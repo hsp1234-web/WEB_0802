@@ -1,4 +1,1 @@
-INFO:     Started server process [11800]
-INFO:     Waiting for application startup.
-INFO:     Application startup complete.
-INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+2025-08-01 23:07:12,383 - INFO - HTTP Request: POST http://localhost:8088/api/v1/shutdown "HTTP/1.1 200 OK"
