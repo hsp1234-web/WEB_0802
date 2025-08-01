@@ -7,3 +7,6 @@ uvicorn[standard]
 # --- 設定管理 ---
 pydantic
 pydantic-settings
+
+# --- 系統工具 ---
+psutil
