@@ -48,3 +48,6 @@ WEB1/
 # OS-specific
 .DS_Store
 Thumbs.db
+
+# 忽略本地環境變數檔案
+.env

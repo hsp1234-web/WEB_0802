@@ -1,12 +1,9 @@
-pytest==8.4.1
-pytest-timeout==2.4.0
-pytest-mock==3.14.1
-httpx==0.28.1
-pandas==2.3.1
-fastapi==0.116.1
-FinMind==1.8.1
-python-multipart==0.0.20
-tqdm==4.67.1
-fredapi==0.5.2
-trio==0.26.0
-psutil==5.9.8
+# 思路框架: 這裡放開發、測試、格式化等輔助工具。
+
+# 從根目錄的 requirements.in 導入所有核心依賴
+-r requirements.in
+
+# --- 開發與測試工具 ---
+pip-tools
+pytest
+httpx  # 用於在測試中非同步請求我們的 API

@@ -1,10 +1,18 @@
-[project]
-name = "phoenix-heart"
-version = "1.0.0"
-description = "Phoenix Heart project, structured as an installable package."
-readme = "README.md"
-requires-python = ">=3.8"
+# 檔案: pyproject.toml
 
+[project]
+name = "phoenix-core"
+version = "0.1.0"
+description = "The modular monolith core for the Phoenix Heart project."
+readme = "README.md"
+requires-python = ">=3.10"
+
+# 思路框架: 告訴打包工具，我們的原始碼在 'src' 目錄下。
 [tool.setuptools.packages.find]
-where = ["."]
-include = ["apps*", "core_utils*", "scripts*", "run*"]
+where = ["src"]
+
+# 思路框架: 告訴 Pytest 在執行時，需要將 src 目錄加入到 Python 的搜索路徑中，
+#           這樣才能找到 phoenix_core 套件。
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+asyncio_mode = "auto"
