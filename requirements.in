@@ -11,3 +11,5 @@ pydantic-settings
 # --- 系統工具 ---
 psutil
 pytz
+pandas
+tabulate
