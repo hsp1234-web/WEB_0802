@@ -1,77 +1,60 @@
-# 測試計畫與執行指南 (作戰藍圖 v3.0 - Pythonic)
+# 測試計畫與執行指南 (v27 - 資料庫驅動架構)
 
 **文件作者：** Jules (AI 軟體工程師)
-**最後更新：** 2025年7月29日
+**最後更新：** 2025年8月1日
 
-## 一、 核心理念：快速、穩健、平行的 Pythonic 測試
+## 一、 核心理念：專注於架構驗證
 
-為了解決傳統測試流程的瓶頸，我們已將測試框架全面升級為一個以 Python 為核心的現代化解決方案。此框架被固化在一個名為 `smart_e2e_test.py` 的統一指揮腳本中，它徹底解決了空間、時間與穩定性的三重困境。
+隨著專案演進至穩定的資料庫驅動架構，我們的測試理念也從測試單一、龐大的腳本，轉變為**驗證核心架構的互動與正確性**。
 
-### **核心優勢：**
-
-1.  **極致速度 (解決時間瓶頸):**
-    *   **應用級平行 (App-level Parallelism):** 利用 Python 的 `multiprocessing` 模組，可以同時對多個獨立的 App (如 `quant`, `transcriber`) 執行完整的測試流程。
-    *   **測試級平行 (Test-level Parallelism):** 在每個 App 的測試流程內部，利用 `pytest-xdist` 將測試案例分配到所有可用的 CPU 核心，實現最大程度的平行化。
-
-2.  **絕對穩定 (解決穩定性瓶頸):**
-    *   **主動超時中斷:** 透過整合 `pytest-timeout`，為每一個測試案例都設定了 300 秒的「生命時鐘」。任何因意外情況（如外部 API 無回應、死循環）而卡死的測試都會被自動中斷並標記為失敗，確保整個 CI/CD 流程永遠不會被無限期阻塞。
-
-3.  **資源高效 (解決空間瓶頸):**
-    *   **原子化隔離:** 每個 App 的測試都在一個獨立的、用後即焚的虛擬環境中執行。測試結束後，該環境會被徹底刪除，將硬碟空間 100% 釋放，確保資源峰值佔用永遠在可控範圍內。
-    *   **跨平台兼容:** 作為一個純 Python 腳本，它可以在 Windows, macOS, Linux, 以及 Google Colab 等任何支持 Python 的環境中無縫運行。
+我們的測試框架現在專注於回答以下關鍵問題：
+1.  後端核心 (`scripts/launch.py`) 能否獨立、正確地執行其任務並更新資料庫？
+2.  前端顯示器 (`run/colab_runner.py`) 能否在後端运行时，正確地從資料庫讀取到一系列的狀態變化？
+3.  整個前後端解耦的流程是否如預期般順暢運作？
 
 ---
 
-## 二、 如何執行測試：`smart_e2e_test.py`
+## 二、 如何執行測試：`pytest` 與整合測試
 
-所有端對端測試都應透過根目錄下的 `smart_e2e_test.py` 腳本來啟動。
+所有測試都應透過 `pytest` 命令列工具來啟動。我們已經在 `pytest.ini` 中配置了高效能的預設選項 (`-n auto` 平行化執行, `--timeout=60` 全域超時)。
 
 ### **前置要求：**
 
-- **Python 3.8+ 環境：** 腳本會自動安裝 `uv`, `psutil`, `pyyaml` 等核心依賴。
-- **網路連線：** 用於下載依賴套件。
+- **Python 3.8+ 環境**
+- **安裝開發依賴:** 在執行測試前，請確保已安裝所有必要的開發與測試依賴。
+  ```bash
+  pip install -r requirements-dev.txt
+  ```
 
-### **基本用法 (模擬模式):**
+### **執行測試套件:**
 
-在專案的根目錄下，使用 Python 解譯器執行腳本：
+在專案的根目錄下，執行 `pytest`：
 
 ```bash
-python smart_e2e_test.py
+# 執行所有測試
+python -m pytest
 ```
 
-預設情況下，這將以 `TEST_MODE=mock` (模擬模式) 運行所有測試。在模擬模式下，腳本會**跳過**大型依賴（如 `torch`）的下載和安裝，並執行快速的 API 路徑驗證，主要用於開發過程中的快速反饋。
+或者，您可以只執行針對此架構的特定整合測試：
 
-### **進階用法 (真實模式):**
-
-若需驗證包含大型 AI 模型在內的完整功能（例如，在部署前或修改了核心轉錄邏輯後），可透過設定環境變數 `TEST_MODE` 來啟用「真實模式」。
-
-**Linux / macOS:**
 ```bash
-TEST_MODE=real python smart_e2e_test.py
-```
-
-**Windows (CMD):**
-```cmd
-set TEST_MODE=real
-python smart_e2e_test.py
-```
-
-**Windows (PowerShell):**
-```powershell
-$env:TEST_MODE="real"
-python smart_e2e_test.py
+python -m pytest tests/integration/test_db_driven_architecture.py
 ```
 
 ---
 
-## 三、 Colab 一鍵驗證
+## 三、 核心測試詳解：`test_db_driven_architecture.py`
 
-對於需要快速驗證整個系統是否正常運行的使用者，我們提供了 `colab_dashboard_test.ipynb`。
+這是我們目前最重要的測試檔案，它包含了兩個關鍵的測試案例：
 
-只需在 Google Colab 中打開此 Notebook，並依序執行其中的儲存格，即可自動完成以下所有操作：
-1.  下載最新程式碼。
-2.  執行完整的端對端測試 (`smart_e2e_test.py`)。
-3.  在背景啟動所有後端服務。
-4.  驗證核心的逆向代理服務是否正常運行。
+1.  **`test_launch_script_execution()`**:
+    *   **目標**: 驗證 `scripts/launch.py` 作為一個獨立單元的正確性。
+    *   **作法**: 直接透過 `subprocess` 執行 `launch.py`。
+    *   **斷言**: 檢查 `state.db` 是否被建立，以及任務完成後，資料庫中的最終狀態是否為「任務成功完成」。
 
-這提供了一個極其便利的方式來驗證部署的最終狀態。
+2.  **`test_e2e_db_driven_flow()`**:
+    *   **目標**: 驗證前後端之間的解耦通訊。
+    *   **作法**: 使用 Python 的 `multiprocessing` 模組，在一個背景進程中啟動 `launch.py`。同時，主進程會模擬 `run/colab_runner.py` 的行為，持續輪詢 `state.db`。
+    *   **斷言**: 檢查主進程是否能成功觀察到由背景進程寫入的一系列預期狀態變化。
+
+這套測試完整地驗證了我們資料庫驅動架構的核心邏輯，確保了其穩定性和可靠性。

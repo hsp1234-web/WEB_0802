@@ -1,103 +1,75 @@
-# Colab 使用指南：統一指揮中心
+# Colab 使用指南：資料庫驅動架構
 
 ## 簡介
 
-歡迎使用「統一指揮中心」！本平台專為在 Google Colab 環境中穩定、可靠地運行 Web 服務而設計。透過我們提供的 Colab 筆記本，您可以一鍵啟動您的服務。
+歡迎使用「鳳凰之心」專案！本指南將引導您如何在 Google Colab 環境中，運行我們穩定、可靠的資料庫驅動架構。
 
-平台會自動處理：
-*   使用 `uv` 進行高速依賴安裝。
-*   啟動後端 FastAPI 服務。
-*   使用 Google Colab 的內建代理功能，為您的應用程式生成一個安全、私有的訪問連結。
+此架構的核心是**前後端分離**：
+*   **後端 (`scripts/launch.py`)**: 一個獨立的進程，負責執行所有核心任務，並將其狀態持續寫入 `state.db` 資料庫。
+*   **前端 (`run/colab_runner.py`)**: 一個純粹的顯示器，它透過讀取 `state.db` 來即時展示後端的運行狀態。
 
-## Colab 啟動介面
+這種設計確保了即使前端顯示被中斷，後端的核心任務也能不受影響地繼續執行。
 
-將下方的程式碼儲存格複製到您的 Colab 筆記本中。執行後，它將會安裝依賴並啟動服務。
+## Colab 啟動流程
 
-### 如何設定
+您需要**兩個 Colab 儲存格**來體驗完整的流程。
 
-在執行儲存格之前，請根據您的需求設定以下參數：
+### 第一步：啟動後端核心服務
 
-*   `PROJECT_FOLDER_NAME`: 這是您存放整個專案的資料夾名稱。例如：`MP3_Converter_TXT`。
-*   `FASTAPI_PORT`: 您的後端 FastAPI 應用程式將在此埠號上運行。預設值為 `8000`。
-
-### 啟動儲存格程式碼
+在**第一個** Colab 儲存格中，貼上 `scripts/launch.py` 的完整內容。
 
 <details>
-<summary>點此展開/收合 🚀 啟動指揮中心 的程式碼</summary>
+<summary>點此展開/收合 🚀 後端核心 (scripts/launch.py) 的程式碼</summary>
 
 ```python
-#@title 🚀 啟動指揮中心 { vertical-output: true, display-mode: "form" }
-#@markdown ---
-#@markdown ### **專案路徑與伺服器設定**
-#@markdown **專案資料夾名稱 (PROJECT_FOLDER_NAME)**
-PROJECT_FOLDER_NAME = "ALL_DATE/MP3_Converter_TXT" #@param {type:"string"}
-#@markdown **後端服務埠號 (FASTAPI_PORT)**
-FASTAPI_PORT = 8000 #@param {type:"integer"}
-#@markdown ---
-#@markdown > **準備就緒後，點擊此儲存格左側的「執行」按鈕。**
-#@markdown ---
+# 檔案: scripts/launch.py
+# 說明: 專案的核心後端服務，負責執行任務並透過資料庫更新狀態。
 
-# ==============================================================================
-#                      🚀 核心啟動器 (請勿修改) 🚀
-# ==============================================================================
-import os
-import sys
-from pathlib import Path
+import sqlite3
+import time
 import subprocess
+import sys
+import os
+from pathlib import Path
+import logging
 
-# --- 步驟 1: 切換路徑並驗證 ---
-project_path = Path(f"/content/{PROJECT_FOLDER_NAME}")
-if not project_path.is_dir():
-    print(f"❌ 致命錯誤：找不到專案資料夾 '{project_path}'。")
-else:
-    os.chdir(project_path)
-    print(f"✅ 工作目錄已切換至: {os.getcwd()}")
+DB_PATH = Path("state.db")
+LOG_PATH = Path("uvicorn.log")
 
-    # --- 步驟 2: 安裝專案與依賴 ---
-    # 我們將安裝所有必要的依賴，以便在 Colab 中運行
-    print("--- 正在安裝專案套件與核心依賴 ---")
-    try:
-        # 步驟 2.1: 將專案本身以可編輯模式安裝
-        # 這是套件化方案的核心，讓 Python 知道如何找到專案內的模組
-        print("--- 正在安裝專案本身 (可編輯模式) ---")
-        subprocess.run([sys.executable, "-m", "pip", "install", "-e", "."], check=True)
-        print("✅ 專案套件安裝完成。")
-
-        # 步驟 2.2: 安裝其他依賴
-        print("--- 正在安裝第三方依賴 ---")
-        # 使用 uv 來加速安裝
-        subprocess.run(["pip", "install", "-q", "uv"], check=True)
-        # 安裝運行所需的所有 requirements
-        subprocess.run(["uv", "pip", "install", "-r", "requirements/base.txt"], check=True)
-        subprocess.run(["uv", "pip", "install", "-r", "requirements/transcriber.txt"], check=True)
-        print("✅ 第三方依賴安裝完成。")
-
-        # --- 步驟 3: 啟動服務 ---
-        print(f"--- 準備在埠號 {FASTAPI_PORT} 上啟動 FastAPI 服務 ---")
-        print("您將在下方看到一個 `https://*.loca.lt` 或類似的公開連結。")
-
-        # 使用 uvicorn 啟動位於 src/main.py 的 FastAPI 應用
-        # 注意：假設您的 FastAPI app 物件在 src/main.py 中被命名為 'app'
-        subprocess.run([
-            "uvicorn",
-            "src.main:app",
-            "--host", "0.0.0.0",
-            "--port", str(FASTAPI_PORT),
-            "--reload"  # 在 Colab 中使用 reload 可能有助於開發
-        ])
-
-    except subprocess.CalledProcessError as e:
-        print(f"❌ 執行命令時發生錯誤: {e}")
-    except Exception as e:
-        import traceback
-        print(f"💥 執行期間發生未預期的嚴重錯誤: {e}")
-        traceback.print_exc()
-
+# ... (此處應為 launch.py 的完整內容) ...
 ```
 </details>
 
-## 執行與訪問
+**執行**這個儲存格。您會看到後端開始執行的日誌。讓這個儲存格在背景持續運行。
 
-1.  **設定參數**：根據您的專案位置，填寫 `PROJECT_FOLDER_NAME` 欄位。
-2.  **執行儲存格**：點擊儲存格左側的「播放」按鈕。
-3.  **訪問應用**：當後端服務完全上線後，Colab 會在儲存格輸出中生成一個可點擊的應用程式連結 (通常以 `https://` 開頭)。點擊該連結，即可在新分頁中與您的應用程式互動。
+### 第二步：啟動前端戰情室
+
+在**第二個** Colab 儲存格中，貼上 `run/colab_runner.py` 的完整內容。
+
+<details>
+<summary>點此展開/收合 📊 前端戰情室 (run/colab_runner.py) 的程式碼</summary>
+
+```python
+# 檔案: run/colab_runner.py
+# 說明: 前端戰情室，純粹作為後端服務的狀態顯示器。
+
+import sqlite3
+import time
+from pathlib import Path
+from IPython.display import display, HTML, clear_output
+
+DB_PATH = Path("state.db")
+LOG_PATH = Path("uvicorn.log")
+# ... (此處應為 colab_runner.py 的完整內容) ...
+```
+</details>
+
+**執行**這個儲存格。一個視覺化的 HTML 儀表板將會出現，並開始每隔幾秒刷新一次，即時顯示第一個儲存格中後端服務的當前狀態和日誌。
+
+## 預期結果
+
+*   第一個儲存格會持續打印後端任務的日誌。
+*   第二個儲存格會顯示一個儀表板，上面的「後端服務狀態」會從「後端服務已啟動」逐步變為「核心任務：處理完畢」，最終變為「任務成功完成」。
+*   當第一個儲存格的任務全部完成後，它會自動呼叫報告生成器，並在專案的 `reports/` 目錄下產生分析報告。
+
+這個流程完整地展示了前後端解耦架構的穩定性和可觀測性。
