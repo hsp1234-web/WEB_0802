@@ -1,17 +1,18 @@
 import pytest
-import time
 from fastapi.testclient import TestClient
 
-# 思路框架: 使用 pytest.mark.timeout 來確保單個測試不會運行超過 1 秒。
+# 我們將模擬 storage 模組的行為。
+# 這個路徑指向 logic.py 檔案中導入的 storage 模組的引用。
+MODULE_PATH_TO_MOCK = "phoenix_core.modules.dataprovider.logic.storage"
+
 @pytest.mark.timeout(1)
-def test_get_stock_data_fast(monkeypatch):
-    """
-    測試 /data/stock/{symbol} 端點，確保其快速響應。
-    註：由於在該測試環境下修補自訂函式遇到無法解釋的困難，
-    此處採用務實的方案，直接修補 time.sleep()，以確保測試的核心目標——快速執行——得以實現。
-    """
-    # 務實的修補方案: 直接修補 time.sleep，移除延遲，讓測試快速執行。
-    monkeypatch.setattr(time, "sleep", lambda seconds: None)
+def test_stock_data_cache_hit(monkeypatch):
+    """測試快取命中的場景 (不應有延遲)。"""
+    # 準備: 模擬 storage.load_json，讓它返回一個預設的快取數據。
+    def mock_load_json(file_name):
+        return {"symbol": "TSMC", "price": 123.45, "timestamp": "cached_time"}
+
+    monkeypatch.setattr(f"{MODULE_PATH_TO_MOCK}.load_json", mock_load_json)
 
     # 延遲匯入 app，確保修補在 app 載入前生效。
     from phoenix_core.main import app
@@ -19,10 +20,27 @@ def test_get_stock_data_fast(monkeypatch):
     # 執行與斷言
     with TestClient(app) as client:
         response = client.get("/data/stock/TSMC")
-
         assert response.status_code == 200
         data = response.json()
-        # 斷言返回的是真實數據，因為我們只移除了延遲。
-        assert data["symbol"] == "TSMC"
-        assert data["price"] == 2330.0
-        assert data["timestamp"] == "2025-08-02T12:00:00Z"
+        assert data["price"] == 123.45 # 驗證返回的是快取數據
+        assert data["timestamp"] == "cached_time"
+
+@pytest.mark.timeout(1)
+def test_stock_data_cache_miss(monkeypatch):
+    """測試快取未命中的場景 (應有延遲，但我們也會模擬掉)。"""
+    # 準備: 模擬 load_json 返回 None，並模擬 save_json 不做任何事。
+    monkeypatch.setattr(f"{MODULE_PATH_TO_MOCK}.load_json", lambda fn: None)
+    monkeypatch.setattr(f"{MODULE_PATH_TO_MOCK}.save_json", lambda fn, data: None)
+    # 為了讓測試快速，我們也必須模擬掉 time.sleep
+    monkeypatch.setattr("time.sleep", lambda seconds: None)
+
+    # 延遲匯入 app
+    from phoenix_core.main import app
+
+    # 執行與斷言
+    with TestClient(app) as client:
+        response = client.get("/data/stock/AAPL")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["symbol"] == "AAPL"
+        assert data["price"] == 2330.0 # 驗證返回的是新生成的數據

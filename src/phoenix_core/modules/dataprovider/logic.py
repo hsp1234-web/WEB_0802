@@ -1,23 +1,35 @@
 import time
+import datetime
 from pydantic import BaseModel
+# 思路框架: 導入我們在 kernel 中新建的存儲服務函式。
+from ...kernel import storage
 
 class StockData(BaseModel):
     symbol: str
     price: float
     timestamp: str
 
-def get_stock_price_from_external_api(symbol: str) -> StockData:
+def get_stock_price(symbol: str) -> StockData:
     """
-    模擬一個從外部 API 獲取股價的耗時操作。
+    獲取股價。優先從快取（檔案系統）讀取，若無快取則模擬從外部 API 獲取。
     """
-    print(f"模擬向外部 API 查詢 {symbol} 的股價...")
-    # 思路框架: 故意延遲，以模擬真實世界的網路延遲。
-    #           在真實的測試中，我們將會「跳過」這個延遲。
-    time.sleep(2)
-    print("...模擬查詢完成。")
+    # 1. 嘗試從快取讀取
+    cached_data = storage.load_json(f"stock_{symbol}")
+    if cached_data:
+        print(f"從快取命中讀取 {symbol} 的數據。")
+        return StockData(**cached_data)
 
-    return StockData(
+    # 2. 快取未命中，模擬從外部 API 獲取
+    print(f"快取未命中。模擬向外部 API 查詢 {symbol} 的股價...")
+    time.sleep(2) # 模擬網路延遲
+
+    new_data = StockData(
         symbol=symbol,
-        price=2330.0, # 模擬價格
-        timestamp="2025-08-02T12:00:00Z"
+        price=2330.0,
+        timestamp=datetime.datetime.now(datetime.timezone.utc).isoformat()
     )
+
+    # 3. 將新數據寫入快取
+    storage.save_json(f"stock_{symbol}", new_data.model_dump())
+
+    return new_data
