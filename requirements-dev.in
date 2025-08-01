@@ -9,5 +9,6 @@ pytest
 httpx  # 用於在測試中非同步請求我們的 API
 
 # --- Pytest 擴展 ---
+pytest-aiohttp # 用於測試 aiohttp 應用
 pytest-xdist # 用於並行測試，發揮多核心效能
 pytest-timeout # 為每個測試設置超時，防止掛起

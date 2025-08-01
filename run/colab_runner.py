@@ -125,7 +125,7 @@ def update_status(task=None, log=None):
             shared_status["logs"].append(f"[{datetime.now(pytz.timezone(TIMEZONE)).strftime('%H:%M:%S')}] {log}")
 
 def background_worker():
-    """在背景執行緒中處理所有耗時任務"""
+    """在背景執行緒中處理所有耗時任務：準備環境並啟動後端服務。"""
     project_path = None
     try:
         base_path = Path("/content")
@@ -134,17 +134,17 @@ def background_worker():
             shared_status["project_path"] = project_path
 
         # --- 步驟 1: 準備專案環境 ---
-        update_status(task="準備專案環境")
+        update_status(task="準備專案環境", log="檢查專案資料夾...")
         if FORCE_REPO_REFRESH and project_path.exists():
             update_status(log="偵測到強制刷新，正在刪除舊的專案資料夾...")
             shutil.rmtree(project_path)
             update_status(log="✅ 舊資料夾已刪除。")
 
         if not project_path.exists():
-            update_status(log="正在從 Github 下載程式碼...")
+            update_status(log=f"正在從 {REPOSITORY_URL} (分支/標籤: {TARGET_BRANCH_OR_TAG}) 下載程式碼...")
             process = subprocess.run(
                 ["git", "clone", "--depth", "1", "--branch", TARGET_BRANCH_OR_TAG, REPOSITORY_URL, str(project_path)],
-                capture_output=True, text=True
+                capture_output=True, text=True, encoding='utf-8'
             )
             if process.returncode != 0:
                 raise RuntimeError(f"Git clone 失敗: {process.stderr}")
@@ -152,89 +152,47 @@ def background_worker():
         else:
             update_status(log="專案資料夾已存在，跳過下載。")
 
-        # --- 步驟 2: 生成設定檔 ---
-        update_status(task="生成專案設定檔")
-        log_levels_to_show = {
-            "BATTLE": SHOW_LOG_LEVEL_BATTLE,
-            "SUCCESS": SHOW_LOG_LEVEL_SUCCESS,
-            "INFO": SHOW_LOG_LEVEL_INFO,
-            "CMD": SHOW_LOG_LEVEL_CMD,
-            "SHELL": SHOW_LOG_LEVEL_SHELL,
-            "ERROR": SHOW_LOG_LEVEL_ERROR,
-            "CRITICAL": SHOW_LOG_LEVEL_CRITICAL,
-            "PERF": SHOW_LOG_LEVEL_PERF,
-        }
-
-        config_data = {
-            "REFRESH_RATE_SECONDS": REFRESH_RATE_SECONDS,
-            "PERFORMANCE_MONITOR_RATE_SECONDS": PERFORMANCE_MONITOR_RATE_SECONDS,
-            "LOG_DISPLAY_LINES": LOG_DISPLAY_LINES,
-            "LOG_ARCHIVE_FOLDER_NAME": LOG_ARCHIVE_FOLDER_NAME,
-            "TIMEZONE": TIMEZONE,
-            "FAST_TEST_MODE": FAST_TEST_MODE,
-            "LOG_LEVELS_TO_SHOW": {level: show for level, show in log_levels_to_show.items() if show},
-            "COLAB_URL_RETRIES": COLAB_URL_RETRIES,
-            "COLAB_URL_RETRY_DELAY": COLAB_URL_RETRY_DELAY,
-        }
-        config_file = project_path / "config.json"
-        with open(config_file, "w", encoding="utf-8") as f:
-            json.dump(config_data, f, indent=4, ensure_ascii=False)
-        update_status(log="✅ Colab 設定檔 (config.json) 已生成。")
-
-        # --- 步驟 2.5: 同步後端設定檔 ---
-        update_status(task="同步後端設定檔")
-        resource_settings_file = project_path / "config" / "resource_settings.yml"
-        if resource_settings_file.exists():
-            try:
-                with open(resource_settings_file, 'r', encoding='utf-8') as f:
-                    resource_settings = yaml.safe_load(f)
-
-                # 更新設定值
-                resource_settings['resource_monitoring']['monitor_refresh_seconds'] = REFRESH_RATE_SECONDS
-
-                with open(resource_settings_file, 'w', encoding='utf-8') as f:
-                    yaml.dump(resource_settings, f, allow_unicode=True)
-
-                update_status(log=f"✅ 後端設定檔 (resource_settings.yml) 已同步更新頻率為 {REFRESH_RATE_SECONDS} 秒。")
-            except Exception as e:
-                update_status(log=f"⚠️ 無法更新後端設定檔: {e}")
+        # --- 步驟 2: 安裝依賴 ---
+        update_status(task="安裝後端依賴", log="正在安裝後端服務所需的依賴套件...")
+        requirements_path = project_path / "requirements.txt"
+        if requirements_path.exists():
+             subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", str(requirements_path)])
+             update_status(log="✅ 後端依賴安裝完成。")
         else:
-            update_status(log="⚠️ 找不到後端資源設定檔，後端將使用預設更新頻率。")
+             update_status(log="⚠️ 找不到 requirements.txt，跳過依賴安裝。")
 
+        # --- 步驟 3: 啟動後端 API 服務 ---
+        update_status(task="啟動後端 API 服務")
+        launch_script_path = project_path / "scripts" / "launch.py"
+        if not launch_script_path.exists():
+            raise FileNotFoundError(f"找不到後端啟動腳本: {launch_script_path}")
 
-        # --- 步驟 3: 觸發背景服務啟動程序 ---
-        update_status(task="啟動後端服務")
-
-        db_file_path = project_path / "state.db"
-        log_file_path = project_path / "logs" / "backend.log"
-        log_file_path.parent.mkdir(exist_ok=True)
-
-        update_status(log="🚀 使用真實後端模式啟動...")
-        command = [
-            sys.executable, str(project_path / "scripts" / "launch.py"),
-            "--db-file", str(db_file_path)
-        ]
-        backend_name = "真實後端 (launch.py)"
-
-        with open(log_file_path, "w") as f:
-            process = subprocess.Popen(command, cwd=project_path, stdout=f, stderr=subprocess.STDOUT)
+        # 使用 Popen 直接啟動後端服務，日誌會由 launch.py 自行處理
+        update_status(log=f"🚀 正在啟動後端服務: {launch_script_path}...")
+        process = subprocess.Popen(
+            [sys.executable, str(launch_script_path)],
+            cwd=project_path,
+            stdout=subprocess.PIPE, # 捕獲輸出以便調試
+            stderr=subprocess.PIPE
+        )
 
         with status_lock:
             shared_status["launch_process"] = process
 
-        update_status(log=f"✅ {backend_name} 已啟動 (PID: {process.pid})。")
-        update_status(task=f"{backend_name} 運行中...")
+        update_status(log=f"✅ 後端服務已在背景啟動 (PID: {process.pid})。儀表板將開始輪詢狀態。")
+        update_status(task="後端服務運行中")
 
     except Exception as e:
-        error_message = f"❌ {e}"
-        update_status(task="背景任務發生致命錯誤", log=error_message)
+        error_message = f"❌ 背景任務發生致命錯誤: {e}"
+        update_status(task="背景任務失敗", log=error_message)
         with status_lock:
             shared_status["worker_error"] = str(e)
     finally:
         with status_lock:
             shared_status["worker_finished"] = True
-            if not shared_status.get("launch_process"):
-                update_status(task="背景任務提前終止")
+            # 如果 launch_process 沒有被設定，說明啟動失敗
+            if "launch_process" not in shared_status or not shared_status["launch_process"]:
+                update_status(task="後端啟動失敗")
 
 def render_dashboard_html():
     """生成包含動態更新邏輯的儀表板 HTML 骨架"""
@@ -467,11 +425,10 @@ async def serve_proxy_url_with_retry(health_check_url: str, port: int, retries: 
     帶重試邏輯，檢查後端並顯示 Colab 代理 URL。
     """
     import asyncio
-    update_status(log=f"🔗 [URL 服務] 已啟動，開始監控後端健康狀態...")
+    update_status(log=f"🔗 [URL 服務] 已啟動，開始監控後端 API 健康狀態 ({health_check_url})...")
     for attempt in range(retries):
-        # 為了相容性，我們先檢查主儀表板的健康狀態
         if await check_backend_ready(health_check_url):
-            update_status(log=f"✅ [URL 服務] 後端服務已就緒，正在生成代理 URL...")
+            update_status(log=f"✅ [URL 服務] 後端 API 已就緒，正在生成代理 URL...")
             try:
                 # 使用 `colab_output.serve_kernel_port_as_window` 提供更乾淨的體驗
                 colab_output.serve_kernel_port_as_window(port, anchor_text="在新分頁中開啟主控台")
@@ -484,71 +441,71 @@ async def serve_proxy_url_with_retry(health_check_url: str, port: int, retries: 
             update_status(log=f"🟡 [URL 服務] 後端尚未就緒 (嘗試 {attempt + 1}/{retries})，將在 {delay} 秒後重試...")
             await asyncio.sleep(delay)
 
-    update_status(log=f"❌ [URL 服務] 在 {retries} 次嘗試後，後端服務仍未回應。URL 無法生成。")
+    update_status(log=f"❌ [URL 服務] 在 {retries} 次嘗試後，後端 API 仍未回應。URL 無法生成。")
 
 
 def main():
-    update_status(log="指揮中心 V23 (內建複製版) 啟動。")
+    update_status(log="指揮中心 V23 API-驅動版啟動。")
 
     clear_output(wait=True)
     display(HTML(render_dashboard_html()))
 
-    worker_thread = threading.Thread(target=background_worker)
+    # 啟動背景工作執行緒，負責啟動後端
+    worker_thread = threading.Thread(target=background_worker, daemon=True)
     worker_thread.start()
 
-    # 啟動 URL 服務執行緒
-    import asyncio
-    url_service_thread = threading.Thread(
-        target=lambda: asyncio.run(serve_proxy_url_with_retry(
-            health_check_url="http://localhost:8000/health",
-            port=8000,
-            retries=COLAB_URL_RETRIES,
-            delay=COLAB_URL_RETRY_DELAY
-        )),
-        daemon=True
-    )
-    url_service_thread.start()
+    # 此處不再需要 URL 服務執行緒，因為新的架構中，
+    # Colab URL 的生成與主應用無關，且狀態 API 已足夠。
+    # 我們簡化流程，專注於監控後端程序。
 
     try:
-        launch_process_local = None
-        while not launch_process_local:
-            with status_lock:
-                launch_process_local = shared_status.get("launch_process")
-            if not worker_thread.is_alive() and not launch_process_local:
-                 raise RuntimeError("背景工作執行緒結束，但未能啟動後端服務。")
-            time.sleep(0.5)
+        # 等待背景工作執行緒完成其啟動任務
+        worker_thread.join()
 
-        update_status(log="[前端] 後端已啟動，前端進入待命模式。可隨時手動中斷此儲存格來結束任務。")
+        with status_lock:
+            launch_process_local = shared_status.get("launch_process")
+            worker_error = shared_status.get("worker_error")
 
-        if launch_process_local:
-            exit_code = launch_process_local.wait()
-            update_status(log=f"[前端] 後端程序已結束，返回碼: {exit_code}。前端任務完成。")
+        if worker_error:
+            raise RuntimeError(f"背景工作執行緒啟動失敗: {worker_error}")
+        if not launch_process_local:
+            raise RuntimeError("背景工作執行緒結束，但未能成功啟動後端服務。")
 
-    except (KeyboardInterrupt, Exception):
+        update_status(log="[前端] 後端程序已啟動。前端進入監控模式。可隨時手動中斷此儲存格來觸發後端優雅關機。")
+
+        # 等待後端程序自然結束
+        # launch.py 現在是一個服務，理論上會一直運行直到被告知關閉
+        # .wait() 會阻塞直到程序終止
+        exit_code = launch_process_local.wait()
+        update_status(log=f"[前端] 後端程序已終止，返回碼: {exit_code}。前端任務完成。")
+
+    except KeyboardInterrupt:
         print("\n" + "="*80)
-        print("🛑 前端儲存格被手動中斷或發生錯誤，正在嘗試優雅關閉後端服務...")
+        print("🛑 偵測到手動中斷，正在向後端 API 發送優雅關閉信號...")
         print("="*80)
         try:
-            with status_lock:
-                launch_process_local = shared_status.get("launch_process")
+            # 不再檢查 launch_process，直接嘗試呼叫 API
+            shutdown_url = 'http://localhost:8088/api/v1/shutdown'
+            print(f"正在向 {shutdown_url} 發送 POST 請求...")
+            # 使用 httpx 發送請求
+            with httpx.Client() as client:
+                response = client.post(shutdown_url, timeout=10)
 
-            if launch_process_local and launch_process_local.poll() is None:
-                shutdown_url = 'http://localhost:8088/api/v1/shutdown'
-                print(f"正在向 {shutdown_url} 發送關閉信號...")
-                with httpx.Client() as client:
-                    response = client.post(shutdown_url, timeout=10)
-
-                if response.status_code == 200:
-                    print("✅ 成功發送關閉信號。後端將在背景完成狀態儲存。")
-                    print("   請在下一個儲存格執行「報告生成器」以產出最終報告。")
-                else:
-                    print(f"⚠️ 發送關閉信號失敗，後端回應: {response.status_code}。")
-                    launch_process_local.terminate()
+            if response.status_code == 200:
+                print("✅ 成功發送關閉信號。後端將在背景完成資料庫儲存。")
+                print("   請等待幾秒鐘，然後在下一個儲存格執行「報告生成器」。")
             else:
-                print("ℹ️ 後端程序似乎已經結束，無需發送關閉信號。")
-
+                print(f"⚠️ 發送關閉信號可能失敗，後端回應: {response.status_code} - {response.text}")
+                print("   將嘗試強制終止後端程序...")
+                with status_lock:
+                    launch_process_local = shared_status.get("launch_process")
+                if launch_process_local:
+                    launch_process_local.terminate()
+        except httpx.RequestError as req_exc:
+            print(f"❌ 發送關閉信號時發生網路錯誤: {req_exc}")
+            print("   可能是後端服務已提前崩潰。建議檢查後端日誌。")
         except Exception as shutdown_exc:
-            print(f"❌ 在嘗試優雅關閉後端時發生錯誤: {shutdown_exc}")
+            print(f"❌ 在嘗試優雅關閉後端時發生未預期的錯誤: {shutdown_exc}")
             print("   狀態可能未正確儲存。")
 
 def run_main():

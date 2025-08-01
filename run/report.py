@@ -48,7 +48,7 @@ report_script = project_path / "scripts" / "generate_report.py"
 requirements_file = project_path / "scripts" / "requirements-report.txt"
 db_file = project_path / "state.db"
 config_file = project_path / "config.json"
-report_output_dir = project_path / "logs"
+report_output_dir = project_path / "reports"
 
 # --- 檢查必要檔案 ---
 if not project_path.is_dir():
@@ -56,9 +56,6 @@ if not project_path.is_dir():
 elif not db_file.exists():
     print(f"❌ 錯誤：在 '{project_path}' 中找不到 state.db。")
     print("   請確認「指揮中心」已正常運行並被手動中斷，以確保狀態已寫入資料庫。")
-elif not config_file.exists():
-    print(f"❌ 錯誤：在 '{project_path}' 中找不到 config.json。")
-    print("   請確認「指揮中心」已成功執行。")
 elif not report_script.is_file():
     print(f"❌ 嚴重錯誤：找不到報告生成腳本 '{report_script}'。")
 elif not requirements_file.exists():
@@ -90,7 +87,7 @@ else:
         report_command = [
             sys.executable, str(report_script),
             "--db-file", str(db_file),
-            "--config-file", str(config_file)
+            "--report-dir", str(report_output_dir)
         ]
 
         report_process = subprocess.run(
@@ -118,6 +115,8 @@ else:
                 "GENERATE_DETAILED_LOG_REPORT": ("詳細日誌報告", "detailed_log_report.md"),
             }
 
+            # 在新架構中，一次性生成所有報告
+            # 我們根據使用者勾選的項目來決定要顯示哪些已生成的報告
             reports_to_show_keys = [key for key, value in locals().items() if key.startswith("GENERATE_") and value]
 
             if not reports_to_show_keys:
