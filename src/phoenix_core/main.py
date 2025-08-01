@@ -2,6 +2,9 @@
 import pkgutil
 import importlib
 from fastapi import FastAPI
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
+import os
 
 from .kernel.settings import settings
 # 思路框架: 導入我們新建立的註冊中心中的 registered_routers 列表。
@@ -40,9 +43,16 @@ def startup_event():
 
 
 # --- 基礎 API 端點 ---
-@app.get("/", tags=["系統 (System)"])
+# 獲取專案根目錄 (假設 main.py 在 src/phoenix_core/ 內)
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# 掛載根目錄為靜態文件夾，這樣 HTML 裡面的相對路徑 (如 CSS/JS) 才能正確載入
+app.mount("/static", StaticFiles(directory=PROJECT_ROOT), name="static")
+
+@app.get("/", response_class=FileResponse, tags=["系統 (System)"])
 async def read_root():
-    return {"status": "OK", "message": f"歡迎來到 {settings.APP_NAME}！"}
+    """提供 wolf.html 儀表板作為主頁面。"""
+    return os.path.join(PROJECT_ROOT, 'wolf.html')
 
 @app.get("/system/config", tags=["系統 (System)"])
 async def get_system_config():
