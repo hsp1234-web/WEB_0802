@@ -6,6 +6,36 @@
 
 ---
 
+## v26 - 全功能 Colab UI 與可配置後端
+
+**目標**: 在保持 V24 穩定後端啟動器架構的基礎上，將使用者最初設想的全功能 UI 介面與參數選項重新引入，並使後端能夠動態地根據這些選項進行配置，最終實現一個功能完整且穩定可靠的系統。
+
+### 1. Colab 使用者介面 (`run/colab_runner.py`)
+*   **全參數實現**: 重新加入了使用者最初要求的所有 Colab 表單參數 (`#@param`)，包括 Git 倉庫設定、應用程式參數（如更新頻率）、以及精細的日誌等級顯示控制。
+*   **動態設定生成**: `colab_runner.py` 現在會根據使用者在表單中的選擇，動態生成一個結構化的 `config.json` 檔案。
+
+### 2. 可配置的後端啟動器 (`scripts/start_api_service.py`)
+*   **接收設定**: `start_api_service.py` 被重構為可以接收一個 `--config` 命令列參數，指向由前端生成的 `config.json` 檔案。
+*   **環境變數傳遞**: 啟動器會將 `config.json` 的路徑設定到 `PHOENIX_CONFIG_PATH` 環境變數中，供後端應用程式讀取。
+*   **移除模擬伺服器**: 徹底移除了原先在啟動器中硬編碼一個模擬 API 伺服器的邏輯，確保啟動的是真實的、完整的後端應用。
+
+### 3. 可配置的後端核心 (`src/phoenix_core/`)
+*   **Pydantic 設定升級**: 重構了 `kernel/settings.py`，使用 Pydantic 的自訂來源功能，使其能夠優先從 `PHOENIX_CONFIG_PATH` 所指向的 JSON 檔案中讀取所有巢狀設定。
+*   **模組化 API**:
+    *   建立了新的 `modules/status_api` 模組，專門負責提供狀態 API。
+    *   採用了專案現有的自註冊路由機制 (`kernel/registry.py`)，確保了新 API 模組能被主應用自動發現並掛載。
+
+### 4. 健壯的整合測試 (`tests/integration/colab_test.py`)
+*   **從零開始的除錯**: 經歷了多次失敗，從 `ModuleNotFoundError`、`Address already in use` 到 `Connection refused`，逐步定位並解決了環境、依賴、網路和程式碼邏輯中的多個深層次問題。
+*   **最佳實踐**: 最終的整合測試遵循了所有最佳實踐：
+    *   **Venv 隔離**: 在臨時目錄中建立完全隔離的虛擬環境。
+    *   **動態埠號**: 自動尋找並使用未被佔用的埠號來啟動伺服器，從根本上解決了埠號衝突問題。
+    *   **安全安裝器**: 根據使用者要求，建立了 `utils/safe_installer.py` 和 `utils/resource_monitor.py`，並將其整合進測試流程。
+    *   **穩定驗證**: 最終測試成功驗證了從 UI 參數 -> `config.json` -> 後端啟動器 -> 後端核心設定 -> API 回應的完整流程。
+
+### 5. 文件與工具鏈
+*   **檔案更名**: 根據使用者要求，將 `scripts/run_local.py` 更名為 `scripts/local_run.py`。
+
 ## v0.2.0 (進行中) - 測試架構重構與依賴清理
 
 **目標**: 提升測試套件的可維護性與擴展性，並徹底清理舊架構的技術債，使專案技術棧 100% 統一。
