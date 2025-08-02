@@ -17,3 +17,11 @@ httpx
 
 # 用於執行測試 (For running tests)
 pytest
+
+# FastAPI 框架，用於構建 API
+# FastAPI framework for building APIs
+fastapi
+
+# ASGI 伺服器，用於運行 FastAPI 應用
+# ASGI server for running FastAPI applications
+uvicorn[standard]
