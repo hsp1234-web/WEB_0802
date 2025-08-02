@@ -209,13 +209,14 @@ def main():
         db_original_path = "state.db"
         db_renamed_path = "logs.sqlite"
 
-        if os.path.exists(db_original_path):
-            print(f"正在將 '{db_original_path}' 重命名為 '{db_renamed_path}'...")
-            shutil.move(db_original_path, db_renamed_path)
-            print("✅ 資料庫重命名成功。")
-        else:
-            print(f"⚠️ 警告: 找不到資料庫檔案 '{db_original_path}'。報告可能不完整。")
-            open(db_renamed_path, 'a').close()
+        # 確保 state.db 存在，以防伺服器運行時間過短未及建立
+        if not os.path.exists(db_original_path):
+            print(f"⚠️ 警告: '{db_original_path}' 不存在，將建立一個空檔案以確保測試流程完整。")
+            open(db_original_path, 'a').close()
+
+        print(f"正在將 '{db_original_path}' 重命名為 '{db_renamed_path}'...")
+        shutil.move(db_original_path, db_renamed_path)
+        print("✅ 資料庫重命名成功。")
 
         # 7.2 執行報告生成腳本
         report_generator_script = os.path.join("scripts", "generate_report.py")

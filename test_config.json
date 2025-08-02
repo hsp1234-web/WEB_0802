@@ -1,0 +1,10 @@
+{
+    "system_settings": {
+        "timezone": "Asia/Taipei"
+    },
+    "log_settings": {
+        "levels": {
+            "info": true
+        }
+    }
+}

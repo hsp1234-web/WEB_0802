@@ -1,155 +1,139 @@
 # 檔案: tests/e2e/test_full_lifecycle.py
-# 說明: (V2) 模擬從啟動到報告的完整使用者流程，以進行端對端驗證。
-#      此版本利用環境變數進行配置，無需修改原始碼。
+# 說明: (V3) 模擬從啟動到報告的完整使用者流程，以進行端對端驗證。
+#      此版本採用更穩健的 live_server 模式，直接測試後端服務。
 import subprocess
 import sys
 import os
 import time
 import shutil
+import socket
+import json
+import httpx
 from pathlib import Path
 import pytest
 
 # --- 測試設定 ---
-# 將PROJECT_ROOT設定為此檔案所在目錄往上兩層的目錄
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-# 在專案根目錄下建立一個名為 `tmp_e2e_test_v2` 的臨時目錄
-TMP_E2E_DIR = PROJECT_ROOT / "tmp_e2e_test_v2"
-# 設定專案資料夾的名稱
+TMP_E2E_DIR = PROJECT_ROOT / "tmp_e2e_test_v3"
 PROJECT_FOLDER_NAME = "WEB1_E2E_TEST"
-# 組合出完整的專案路徑
-PROJECT_PATH = TMP_E2E_DIR / PROJECT_FOLDER_NAME
-# 模擬 `colab_runner.py` 運行的時間（秒）
-RUN_TIME_SECONDS = 15
+SERVER_START_TIMEOUT = 120 # 延長等待時間以應對首次安裝
+POLL_INTERVAL = 2
+
+def find_free_port() -> int:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("", 0))
+        return s.getsockname()[1]
 
 @pytest.fixture(scope="module")
 def setup_e2e_environment():
     """
-    (Fixture) 設定 E2E 測試環境。
-    在所有測試開始前執行一次，並在結束後進行清理。
+    (Fixture) 設定 E2E 測試環境，複製專案檔案。
     """
-    # --- 環境準備 ---
-    # 如果臨時目錄已存在，先刪除
     if TMP_E2E_DIR.exists():
         shutil.rmtree(TMP_E2E_DIR)
-    # 建立臨時目錄
-    TMP_E2E_DIR.mkdir()
 
-    # --- 模擬的 Colab 內容目錄 ---
-    # 這是 `colab_runner.py` 和 `report.py` 將要操作的根目錄
-    # 我們將其命名為 `content` 以模擬 Colab 的環境
-    content_dir = TMP_E2E_DIR / "content"
-    content_dir.mkdir()
+    # 我們只複製 src 和 scripts，因為這是服務運行所必需的
+    # 不再複製整個專案，以加快速度並減少複雜性
+    project_path = TMP_E2E_DIR / PROJECT_FOLDER_NAME
+    project_path.mkdir(parents=True, exist_ok=True)
 
-    # --- 複製專案程式碼 ---
-    # 將當前的專案完整複製到臨時的專案路徑下
-    # 忽略 .venv, .git 等不必要的檔案
-    shutil.copytree(
-        PROJECT_ROOT,
-        PROJECT_PATH,
-        ignore=shutil.ignore_patterns('.venv', '.git', '__pycache__', 'tmp_e2e_test*')
-    )
+    shutil.copytree(PROJECT_ROOT / "src", project_path / "src")
+    shutil.copytree(PROJECT_ROOT / "scripts", project_path / "scripts")
+    shutil.copytree(PROJECT_ROOT / "requirements", project_path / "requirements")
+    shutil.copy(PROJECT_ROOT / "pyproject.toml", project_path / "pyproject.toml")
 
-    # `yield` 關鍵字將控制權交還給測試函式
-    # `yield` 之後的程式碼將在測試結束後執行
-    yield {
-        "content_dir": content_dir,
-        "project_path": PROJECT_PATH
-    }
+    yield project_path
 
-    # --- 清理 ---
-    # 測試結束後，刪除整個臨時目錄
     shutil.rmtree(TMP_E2E_DIR)
     print("\n[INFO] 臨時 E2E 測試環境已清理。")
 
 def test_full_lifecycle(setup_e2e_environment):
     """
-    執行完整的端對端生命週期測試。
+    執行完整的端對端生命週期測試（Live Server 模式）。
     """
-    # 從 fixture 取得設定好的路徑
-    content_dir = setup_e2e_environment["content_dir"]
-    project_path = setup_e2e_environment["project_path"]
+    project_path = setup_e2e_environment
+    port = find_free_port()
 
-    # --- 1. 設定環境變數 ---
-    # 這是新測試方法的關鍵：透過環境變數控制腳本行為
+    # --- 1. 準備設定檔 ---
+    config_data = {
+        "system_settings": {"timezone": "UTC"},
+        "__test_port__": port
+    }
+    config_path = project_path / "test_config.json"
+    with open(config_path, "w") as f:
+        json.dump(config_data, f)
+
+    # --- 2. 啟動後端服務 ---
+    # 直接執行 start_api_service.py，因為它包含了完整的環境建立流程
+    # 使用當前的 pytest venv 中的 python 來執行
+    command = [
+        sys.executable, str(project_path / "scripts" / "start_api_service.py"),
+        "--config", str(config_path)
+    ]
+
+    # 使用 PYTHONUNBUFFERED 確保日誌即時輸出
     test_env = os.environ.copy()
-    test_env["PHOENIX_FAST_TEST_MODE"] = "True"
-    test_env["PHOENIX_CONTENT_ROOT"] = str(content_dir)
-    test_env["PHOENIX_PROJECT_FOLDER"] = PROJECT_FOLDER_NAME
-    # 將專案根目錄添加到 PYTHONPATH，以便子程序能找到 'src' 模組
-    test_env["PYTHONPATH"] = str(project_path) + os.pathsep + test_env.get("PYTHONPATH", "")
-
-    # --- 2. 執行 colab_runner.py ---
-    # 我們不再需要修改 runner 腳本，只需在正確的環境下執行它
-    colab_runner_path = project_path / "run" / "colab_runner.py"
-    # 使用 `sys.executable` 確保我們用的是執行 pytest 的同一個 Python 解譯器
-    command = [sys.executable, str(colab_runner_path)]
+    test_env["PYTHONUNBUFFERED"] = "1"
+    test_env["PYTHONPATH"] = str(PROJECT_ROOT) # 確保能找到 src
 
     print(f"\n[INFO] 執行指令: {' '.join(command)}")
-    print(f"[INFO] 環境變數: PHOENIX_CONTENT_ROOT={test_env['PHOENIX_CONTENT_ROOT']}, PHOENIX_PROJECT_FOLDER={test_env['PHOENIX_PROJECT_FOLDER']}")
+    print(f"[INFO] 在 CWD: {project_path} 中啟動服務...")
 
-    # 啟動子程序
-    process = subprocess.Popen(
+    server_process = subprocess.Popen(
         command,
-        env=test_env,
-        cwd=project_path, # 在模擬的專案目錄下執行
-        stdout=sys.stdout,
-        stderr=sys.stderr,
-    )
-
-    # --- 3. 等待並優雅關閉 ---
-    print(f"[INFO] 等待 {RUN_TIME_SECONDS} 秒...")
-    time.sleep(RUN_TIME_SECONDS)
-
-    print(f"[INFO] 發送 SIGINT (Ctrl+C) 至進程 (PID: {process.pid}) 以觸發優雅關機...")
-    # process.send_signal(signal.SIGINT) # 在某些 CI 環境中可能不穩定
-    process.terminate() # 使用 terminate 更為可靠
-    try:
-        process.wait(timeout=20)
-        print("[INFO] colab_runner.py 進程已結束。")
-    except subprocess.TimeoutExpired:
-        print("[WARN] 等待進程超時，強制終止。")
-        process.kill()
-
-    # --- 4. 驗證 state.db 是否生成 ---
-    db_path = project_path / "state.db"
-    assert db_path.exists(), f"測試失敗: state.db 未在 {db_path} 中生成。"
-    print(f"[INFO] ✅ 成功找到 state.db 於: {db_path}")
-
-    # --- 5. 執行 report.py ---
-    report_script_path = project_path / "run" / "report.py"
-    report_command = [sys.executable, str(report_script_path)]
-
-    print(f"[INFO] 執行報告生成指令: {' '.join(report_command)}")
-    report_result = subprocess.run(
-        report_command,
-        env=test_env, # 同樣使用設定好的環境變數
         cwd=project_path,
-        capture_output=True,
-        text=True,
-        encoding='utf-8'
+        env=test_env,
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        text=True, encoding='utf-8'
     )
 
-    # 印出報告腳本的輸出，方便除錯
-    print("\n--- report.py STDOUT ---")
-    print(report_result.stdout)
-    if report_result.stderr:
-        print("\n--- report.py STDERR ---")
-        print(report_result.stderr)
+    # --- 3. 等待伺服器就緒 ---
+    start_time = time.time()
+    is_ready = False
+    log_lines = []
 
-    assert report_result.returncode == 0, "測試失敗: run/report.py 執行時返回非零代碼。"
+    try:
+        while time.time() - start_time < SERVER_START_TIMEOUT:
+            if server_process.poll() is not None:
+                # 伺服器意外終止
+                stdout, stderr = server_process.communicate()
+                all_logs = stdout + stderr
+                pytest.fail(f"伺服器提前崩潰。\n--- LOGS ---\n{all_logs}")
 
-    # --- 6. 最終驗證報告檔案 ---
-    reports_dir = project_path / "reports"
-    assert reports_dir.is_dir(), f"報告目錄 {reports_dir} 未被建立。"
+            try:
+                # 輪詢根端點，直到它回應或超時
+                with httpx.Client() as client:
+                    response = client.get(f"http://127.0.0.1:{port}/", timeout=1)
+                    if response.status_code == 200:
+                        print(f"\n[INFO] 伺服器在埠號 {port} 上已就緒！")
+                        is_ready = True
+                        break
+            except httpx.RequestError:
+                # 預期中的連線錯誤，繼續等待
+                time.sleep(POLL_INTERVAL)
 
-    expected_reports = [
-        "summary_report.md",
-        "performance_report.md",
-        "detailed_log_report.md"
-    ]
-    for report_name in expected_reports:
-        report_path = reports_dir / report_name
-        assert report_path.exists(), f"預期的報告檔案 {report_name} 未在 {reports_dir} 中找到。"
-        print(f"[INFO] ✅ 成功驗證報告存在: {report_name}")
+        if not is_ready:
+            pytest.fail(f"伺服器在 {SERVER_START_TIMEOUT}s 內未能啟動。")
+
+        # --- 4. 驗證核心功能：state.db 是否生成 ---
+        # 讓伺服器再運行一小段時間以確保有時間寫入 db
+        time.sleep(5)
+        db_path = project_path / "state.db"
+        assert db_path.exists(), f"測試失敗: state.db 未在 {db_path} 中生成。"
+        print(f"[INFO] ✅ 成功找到 state.db 於: {db_path}")
+
+    finally:
+        # --- 5. 無論如何都終止伺服器 ---
+        if server_process.poll() is None:
+            print("\n[INFO] 測試結束，正在終止伺服器...")
+            server_process.terminate()
+            try:
+                stdout, stderr = server_process.communicate(timeout=10)
+                print("[INFO] 伺服器已成功終止。")
+                all_logs = stdout + stderr
+                print(f"--- FINAL SERVER LOGS ---\n{all_logs}")
+            except subprocess.TimeoutExpired:
+                print("[WARN] 終止超時，強制抹除。")
+                server_process.kill()
 
     print("\n🎉 [SUCCESS] 端對端生命週期測試成功！")

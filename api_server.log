@@ -1,0 +1,49 @@
+工作目錄已變更至: /app
+
+================================================================================
+🚀 2025-08-02 16:27:27 - 步驟 1: 建立/驗證後端專用虛擬環境
+================================================================================
+✅ 虛擬環境 '.venv_colab_backend' 已存在。
+
+================================================================================
+🚀 2025-08-02 16:27:27 - 步驟 2: 安裝核心依賴
+================================================================================
+   🔹 執行命令: .venv_colab_backend/bin/pip install -r requirements/base.txt
+     [LOG] Requirement already satisfied: annotated-types==0.7.0 in ./.venv_colab_backend/lib/python3.12/site-packages (from -r requirements/base.txt (line 7)) (0.7.0)
+     [LOG] Requirement already satisfied: anyio==4.9.0 in ./.venv_colab_backend/lib/python3.12/site-packages (from -r requirements/base.txt (line 9)) (4.9.0)
+     [LOG] Requirement already satisfied: click==8.2.2 in ./.venv_colab_backend/lib/python3.12/site-packages (from -r requirements/base.txt (line 13)) (8.2.2)
+     [LOG] Requirement already satisfied: fastapi==0.116.1 in ./.venv_colab_backend/lib/python3.12/site-packages (from -r requirements/base.txt (line 15)) (0.116.1)
+     [LOG] Requirement already satisfied: h11==0.16.0 in ./.venv_colab_backend/lib/python3.12/site-packages (from -r requirements/base.txt (line 17)) (0.16.0)
+     [LOG] Requirement already satisfied: httptools==0.6.4 in ./.venv_colab_backend/lib/python3.12/site-packages (from -r requirements/base.txt (line 19)) (0.6.4)
+     [LOG] Requirement already satisfied: idna==3.10 in ./.venv_colab_backend/lib/python3.12/site-packages (from -r requirements/base.txt (line 21)) (3.10)
+     [LOG] Requirement already satisfied: numpy==2.3.2 in ./.venv_colab_backend/lib/python3.12/site-packages (from -r requirements/base.txt (line 23)) (2.3.2)
+     [LOG] Requirement already satisfied: pandas==2.3.1 in ./.venv_colab_backend/lib/python3.12/site-packages (from -r requirements/base.txt (line 25)) (2.3.1)
+     [LOG] Requirement already satisfied: psutil==7.0.0 in ./.venv_colab_backend/lib/python3.12/site-packages (from -r requirements/base.txt (line 27)) (7.0.0)
+     [LOG] Requirement already satisfied: pydantic==2.11.7 in ./.venv_colab_backend/lib/python3.12/site-packages (from -r requirements/base.txt (line 29)) (2.11.7)
+     [LOG] Requirement already satisfied: pydantic-core==2.33.2 in ./.venv_colab_backend/lib/python3.12/site-packages (from -r requirements/base.txt (line 34)) (2.33.2)
+     [LOG] Requirement already satisfied: pydantic-settings==2.10.1 in ./.venv_colab_backend/lib/python3.12/site-packages (from -r requirements/base.txt (line 36)) (2.10.1)
+     [LOG] Requirement already satisfied: python-dateutil==2.9.0.post0 in ./.venv_colab_backend/lib/python3.12/site-packages (from -r requirements/base.txt (line 38)) (2.9.0.post0)
+     [LOG] Requirement already satisfied: python-dotenv==1.1.1 in ./.venv_colab_backend/lib/python3.12/site-packages (from -r requirements/base.txt (line 40)) (1.1.1)
+     [LOG] Requirement already satisfied: pytz==2025.2 in ./.venv_colab_backend/lib/python3.12/site-packages (from -r requirements/base.txt (line 44)) (2025.2)
+     [LOG] Requirement already satisfied: pyyaml==6.0.2 in ./.venv_colab_backend/lib/python3.12/site-packages (from -r requirements/base.txt (line 48)) (6.0.2)
+     [LOG] Requirement already satisfied: six==1.17.0 in ./.venv_colab_backend/lib/python3.12/site-packages (from -r requirements/base.txt (line 50)) (1.17.0)
+     [LOG] Requirement already satisfied: sniffio==1.3.1 in ./.venv_colab_backend/lib/python3.12/site-packages (from -r requirements/base.txt (line 52)) (1.3.1)
+     [LOG] Requirement already satisfied: starlette==0.47.2 in ./.venv_colab_backend/lib/python3.12/site-packages (from -r requirements/base.txt (line 54)) (0.47.2)
+     [LOG] Requirement already satisfied: tabulate==0.9.0 in ./.venv_colab_backend/lib/python3.12/site-packages (from -r requirements/base.txt (line 56)) (0.9.0)
+     [LOG] Requirement already satisfied: typing-extensions==4.14.1 in ./.venv_colab_backend/lib/python3.12/site-packages (from -r requirements/base.txt (line 58)) (4.14.1)
+     [LOG] Requirement already satisfied: typing-inspection==0.4.1 in ./.venv_colab_backend/lib/python3.12/site-packages (from -r requirements/base.txt (line 66)) (0.4.1)
+     [LOG] Requirement already satisfied: tzdata==2025.2 in ./.venv_colab_backend/lib/python3.12/site-packages (from -r requirements/base.txt (line 70)) (2025.2)
+     [LOG] Requirement already satisfied: uvicorn==0.35.0 in ./.venv_colab_backend/lib/python3.12/site-packages (from uvicorn[standard]==0.35.0->-r requirements/base.txt (line 72)) (0.35.0)
+     [LOG] Requirement already satisfied: uvloop==0.21.0 in ./.venv_colab_backend/lib/python3.12/site-packages (from -r requirements/base.txt (line 74)) (0.21.0)
+     [LOG] Requirement already satisfied: watchfiles==1.1.0 in ./.venv_colab_backend/lib/python3.12/site-packages (from -r requirements/base.txt (line 76)) (1.1.0)
+     [LOG] Requirement already satisfied: websockets==15.0.1 in ./.venv_colab_backend/lib/python3.12/site-packages (from -r requirements/base.txt (line 78)) (15.0.1)
+     [LOG]
+     [LOG] [notice] A new release of pip is available: 25.0.1 -> 25.2
+     [LOG] [notice] To update, run: python3 -m pip install --upgrade pip
+   ✅ 命令成功完成。
+✅ 核心依賴安裝成功。
+
+================================================================================
+🚀 2025-08-02 16:27:28 - 步驟 3: 將專案以可編輯模式安裝
+================================================================================
+   🔹 執行命令: .venv_colab_backend/bin/pip install -e .

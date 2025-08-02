@@ -117,8 +117,17 @@ def generate_config_file():
         }
     }
 
+    # V2 E2E 測試模式：從環境變數讀取路徑，若不存在則使用預設值
+    content_root = Path(os.getenv("PHOENIX_CONTENT_ROOT", "/content"))
+    project_folder_name = os.getenv("PHOENIX_PROJECT_FOLDER", PROJECT_FOLDER_NAME)
+    project_path = content_root / project_folder_name
+
+    # 檢查是否有測試用的動態埠號
+    test_port = os.getenv("PHOENIX_TEST_PORT")
+    if test_port:
+        config_data["__test_port__"] = test_port
+
     # 確保專案目錄存在
-    project_path = Path(f"/content/{PROJECT_FOLDER_NAME}")
     project_path.mkdir(exist_ok=True)
 
     config_file_path = project_path / "config.json"
