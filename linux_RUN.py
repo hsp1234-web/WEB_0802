@@ -30,7 +30,7 @@ if project_root not in sys.path:
 # 這使得無論從哪裡執行此腳本，都能找到 phoenix_core 模組
 try:
     from src.phoenix_core.utils.logger import logger
-    from src.phoenix_core.utils.display import DisplayManager
+    # from src.phoenix_core.utils.display import DisplayManager # 已停用
     from src.phoenix_core.utils.worker import run_main_tasks
 except ImportError as e:
     print(f"錯誤: 無法匯入核心模組 ({e})。請確保 `src` 目錄與此腳本位於同一專案根目錄下。")
@@ -38,7 +38,7 @@ except ImportError as e:
 
 
 # --- 全域設定 ---
-WATCHDOG_TIMEOUT_SECONDS = 60  # 如果任務在 60 秒內無任何進展，則視為超時
+WATCHDOG_TIMEOUT_SECONDS = 10  # 如果任務在 10 秒內無任何進展，則視為超時
 
 import argparse
 
@@ -67,9 +67,9 @@ def main():
         'stop_event': stop_event,
     }
 
-    # 2. 初始化日誌和顯示管理器
-    logger.log("BATTLE", "=== 鳳凰之心儀表板系統啟動 ===")
-    display = DisplayManager(shared_state, log_lines=15)
+    # 2. 初始化日誌
+    logger.log("BATTLE", "=== 鳳凰之心純日誌系統啟動 ===")
+    # display = DisplayManager(shared_state, log_lines=15) # 已停用
 
     # 3. 建立並準備工作執行緒
     worker_thread = threading.Thread(
@@ -78,24 +78,27 @@ def main():
         daemon=True
     )
 
-    # 4. 啟動顯示和工作執行緒
-    display.start()
+    # 4. 啟動工作執行緒
+    # display.start() # 已停用
     worker_thread.start()
 
     try:
-        # 5. 主執行緒的「看門狗」迴圈
+        # 5. 主執行緒的「看門狗」與簡易狀態回報迴圈
+        logger.log("INFO", "主執行緒進入監控模式...")
         while worker_thread.is_alive():
             # 檢查工作執行緒是否卡住
             now = datetime.now().timestamp()
             time_since_last_update = now - shared_state.get('last_update_time', now)
 
             if time_since_last_update > WATCHDOG_TIMEOUT_SECONDS:
-                error_message = f"看門狗超時: 任務超過 {WATCHDOG_TIMEOUT_SECONDS} 秒無回應。"
+                error_message = f"看門狗超時: 背景任務超過 {WATCHDOG_TIMEOUT_SECONDS} 秒無回應。"
                 logger.log("CRITICAL", error_message)
                 shared_state['error'] = error_message
-                break # 偵測到超時，跳出迴圈以關閉程式
+                break  # 偵測到超時，跳出迴圈以關閉程式
 
-            worker_thread.join(timeout=1.0) # 每秒檢查一次
+            # 每 2 秒打印一次存活心跳和當前任務狀態
+            logger.log("INFO", f"[主線程監控] 背景任務執行中: {shared_state.get('current_task', 'N/A')}")
+            worker_thread.join(timeout=2.0)  # 等待 2 秒或直到執行緒結束
 
     except KeyboardInterrupt:
         logger.log("WARN", "偵測到使用者手動中斷 (Ctrl+C)。")
@@ -129,7 +132,7 @@ def main():
             worker_thread.join(timeout=2)
 
         # 停止顯示執行緒
-        display.stop()
+        # display.stop() # 已停用
 
         # 確保在所有操作完成後，再進行日誌歸檔
         time.sleep(0.5) # 給顯示執行緒一點時間來打印最後的訊息
