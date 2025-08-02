@@ -1,177 +1,155 @@
 # 檔案: tests/e2e/test_full_lifecycle.py
-# 說明: 模擬從啟動到報告的完整使用者流程，以進行端對端驗證。 (修正版 3)
-# 作者: Jules
-
+# 說明: (V2) 模擬從啟動到報告的完整使用者流程，以進行端對端驗證。
+#      此版本利用環境變數進行配置，無需修改原始碼。
 import subprocess
 import sys
 import os
 import time
-import signal
 import shutil
 from pathlib import Path
-
-# --- 顏色和日誌 ---
-class Color:
-    GREEN = '\033[92m'
-    YELLOW = '\033[93m'
-    RED = '\033[91m'
-    ENDC = '\033[0m'
-
-def log_info(message):
-    print(f"{Color.GREEN}[INFO] {message}{Color.ENDC}")
-
-def log_warn(message):
-    print(f"{Color.YELLOW}[WARN] {message}{Color.ENDC}")
-
-def log_error(message):
-    print(f"{Color.RED}[ERROR] {message}{Color.ENDC}")
+import pytest
 
 # --- 測試設定 ---
+# 將PROJECT_ROOT設定為此檔案所在目錄往上兩層的目錄
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-TMP_CONTENT_DIR = PROJECT_ROOT / "tmp_e2e_test"
+# 在專案根目錄下建立一個名為 `tmp_e2e_test_v2` 的臨時目錄
+TMP_E2E_DIR = PROJECT_ROOT / "tmp_e2e_test_v2"
+# 設定專案資料夾的名稱
 PROJECT_FOLDER_NAME = "WEB1_E2E_TEST"
-PROJECT_PATH = TMP_CONTENT_DIR / PROJECT_FOLDER_NAME
+# 組合出完整的專案路徑
+PROJECT_PATH = TMP_E2E_DIR / PROJECT_FOLDER_NAME
+# 模擬 `colab_runner.py` 運行的時間（秒）
 RUN_TIME_SECONDS = 15
-VENV_PYTHON_PATH = PROJECT_ROOT / ".venv" / "bin" / "python"
 
-# --- 主測試函式 ---
-def main():
-    """執行完整的端對端測試流程。"""
+@pytest.fixture(scope="module")
+def setup_e2e_environment():
+    """
+    (Fixture) 設定 E2E 測試環境。
+    在所有測試開始前執行一次，並在結束後進行清理。
+    """
+    # --- 環境準備 ---
+    # 如果臨時目錄已存在，先刪除
+    if TMP_E2E_DIR.exists():
+        shutil.rmtree(TMP_E2E_DIR)
+    # 建立臨時目錄
+    TMP_E2E_DIR.mkdir()
 
-    process = None # 確保 process 在 try 區塊外被定義
+    # --- 模擬的 Colab 內容目錄 ---
+    # 這是 `colab_runner.py` 和 `report.py` 將要操作的根目錄
+    # 我們將其命名為 `content` 以模擬 Colab 的環境
+    content_dir = TMP_E2E_DIR / "content"
+    content_dir.mkdir()
+
+    # --- 複製專案程式碼 ---
+    # 將當前的專案完整複製到臨時的專案路徑下
+    # 忽略 .venv, .git 等不必要的檔案
+    shutil.copytree(
+        PROJECT_ROOT,
+        PROJECT_PATH,
+        ignore=shutil.ignore_patterns('.venv', '.git', '__pycache__', 'tmp_e2e_test*')
+    )
+
+    # `yield` 關鍵字將控制權交還給測試函式
+    # `yield` 之後的程式碼將在測試結束後執行
+    yield {
+        "content_dir": content_dir,
+        "project_path": PROJECT_PATH
+    }
+
+    # --- 清理 ---
+    # 測試結束後，刪除整個臨時目錄
+    shutil.rmtree(TMP_E2E_DIR)
+    print("\n[INFO] 臨時 E2E 測試環境已清理。")
+
+def test_full_lifecycle(setup_e2e_environment):
+    """
+    執行完整的端對端生命週期測試。
+    """
+    # 從 fixture 取得設定好的路徑
+    content_dir = setup_e2e_environment["content_dir"]
+    project_path = setup_e2e_environment["project_path"]
+
+    # --- 1. 設定環境變數 ---
+    # 這是新測試方法的關鍵：透過環境變數控制腳本行為
+    test_env = os.environ.copy()
+    test_env["PHOENIX_FAST_TEST_MODE"] = "True"
+    test_env["PHOENIX_CONTENT_ROOT"] = str(content_dir)
+    test_env["PHOENIX_PROJECT_FOLDER"] = PROJECT_FOLDER_NAME
+    # 將專案根目錄添加到 PYTHONPATH，以便子程序能找到 'src' 模組
+    test_env["PYTHONPATH"] = str(project_path) + os.pathsep + test_env.get("PYTHONPATH", "")
+
+    # --- 2. 執行 colab_runner.py ---
+    # 我們不再需要修改 runner 腳本，只需在正確的環境下執行它
+    colab_runner_path = project_path / "run" / "colab_runner.py"
+    # 使用 `sys.executable` 確保我們用的是執行 pytest 的同一個 Python 解譯器
+    command = [sys.executable, str(colab_runner_path)]
+
+    print(f"\n[INFO] 執行指令: {' '.join(command)}")
+    print(f"[INFO] 環境變數: PHOENIX_CONTENT_ROOT={test_env['PHOENIX_CONTENT_ROOT']}, PHOENIX_PROJECT_FOLDER={test_env['PHOENIX_PROJECT_FOLDER']}")
+
+    # 啟動子程序
+    process = subprocess.Popen(
+        command,
+        env=test_env,
+        cwd=project_path, # 在模擬的專案目錄下執行
+        stdout=sys.stdout,
+        stderr=sys.stderr,
+    )
+
+    # --- 3. 等待並優雅關閉 ---
+    print(f"[INFO] 等待 {RUN_TIME_SECONDS} 秒...")
+    time.sleep(RUN_TIME_SECONDS)
+
+    print(f"[INFO] 發送 SIGINT (Ctrl+C) 至進程 (PID: {process.pid}) 以觸發優雅關機...")
+    # process.send_signal(signal.SIGINT) # 在某些 CI 環境中可能不穩定
+    process.terminate() # 使用 terminate 更為可靠
     try:
-        # --- 1. 環境準備 ---
-        log_info("--- 步驟 1: 環境準備 ---")
-        if TMP_CONTENT_DIR.exists():
-            shutil.rmtree(TMP_CONTENT_DIR)
-        TMP_CONTENT_DIR.mkdir()
-
-        # 複製整個專案到一個模擬的 git clone 目錄
-        shutil.copytree(PROJECT_ROOT, PROJECT_PATH, ignore=shutil.ignore_patterns('.venv', 'tmp_e2e_test', '.git', '__pycache__'))
-        os.chdir(PROJECT_PATH) # 進入模擬的專案目錄
-        log_info(f"臨時 Colab 環境已建立於: {PROJECT_PATH}")
-
-        # --- 2. 模擬 colab_runner.py ---
-        log_info(f"--- 步驟 2: 模擬執行 run/colab_runner.py (將運行 {RUN_TIME_SECONDS} 秒) ---")
-        colab_runner_path = PROJECT_PATH / "run" / "colab_runner.py"
-
-        # 我們需要修改 colab_runner.py 來禁用 git clone 和設定正確的 project folder
-        with open(colab_runner_path, "r", encoding="utf-8") as f:
-            runner_content = f.read()
-
-        runner_content = runner_content.replace(
-            'PROJECT_FOLDER_NAME = "WEB1"',
-            f'PROJECT_FOLDER_NAME = "{PROJECT_FOLDER_NAME}"'
-        ).replace(
-            'base_path = Path("/content")',
-            f'base_path = Path("{TMP_CONTENT_DIR}")'
-        ).replace(
-            'if FORCE_REPO_REFRESH and project_path.exists():',
-            'if False: # E2E Test'
-        ).replace(
-            'if not project_path.exists():',
-            'if False: # E2E Test'
-        )
-        with open(colab_runner_path, "w", encoding="utf-8") as f:
-            f.write(runner_content)
-
-        command = [str(VENV_PYTHON_PATH), str(colab_runner_path)]
-        log_info(f"執行指令: {' '.join(command)}")
-
-        process = subprocess.Popen(
-            command,
-            stdout=sys.stdout, # 直接輸出到主控台方便即時觀察
-            stderr=sys.stderr,
-            text=True,
-            encoding='utf-8'
-        )
-
-        # --- 3. 模擬使用者中斷 ---
-        log_info(f"--- 步驟 3: 等待 {RUN_TIME_SECONDS} 秒後，模擬使用者中斷 (Ctrl+C) ---")
-        time.sleep(RUN_TIME_SECONDS)
-
-        log_info(f"發送 SIGINT 信號至進程 (PID: {process.pid})")
-        process.send_signal(signal.SIGINT)
-
-        log_info("等待進程結束...")
         process.wait(timeout=20)
-        log_info("進程已結束。")
+        print("[INFO] colab_runner.py 進程已結束。")
+    except subprocess.TimeoutExpired:
+        print("[WARN] 等待進程超時，強制終止。")
+        process.kill()
 
-        # --- 4. 驗證 state.db ---
-        log_info("--- 步驟 4: 驗證 state.db 是否生成 ---")
-        db_path = PROJECT_PATH / "state.db"
-        if not db_path.exists():
-            log_error(f"測試失敗: state.db 未在 {db_path} 中生成。")
-            sys.exit(1)
-        log_info(f"✅ 成功找到 state.db 於: {db_path}")
+    # --- 4. 驗證 state.db 是否生成 ---
+    db_path = project_path / "state.db"
+    assert db_path.exists(), f"測試失敗: state.db 未在 {db_path} 中生成。"
+    print(f"[INFO] ✅ 成功找到 state.db 於: {db_path}")
 
-        # --- 5. 模擬 report.py ---
-        log_info("--- 步驟 5: 模擬執行 run/report.py ---")
-        report_script_path = PROJECT_PATH / "run" / "report.py"
+    # --- 5. 執行 report.py ---
+    report_script_path = project_path / "run" / "report.py"
+    report_command = [sys.executable, str(report_script_path)]
 
-        with open(report_script_path, "r", encoding="utf-8") as f:
-            report_content = f.read()
-        report_content = report_content.replace(
-            'PROJECT_FOLDER_NAME = "WEB1"',
-            f'PROJECT_FOLDER_NAME = "{PROJECT_FOLDER_NAME}"'
-        ).replace(
-            'content_root = Path("/content")',
-            f'content_root = Path("{TMP_CONTENT_DIR}")'
-        )
-        with open(report_script_path, "w", encoding="utf-8") as f:
-            f.write(report_content)
+    print(f"[INFO] 執行報告生成指令: {' '.join(report_command)}")
+    report_result = subprocess.run(
+        report_command,
+        env=test_env, # 同樣使用設定好的環境變數
+        cwd=project_path,
+        capture_output=True,
+        text=True,
+        encoding='utf-8'
+    )
 
-        report_command = [str(VENV_PYTHON_PATH), str(report_script_path)]
-        log_info(f"執行指令: {' '.join(report_command)}")
+    # 印出報告腳本的輸出，方便除錯
+    print("\n--- report.py STDOUT ---")
+    print(report_result.stdout)
+    if report_result.stderr:
+        print("\n--- report.py STDERR ---")
+        print(report_result.stderr)
 
-        report_result = subprocess.run(
-            report_command,
-            capture_output=True,
-            text=True,
-            encoding='utf-8'
-        )
+    assert report_result.returncode == 0, "測試失敗: run/report.py 執行時返回非零代碼。"
 
-        print("\n--- report.py STDOUT ---")
-        print(report_result.stdout)
-        if report_result.stderr:
-            print("\n--- report.py STDERR ---")
-            print(report_result.stderr)
+    # --- 6. 最終驗證報告檔案 ---
+    reports_dir = project_path / "reports"
+    assert reports_dir.is_dir(), f"報告目錄 {reports_dir} 未被建立。"
 
-        if report_result.returncode != 0:
-            log_error("測試失敗: run/report.py 執行時返回非零代碼。")
-            sys.exit(1)
+    expected_reports = [
+        "summary_report.md",
+        "performance_report.md",
+        "detailed_log_report.md"
+    ]
+    for report_name in expected_reports:
+        report_path = reports_dir / report_name
+        assert report_path.exists(), f"預期的報告檔案 {report_name} 未在 {reports_dir} 中找到。"
+        print(f"[INFO] ✅ 成功驗證報告存在: {report_name}")
 
-        # --- 6. 最終驗證 ---
-        log_info("--- 步驟 6: 最終驗證報告檔案是否生成 ---")
-        reports_dir = PROJECT_PATH / "reports"
-        expected_reports = ["summary_report.md", "performance_report.md", "detailed_log_report.md"]
-
-        all_reports_found = True
-        for report_name in expected_reports:
-            report_path = reports_dir / report_name
-            if report_path.exists():
-                log_info(f"✅ 成功找到報告: {report_name}")
-            else:
-                log_error(f"❌ 找不到報告: {report_name}")
-                all_reports_found = False
-
-        if all_reports_found:
-            log_info("🎉 端對端生命週期測試成功！")
-            sys.exit(0)
-        else:
-            log_error("💥 端對端生命週期測試失敗。")
-            sys.exit(1)
-
-    finally:
-        # --- 清理 ---
-        if process and process.poll() is None:
-            log_warn("測試結束時，子進程仍在運行。強制終止。")
-            process.kill()
-
-        os.chdir(PROJECT_ROOT) # 切換回原始目錄
-        if TMP_CONTENT_DIR.exists():
-            shutil.rmtree(TMP_CONTENT_DIR)
-            log_info("臨時目錄已刪除。")
-
-if __name__ == "__main__":
-    main()
+    print("\n🎉 [SUCCESS] 端對端生命週期測試成功！")

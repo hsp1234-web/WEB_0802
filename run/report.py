@@ -17,7 +17,8 @@
 #@markdown > **指定專案資料夾以找到 state.db 檔案。**
 #@markdown ---
 #@markdown **專案資料夾名稱 (PROJECT_FOLDER_NAME)**
-PROJECT_FOLDER_NAME = "WEB1" #@param {type:"string"}
+# --- 說明：從環境變數 PHOENIX_PROJECT_FOLDER 讀取，若未設定則使用 Colab 表單預設值。
+PROJECT_FOLDER_NAME = os.getenv("PHOENIX_PROJECT_FOLDER", "WEB1") #@param {type:"string"}
 
 #@markdown ---
 #@markdown ### **Part 2: 報告內容**
@@ -40,8 +41,9 @@ import subprocess
 from pathlib import Path
 from IPython.display import display, Markdown, Code
 
-# --- 設定路徑 ---
-content_root = Path("/content")
+# --- 設定路徑 (已修改為可由環境變數配置) ---
+# --- 說明：從環境變數 PHOENIX_CONTENT_ROOT 讀取根目錄，若未設定則預設為 /content。
+content_root = Path(os.getenv("PHOENIX_CONTENT_ROOT", "/content"))
 project_path = content_root / PROJECT_FOLDER_NAME
 report_script = project_path / "scripts" / "report_generator.py"
 requirements_file = project_path / "scripts" / "requirements-report.txt"

@@ -8,6 +8,7 @@
 import httpx
 import logging
 import re
+import json
 
 # 為這個模組設定一個日誌記錄器
 # 外部呼叫者可以根據需要設定日誌的等級和格式
@@ -71,6 +72,9 @@ def get_package_size(package_spec: str, http_client: httpx.Client) -> int:
         return 0
     except httpx.HTTPStatusError as e:
         logger.warning(f"查詢 PyPI API 時收到非預期的狀態碼 ({name}): {e.response.status_code}")
+        return 0
+    except json.JSONDecodeError:
+        logger.warning(f"無法解析來自 PyPI API 的回應 (套件: {name})，可能不是有效的 JSON。")
         return 0
 
     # 3. 確定目標版本

@@ -67,7 +67,8 @@ REPOSITORY_URL = "https://github.com/hsp1234-web/0721_web" #@param {type:"string
 #@markdown **後端版本分支或標籤 (TARGET_BRANCH_OR_TAG)**
 TARGET_BRANCH_OR_TAG = "main" #@param {type:"string"}
 #@markdown **專案資料夾名稱 (PROJECT_FOLDER_NAME)**
-PROJECT_FOLDER_NAME = "WEB1" #@param {type:"string"}
+# --- 說明：從環境變數 PHOENIX_PROJECT_FOLDER 讀取，若未設定則使用 Colab 表單預設值。
+PROJECT_FOLDER_NAME = os.getenv("PHOENIX_PROJECT_FOLDER", "WEB1") #@param {type:"string"}
 #@markdown **強制刷新後端程式碼 (FORCE_REPO_REFRESH)**
 FORCE_REPO_REFRESH = True #@param {type:"boolean"}
 
@@ -84,7 +85,9 @@ LOG_ARCHIVE_FOLDER_NAME = "作戰日誌歸檔" #@param {type:"string"}
 #@markdown **時區設定 (TIMEZONE)**
 TIMEZONE = "Asia/Taipei" #@param {type:"string"}
 #@markdown **快速測試模式 (FAST_TEST_MODE)**
-FAST_TEST_MODE = False #@param {type:"boolean"}
+# --- 說明：從環境變數 PHOENIX_FAST_TEST_MODE 讀取，若未設定則使用 Colab 表單預設值。
+_fast_test_mode_str = os.getenv("PHOENIX_FAST_TEST_MODE", "False")
+FAST_TEST_MODE = _fast_test_mode_str.lower() in ('true', '1', 't') #@param {type:"boolean"}
 
 #@markdown ---
 #@markdown ### **Part 3: 日誌顯示設定**
@@ -255,7 +258,9 @@ def background_worker():
     """在背景執行緒中處理所有耗時任務：準備環境並啟動後端服務。"""
     project_path = None
     try:
-        base_path = Path("/content")
+        # --- 說明：從環境變數 PHOENIX_CONTENT_ROOT 讀取根目錄，若未設定則預設為 /content。
+        # ---       這使得在本地或 CI/CD 環境中測試時，可以將根目錄指向一個臨時資料夾。
+        base_path = Path(os.getenv("PHOENIX_CONTENT_ROOT", "/content"))
         project_path = base_path / PROJECT_FOLDER_NAME
         with status_lock:
             shared_status["project_path"] = project_path
