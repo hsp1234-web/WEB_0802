@@ -1,7 +1,6 @@
 # 思路框架: 這裡只放應用程式運行時真正需要的東西。
 
 # --- 應用程式核心 ---
-aiohttp
 fastapi
 uvicorn[standard]
 

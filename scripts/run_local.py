@@ -77,35 +77,66 @@ def run_command(command, cwd=".", env=None):
 
 def run_core_application(stop_event):
     """
-    在一個執行緒中運行核心應用程式。
+    【已修改】啟動 FastAPI 伺服器作為核心應用。
     """
-    print_header("步驟 6: 執行核心應用程式")
+    print_header("步驟 6: 啟動核心應用程式 (FastAPI 伺服器)")
+
+    server_process = None
     try:
-        # 使用 venv 的 python 解譯器來執行，以確保環境正確
-        script_content = """
-import sys
-import os
-# 將當前目錄加入 sys.path，以確保能夠找到模組 (雖然 'pip install -e .' 已處理)
-sys.path.insert(0, os.path.abspath('.'))
-from src.phoenix_core.main import start_event_loop
-from src.phoenix_core.utils.logger import logger
-logger.log("INFO", "核心應用程式啟動...")
-try:
-    # 注意：我們現在是在專案的根目錄下執行
-    start_event_loop(fast_run=False)
-    logger.log("SUCCESS", "核心應用程式正常結束。")
-except Exception as e:
-    logger.log("CRITICAL", f"核心應用程式執行時發生錯誤: {e}", exc_info=True)
-"""
-        # 注意: cwd 現在是 '.' (專案根目錄)
-        run_command([VENV_PYTHON, "-c", script_content], cwd=".")
+        # 正確的啟動方式是使用 uvicorn 運行 src.phoenix_core.main 中的 app 物件
+        api_server_command = [
+            VENV_PYTHON,
+            "-m",
+            "uvicorn",
+            "src.phoenix_core.main:app",
+            "--host", "0.0.0.0",
+            "--port", "8080", # 使用一個常用端口
+        ]
+
+        print(f"   🔹 執行命令: {' '.join(api_server_command)}")
+        # 使用 Popen 在背景啟動伺服器
+        server_process = subprocess.Popen(
+            api_server_command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding='utf-8'
+        )
+
+        # 簡化版看門狗：我們不期望伺服器結束，只驗證它能成功運行一段時間
+        # 讓伺服器運行 15 秒，作為一個簡短的測試運行
+        print("   ℹ️ 伺服器正在背景運行，等待 15 秒作為測試運行...")
+
+        # 在等待時，可以即時打印日誌
+        end_time = time.time() + 15
+        while time.time() < end_time:
+            if server_process.poll() is not None:
+                # 如果進程在此期間意外退出，則表示有錯誤
+                stdout, stderr = server_process.communicate()
+                print(f"❌ 伺服器在測試運行期間意外終止。", file=sys.stderr)
+                print(f"   [STDOUT]: {stdout}", file=sys.stderr)
+                print(f"   [STDERR]: {stderr}", file=sys.stderr)
+                raise Exception("伺服器啟動失敗")
+            time.sleep(1)
+
+        print("✅ 伺服器成功運行了 15 秒。")
 
     except Exception as e:
         print(f"❌ 核心應用程式執行緒發生未預期的錯誤: {e}", file=sys.stderr)
     finally:
+        # 無論如何，確保終止伺服器進程，以便腳本可以繼續
+        if server_process and server_process.poll() is None:
+            print("   ℹ️ 測試運行結束，正在終止伺服器...")
+            server_process.terminate()
+            try:
+                server_process.wait(timeout=5)
+                print("   ✅ 伺服器已成功終止。")
+            except subprocess.TimeoutExpired:
+                server_process.kill()
+
+        # 通知主執行緒（如果需要）
         if not stop_event.is_set():
-            print("   ℹ️ 核心應用程式執行緒已結束。")
-            stop_event.set() # 通知主執行緒
+            stop_event.set()
 
 def main():
     """
@@ -158,27 +189,18 @@ def main():
 
         # --- 步驟 5: 在 venv 中安裝專案依賴 ---
         print_header("步驟 5: 在 venv 中安裝專案依賴")
-        requirements_file = "requirements.txt"
+        requirements_file = "requirements/base.txt"
         if os.path.exists(requirements_file):
             run_command([VENV_UV, "pip", "install", "--python", VENV_PYTHON, "-r", requirements_file], cwd=".")
             print("✅ 專案依賴安裝成功。")
         else:
             print(f"⚠️ 找不到 {requirements_file}，跳過依賴安裝。")
 
-        # --- 步驟 6: 執行核心應用程式 (帶看門狗) ---
-        stop_event = threading.Event()
-        worker_thread = threading.Thread(target=run_core_application, args=(stop_event,))
-        worker_thread.daemon = True
-
-        worker_thread.start()
-        worker_thread.join(timeout=WATCHDOG_TIMEOUT)
-
-        if worker_thread.is_alive():
-            print(f"❌ 看門狗超時! 核心應用程式在 {WATCHDOG_TIMEOUT} 秒內未完成。", file=sys.stderr)
-            stop_event.set()
-            worker_thread.join(timeout=10)
-        else:
-            print("✅ 核心應用程式在看門狗時限內正常結束。")
+        # --- 步驟 6: 執行核心應用程式 ---
+        # 由於 run_core_application 現在是阻塞的，我們不再需要獨立的執行緒和複雜的看門狗
+        stop_event = threading.Event() # 雖然簡化了，但保留事件以備未來擴展
+        run_core_application(stop_event)
+        print("✅ 核心應用程式測試運行已完成。")
 
         # --- 步驟 7: 執行報告生成器 ---
         print_header("步驟 7: 執行報告生成器")
@@ -196,12 +218,12 @@ def main():
             open(db_renamed_path, 'a').close()
 
         # 7.2 執行報告生成腳本
-        report_generator_script = os.path.join("scripts", "report_generator.py")
+        report_generator_script = os.path.join("scripts", "generate_report.py")
         if os.path.exists(report_generator_script):
             print(f"偵測到 {report_generator_script}，將直接呼叫它。")
 
             # 安裝報告依賴
-            requirements_report_file = os.path.join("scripts", "requirements-report.txt")
+            requirements_report_file = "requirements/report.txt"
             if os.path.exists(requirements_report_file):
                  print("\\n--- 安裝報告依賴 ---")
                  run_command([VENV_UV, "pip", "install", "--python", VENV_PYTHON, "-r", requirements_report_file], cwd=".")

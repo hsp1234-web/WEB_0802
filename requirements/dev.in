@@ -1,7 +1,7 @@
 # 思路框架: 這裡放開發、測試、格式化等輔助工具。
 
-# 從根目錄的 requirements.in 導入所有核心依賴
--r requirements.in
+# 從同目錄的 base.in 導入所有核心依賴
+-r base.in
 
 # --- 開發與測試工具 ---
 pip-tools
