@@ -1,24 +1,49 @@
 # -*- coding: utf-8 -*-
 # ╔══════════════════════════════════════════════════════════════════╗
 # ║                                                                      ║
-# ║              🚀 Colab 指揮中心 V26 (可配置後端版)                    ║
+# ║              🚀 Colab 指揮中心 V26 (鳳凰之心版)                      ║
 # ║                                                                      ║
 # ╠══════════════════════════════════════════════════════════════════╣
 # ║                                                                      ║
-# ║ - 架構：Colab UI 產生 config.json，傳遞給一個獨立的、              ║
-# ║           穩定的 venv 驅動的啟動器 `start_api_service.py`。        ║
-# ║ - 版本：0.2.6                                                      ║
+# ║ - 架構：Colab UI 負責準備環境、啟動後端，並提供一個               ║
+# ║           API 驅動的儀表板來監控狀態。                             ║
+# ║ - 版本：0.2.6 (Jules's Fix)                                        ║
 # ║                                                                      ║
 # ╚══════════════════════════════════════════════════════════════════╝
-
 import os
 import sys
+import shutil
 import subprocess
 import threading
 import time
 import json
 from pathlib import Path
 from IPython.display import display, HTML, clear_output
+import pytz
+from datetime import datetime
+from collections import deque
+
+# --- 環境相容性處理 ---
+IS_COLAB = 'google.colab' in sys.modules
+
+try:
+    if IS_COLAB:
+        from google.colab import output as colab_output
+    else:
+        # 在本地環境中，建立一個模擬的 colab_output 物件
+        class MockColabOutput:
+            def serve_kernel_port_as_window(self, port, anchor_text=""):
+                print(f"[本地模式] Colab 'serve_kernel_port_as_window' 被呼叫於 port {port}")
+            def clear_output(self, wait=False):
+                pass
+        colab_output = MockColabOutput()
+except ImportError:
+    class MockColabOutput:
+        def serve_kernel_port_as_window(self, port, anchor_text=""):
+            print(f"[本地模式] Colab 'serve_kernel_port_as_window' 被呼叫於 port {port}")
+        def clear_output(self, wait=False):
+            pass
+    colab_output = MockColabOutput()
 
 # --- Colab 使用者介面參數 ---
 #@title 🚀 V26 鳳凰之心指揮中心 { vertical-output: true, display-mode: "form" }
@@ -41,14 +66,8 @@ FORCE_REPO_REFRESH = True #@param {type:"boolean"}
 #@markdown ---
 #@markdown 儀表板更新頻率 (秒) (REFRESH_RATE_SECONDS)
 REFRESH_RATE_SECONDS = 1.0 #@param {type:"number"}
-#@markdown 效能監控更新頻率 (秒) (PERFORMANCE_MONITOR_RATE_SECONDS)
-PERFORMANCE_MONITOR_RATE_SECONDS = 0.5 #@param {type:"number"}
-#@markdown 日誌歸檔資料夾 (LOG_ARCHIVE_FOLDER_NAME)
-LOG_ARCHIVE_FOLDER_NAME = "作戰日誌歸檔" #@param {type:"string"}
 #@markdown 時區設定 (TIMEZONE)
 TIMEZONE = "Asia/Taipei" #@param {type:"string"}
-#@markdown 快速測試模式 (FAST_TEST_MODE)
-FAST_TEST_MODE = False #@param {type:"boolean"}
 
 #@markdown ---
 #@markdown ### Part 3: 日誌顯示設定
@@ -56,154 +75,295 @@ FAST_TEST_MODE = False #@param {type:"boolean"}
 #@markdown ---
 #@markdown 日誌顯示行數 (LOG_DISPLAY_LINES)
 LOG_DISPLAY_LINES = 50 #@param {type:"integer"}
-#@markdown 顯示戰鬥日誌 (SHOW_LOG_LEVEL_BATTLE)
-SHOW_LOG_LEVEL_BATTLE = True #@param {type:"boolean"}
-#@markdown 顯示成功日誌 (SHOW_LOG_LEVEL_SUCCESS)
-SHOW_LOG_LEVEL_SUCCESS = True #@param {type:"boolean"}
-#@markdown 顯示資訊日誌 (SHOW_LOG_LEVEL_INFO)
-SHOW_LOG_LEVEL_INFO = False #@param {type:"boolean"}
-#@markdown 顯示命令日誌 (SHOW_LOG_LEVEL_CMD)
-SHOW_LOG_LEVEL_CMD = False #@param {type:"boolean"}
-#@markdown 顯示系統日誌 (SHOW_LOG_LEVEL_SHELL)
-SHOW_LOG_LEVEL_SHELL = False #@param {type:"boolean"}
-#@markdown 顯示錯誤日誌 (SHOW_LOG_LEVEL_ERROR)
-SHOW_LOG_LEVEL_ERROR = True #@param {type:"boolean"}
-#@markdown 顯示嚴重錯誤日誌 (SHOW_LOG_LEVEL_CRITICAL)
-SHOW_LOG_LEVEL_CRITICAL = True #@param {type:"boolean"}
-#@markdown 顯示效能日誌 (SHOW_LOG_LEVEL_PERF)
-SHOW_LOG_LEVEL_PERF = False #@param {type:"boolean"}
 
 #@markdown ---
 #@markdown > 設定完成後，點擊此儲存格左側的「執行」按鈕。
 #@markdown ---
 
-
 # ==============================================================================
 # 🚀 核心邏輯
 # ==============================================================================
 
-def generate_config_file():
-    """根據 Colab 表單參數生成 config.json"""
-    print("正在生成 config.json...")
-    config_data = {
-        "repository": {
-            "url": REPOSITORY_URL,
-            "branch": TARGET_BRANCH_OR_TAG,
-            "project_folder": PROJECT_FOLDER_NAME
-        },
-        "dashboard_settings": {
-            "refresh_rate_seconds": REFRESH_RATE_SECONDS
-        },
-        "performance_monitor_settings": {
-            "rate_seconds": PERFORMANCE_MONITOR_RATE_SECONDS
-        },
-        "log_settings": {
-            "archive_folder": LOG_ARCHIVE_FOLDER_NAME,
-            "display_lines": LOG_DISPLAY_LINES,
-            "levels": {
-                "battle": SHOW_LOG_LEVEL_BATTLE,
-                "success": SHOW_LOG_LEVEL_SUCCESS,
-                "info": SHOW_LOG_LEVEL_INFO,
-                "cmd": SHOW_LOG_LEVEL_CMD,
-                "shell": SHOW_LOG_LEVEL_SHELL,
-                "error": SHOW_LOG_LEVEL_ERROR,
-                "critical": SHOW_LOG_LEVEL_CRITICAL,
-                "perf": SHOW_LOG_LEVEL_PERF
-            }
-        },
-        "system_settings": {
-            "timezone": TIMEZONE,
-            "fast_test_mode": FAST_TEST_MODE
-        }
-    }
+# --- 共享狀態 ---
+# 這個狀態只在前端 UI 初始化和後端服務啟動前的階段使用。
+# 後端服務啟動後，所有狀態都從 API 獲取。
+shared_status = {
+    "current_task": "初始化中...",
+    "logs": deque(maxlen=LOG_DISPLAY_LINES),
+    "backend_process": None,
+}
+status_lock = threading.Lock()
 
-    # V2 E2E 測試模式：從環境變數讀取路徑，若不存在則使用預設值
-    content_root = Path(os.getenv("PHOENIX_CONTENT_ROOT", "/content"))
-    project_folder_name = os.getenv("PHOENIX_PROJECT_FOLDER", PROJECT_FOLDER_NAME)
-    project_path = content_root / project_folder_name
+def update_status(task=None, log=None):
+    """安全地更新共享狀態，並即時打印日誌。"""
+    with status_lock:
+        if task is not None:
+            shared_status["current_task"] = task
+        if log is not None:
+            log_message = f"[{datetime.now(pytz.timezone(TIMEZONE)).strftime('%H:%M:%S')}] {log}"
+            shared_status["logs"].append(log_message)
+            print(log_message) # 在 Colab 中直接打印，方便除錯
 
-    # 檢查是否有測試用的動態埠號
-    test_port = os.getenv("PHOENIX_TEST_PORT")
-    if test_port:
-        config_data["__test_port__"] = test_port
-
-    # 確保專案目錄存在
-    project_path.mkdir(exist_ok=True)
-
-    config_file_path = project_path / "config.json"
-    with open(config_file_path, "w", encoding="utf-8") as f:
-        json.dump(config_data, f, indent=4, ensure_ascii=False)
-    print(f"✅ config.json 已生成於 {config_file_path}")
-    return str(config_file_path)
-
-
-def background_worker(stop_event, config_path):
-    """
-    背景工作執行緒，呼叫後端啟動器，並傳遞設定檔路徑。
-    """
+def background_worker():
+    """在背景執行緒中處理所有耗時任務：準備環境並啟動後端服務。"""
+    project_path = None
     try:
-        print(" BACKGROUND_WORKER: 正在啟動後端服務...")
+        base_path = Path("/content")
+        project_path = base_path / PROJECT_FOLDER_NAME
+
+        # --- 步驟 1: 準備專案環境 ---
+        update_status(task="準備專案環境", log="檢查專案資料夾...")
+        if FORCE_REPO_REFRESH and project_path.exists():
+            update_status(log=f"偵測到強制刷新，正在刪除舊的專案資料夾: {project_path}...")
+            shutil.rmtree(project_path)
+            update_status(log="✅ 舊資料夾已刪除。")
+
+        if not project_path.exists():
+            update_status(log=f"正在從 {REPOSITORY_URL} (分支/標籤: {TARGET_BRANCH_OR_TAG}) 下載程式碼...")
+            process = subprocess.run(
+                ["git", "clone", "--depth", "1", "--branch", TARGET_BRANCH_OR_TAG, REPOSITORY_URL, str(project_path)],
+                capture_output=True, text=True, encoding='utf-8', check=False
+            )
+            if process.returncode != 0:
+                raise RuntimeError(f"Git clone 失敗: {process.stderr}")
+            update_status(log="✅ 程式碼下載成功。")
+        else:
+            update_status(log="專案資料夾已存在，跳過下載。")
+
+        # --- 步驟 2: 生成設定檔 ---
+        update_status(task="生成專案設定檔", log="正在生成 config.json...")
+        config_data = {
+            "system_settings": { "timezone": TIMEZONE }
+        }
+        config_file_path = project_path / "config.json"
+        with open(config_file_path, "w", encoding="utf-8") as f:
+            json.dump(config_data, f, indent=4, ensure_ascii=False)
+        update_status(log=f"✅ config.json 已生成於 {config_file_path}")
+
+        # --- 步驟 3: 啟動後端 API 服務 ---
+        update_status(task="啟動後端 API 服務", log="準備啟動後端服務...")
+        launch_script_path = project_path / "scripts" / "start_api_service.py"
+        if not launch_script_path.exists():
+            raise FileNotFoundError(f"找不到後端啟動腳本: {launch_script_path}")
+
         command = [
             sys.executable,
-            "scripts/start_api_service.py",
-            "--config", config_path  # 將設定檔路徑傳遞給後端
+            str(launch_script_path),
+            "--config", str(config_file_path)
         ]
 
+        update_status(log=f"🚀 正在使用指令啟動後端服務: {' '.join(command)}")
+        # 關鍵修正: 使用 project_path 作為工作目錄 (cwd)
+        # 將日誌輸出到檔案中，避免污染 Colab UI
+        log_file = open('api_server.log', 'w')
         process = subprocess.Popen(
             command,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
+            cwd=project_path,
+            stdout=log_file,
+            stderr=log_file,
             text=True,
-            encoding='utf-8',
+            encoding='utf-8'
         )
 
-        for line in process.stdout:
-            print(f"   [BACKEND] {line.strip()}")
-            if stop_event.is_set():
-                print("   [BACKEND] 主執行緒請求終止，正在關閉後端服務...")
-                process.terminate()
-                break
+        with status_lock:
+            shared_status["backend_process"] = process
 
-        process.wait()
-        print(" BACKGROUND_WORKER: 後端服務程序已結束。")
+        update_status(log=f"✅ 後端服務已在背景啟動 (PID: {process.pid})。儀表板將開始輪詢狀態。")
+        update_status(task="後端服務運行中")
 
     except Exception as e:
-        print(f"❌ 背景工作執行緒發生致命錯誤: {e}")
+        error_message = f"❌ 背景任務發生致命錯誤: {e}"
+        update_status(task="背景任務失敗", log=error_message)
+        import traceback
+        traceback.print_exc()
 
 def render_dashboard_html():
-    """生成儀表板的 HTML 和 JavaScript。"""
-    # ... (此處的 HTML/JS 碼與之前的版本相同，為節省篇幅省略)
-    # 唯一重要的是，它輪詢的 API 端點是固定的
-    return "<h1>儀表板正在載入...</h1><script>/* 省略的 JS 碼 */</script>"
+    """生成包含動態更新邏輯的儀表板 HTML 骨架"""
+    refresh_interval_ms = int(REFRESH_RATE_SECONDS * 1000)
+
+    css = """
+    <style>
+        body { background-color: #1a1a1a; color: #e0e0e0; font-family: 'Noto Sans TC', 'Fira Code', monospace; }
+        .container { padding: 1em; }
+        .panel { border: 1px solid #444; margin-bottom: 1em; border-radius: 8px; overflow: hidden; }
+        .title { font-weight: bold; padding: 0.5em; border-bottom: 1px solid #444; background-color: #2a2a2a;}
+        .content { padding: 0.8em; }
+        .grid { display: grid; grid-template-columns: 1fr 2fr; gap: 1em; }
+        .log-container { height: 400px; overflow-y: auto; background-color: #222; padding: 0.5em; border-radius: 5px; }
+        .log-entry { font-size: 0.9em; white-space: pre-wrap; word-break: break-all; margin-bottom: 5px; }
+        .footer { text-align: center; padding-top: 1em; border-top: 1px solid #444; font-size: 0.8em; color: #888;}
+        table { width: 100%; border-collapse: collapse; }
+        td { padding: 4px 8px; }
+        .log-level-SUCCESS { color: #c3e88d; }
+        .log-level-ERROR, .log-level-CRITICAL { color: #ff5370; font-weight: bold; }
+        .log-level-INFO { color: #89ddff; }
+        .log-level-WARNING { color: #ffcb6b; }
+        #entry-point-panel { display: none; grid-column: 1 / -1; text-align: center; padding: 1em; background-color: #2d2d2d; border: 1px solid #50fa7b; }
+        #entry-point-button { display: inline-block; padding: 10px 20px; font-size: 1.2em; font-weight: bold; color: #1a1a1a; background-color: #50fa7b; border: none; border-radius: 5px; text-decoration: none; cursor: pointer; }
+    </style>
+    """
+
+    html_body = """
+    <div class="container">
+        <div class="grid">
+            <div>
+                <div class="panel">
+                    <div class="title">微服務狀態</div>
+                    <div class="content"><table id="app-status-table"><tbody><tr><td>等待後端回報...</td></tr></tbody></table></div>
+                </div>
+                <div class="panel">
+                    <div class="title">系統資源</div>
+                    <div class="content">
+                        <table>
+                            <tr><td>CPU</td><td id="cpu-usage">等待中...</td></tr>
+                            <tr><td>RAM</td><td id="ram-usage">等待中...</td></tr>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div class="panel">
+                <div class="title">後端即時日誌</div>
+                <div class="content log-container" id="log-container">等待日誌...</div>
+            </div>
+        </div>
+        <div id="entry-point-panel">
+             <a id="entry-point-button" href="#" target="_blank">🚀 進入主控台</a>
+             <p style="font-size:0.9em; margin-top: 8px;">主儀表板已就緒，點擊上方按鈕進入操作介面。</p>
+        </div>
+        <div class="footer" id="footer-status">指揮中心前端任務: 初始化中...</div>
+    </div>
+    """
+
+    javascript = f"""
+    <script type="text/javascript">
+        const statusMap = {{
+            "running": "🟢 運行中", "pending": "🟡 等待中",
+            "installing": "🛠️ 安裝中", "starting": "🚀 啟動中",
+            "failed": "🔴 失敗", "unknown": "❓ 未知"
+        }};
+        const dashboardApiUrl = '/api/v1/status/dashboard';
+        const perfApiUrl = '/api/v1/status/performance';
+
+        function updateDashboard() {{
+            const fetchDashboard = fetch(dashboardApiUrl).then(res => {{
+                if (!res.ok) throw new Error('儀表板 API 異常');
+                return res.json();
+            }});
+            const fetchPerf = fetch(perfApiUrl).then(res => {{
+                if (!res.ok) throw new Error('效能 API 異常');
+                return res.json();
+            }});
+
+            Promise.all([fetchDashboard, fetchPerf])
+                .then(([dashboardData, perfData]) => {{
+                    // 更新系統資源
+                    document.getElementById('cpu-usage').textContent = `${{perfData.cpu_usage.toFixed(1)}}%`;
+                    document.getElementById('ram-usage').textContent = `${{perfData.ram_usage.toFixed(1)}}%`;
+
+                    // 更新微服務狀態
+                    const appStatusTable = document.getElementById('app-status-table').querySelector('tbody');
+                    let appRows = '';
+                    if (dashboardData.apps_status && Object.keys(dashboardData.apps_status).length > 0) {{
+                        for (const [appName, status] of Object.entries(dashboardData.apps_status)) {{
+                            const statusText = statusMap[status] || statusMap['unknown'];
+                            appRows += `<tr><td>${{appName}}</td><td>${{statusText}}</td></tr>`;
+                        }}
+                    }} else {{
+                        appRows = '<tr><td>等待後端回報...</td></tr>';
+                    }}
+                    appStatusTable.innerHTML = appRows;
+
+                    // 更新日誌
+                    const logContainer = document.getElementById('log-container');
+                    let logEntries = '';
+                    if (dashboardData.logs && dashboardData.logs.length > 0) {{
+                        const reversedLogs = [...dashboardData.logs].reverse();
+                        reversedLogs.forEach(log => {{
+                            const time = new Date(log.timestamp).toLocaleTimeString('en-GB');
+                            logEntries += `<div class="log-entry"><span class="log-level-${{log.level}}">[${{time}}] [${{log.level}}]</span> ${{log.message}}</div>`;
+                        }});
+                    }} else {{
+                        logEntries = '等待日誌...';
+                    }}
+                    logContainer.innerHTML = logEntries;
+                    logContainer.scrollTop = logContainer.scrollHeight;
+
+                    // 更新頁腳和主控台入口
+                    const footer = document.getElementById('footer-status');
+                    const entryPointPanel = document.getElementById('entry-point-panel');
+                    const entryPointButton = document.getElementById('entry-point-button');
+
+                    if (dashboardData.action_url) {{
+                        entryPointPanel.style.display = 'block';
+                        entryPointButton.href = dashboardData.action_url;
+                        footer.textContent = `指揮中心後端任務: ${{dashboardData.current_stage || '所有服務運行中'}}`;
+                    }} else {{
+                        entryPointPanel.style.display = 'none';
+                        footer.textContent = `指揮中心後端任務: ${{dashboardData.current_stage || '執行中...'}}`;
+                    }}
+                }})
+                .catch(error => {{
+                    const footer = document.getElementById('footer-status');
+                    footer.textContent = `前端狀態: 🔴 API 請求失敗 - ${{error.message}}`;
+                }});
+        }}
+
+        // 立即執行一次，然後設定定時器
+        // 等待 5 秒，給後端一點啟動時間
+        setTimeout(() => {{
+            updateDashboard();
+            setInterval(updateDashboard, {refresh_interval_ms});
+        }}, 5000);
+    </script>
+    """
+    return css + html_body + javascript
 
 def main():
     """主執行函式。"""
-    stop_event = threading.Event()
+    update_status(log="指揮中心 V26 啟動程序開始。")
 
-    try:
-        # 1. 生成設定檔
-        config_file_path = generate_config_file()
-
-        # 2. 清理輸出並顯示儀表板 (此處簡化，實際應顯示完整儀表板)
+    # 在 Colab 中，清理輸出並顯示儀表板
+    if IS_COLAB:
         clear_output(wait=True)
-        print("儀表板 UI 正在渲染...")
-        # display(HTML(render_dashboard_html()))
+        display(HTML("<h1>🚀 鳳凰之心指揮中心 V26</h1>"))
+        display(HTML("<p>正在準備環境，請稍候... 初始日誌將顯示於此儲存格下方。</p>"))
+    else:
+        print("偵測到本地模式，將不會渲染 HTML 儀表板。")
 
-        # 3. 啟動背景工作執行緒
-        worker_thread = threading.Thread(
-            target=background_worker,
-            args=(stop_event, config_file_path),
-            daemon=True
-        )
-        worker_thread.start()
+    # 啟動背景工作執行緒
+    worker_thread = threading.Thread(target=background_worker, daemon=True)
+    worker_thread.start()
 
-        # 4. 主執行緒等待，直到使用者手動中斷
-        worker_thread.join()
+    # 等待背景工作者表示後端進程已啟動
+    while shared_status.get("backend_process") is None and worker_thread.is_alive():
+        time.sleep(0.5)
+
+    if shared_status.get("backend_process") is None:
+        print("❌ 後端服務啟動失敗，請檢查上方日誌。")
+        return
+
+    # 一旦後端進程啟動，就顯示儀表板
+    if IS_COLAB:
+        clear_output(wait=True)
+        display(HTML(render_dashboard_html()))
+    else:
+        print("後端已啟動，儀表板在本地模式下不顯示。")
+
+    backend_process = shared_status["backend_process"]
+    try:
+        # 等待後端程序自然結束
+        exit_code = backend_process.wait()
+        update_status(log=f"[前端] 後端程序已終止，返回碼: {exit_code}。")
 
     except KeyboardInterrupt:
-        print("\n🛑 偵測到使用者手動中斷。正在通知後端服務關閉...")
-        stop_event.set()
-        time.sleep(2)
+        print("\n🛑 偵測到手動中斷，正在終止後端服務...")
+        backend_process.terminate()
+        try:
+            backend_process.wait(timeout=5)
+            print("✅ 後端服務已成功終止。")
+        except subprocess.TimeoutExpired:
+            print("⚠️ 終止超時，強制抹除。")
+            backend_process.kill()
         print("✅ 前端程序已結束。")
 
 if __name__ == "__main__":
