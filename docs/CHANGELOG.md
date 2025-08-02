@@ -6,6 +6,26 @@
 
 ---
 
+## v0.2.0 (進行中) - 測試架構重構與依賴清理
+
+**目標**: 提升測試套件的可維護性與擴展性，並徹底清理舊架構的技術債，使專案技術棧 100% 統一。
+
+### 1. 測試抽象化 (`conftest.py`)
+*   **引入共享 Fixture**: 在 `tests/conftest.py` 中建立了名為 `live_api_service` 的公共測試裝置 (Fixture)。
+*   **封裝複雜邏輯**: 此 Fixture 完整地封裝了「在背景啟動 Colab 後端服務、輪詢 API 直到其就緒、測試結束後自動關閉服務」的複雜流程。
+*   **簡化測試案例**: 重構了 `tests/integration/test_colab_flow.py`，使其直接使用 `live_api_service` Fixture。這使得測試案例本身的程式碼大幅減少，變得極其簡潔且專注於業務邏輯驗證。
+
+### 2. 技術債清理 (Tech Debt Cleanup)
+*   **依賴純淨化**: 從核心依賴檔案 `requirements/base.in` 中徹底移除了舊的 `aiohttp` 依賴。
+*   **過時測試移除**: 刪除了 `tests/integration/` 目錄下所有針對舊 `aiohttp` 伺服器編寫的測試檔案。
+*   **依賴文件再生**: 執行 `pip-compile` 重新生成了所有 `requirements/*.txt` 鎖定檔案，確保依賴關係的準確與乾淨。
+
+### 3. 文件同步 (Documentation Sync)
+*   **架構文件更新**: 更新了 `docs/ARCHITECTURE_V2_Proposal.md`，新增了「測試策略」章節，詳細闡述了基於 `conftest.py` 和 Fixture 的測試架構。
+*   **本變更紀錄**: 新增了此 v0.2.0 的變更紀錄。
+
+---
+
 ## 2025-08-01: v24 - 可測試性與環境解耦重構
 
 **目標**: 解決 V24 (API 驅動) 架構在非 Colab 環境下難以測試的問題，並對其進行全面的加固，使其具備在任何環境下都能可靠運行的能力。

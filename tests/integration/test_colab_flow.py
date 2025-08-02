@@ -1,87 +1,27 @@
 # -*- coding: utf-8 -*-
-import sys
-import os
-import subprocess
-import time
-import pytest
+# 檔案: tests/integration/test_colab_flow.py (V2 - Fixture 驅動版)
+# 說明: 驗證 Colab 啟動流程的整合測試。
+#       此版本已重構，使用來自 conftest.py 的共享 Fixture。
+
 import httpx
 
-# --- 測試設定 ---
-COLAB_RUNNER_SCRIPT = "run/colab_runner.py"
+# --- 常數設定 ---
+# 注意: 這些常數現在也可以考慮移至 conftest.py，以實現更高層次的共享
 API_STATUS_URL = "http://localhost:8088/api/v1/status"
-STARTUP_WAIT_SECONDS = 25  # 給予足夠的時間讓 venv 建立和依賴安裝
-POLL_INTERVAL_SECONDS = 1
 
-@pytest.fixture(scope="module")
-def colab_backend_service():
+def test_colab_api_status_endpoint(live_api_service):
     """
-    一個 Pytest Fixture，負責在背景啟動 Colab 後端服務，
-    並在測試結束後將其關閉。
-    """
-    # 檢查腳本是否存在
-    if not os.path.exists(COLAB_RUNNER_SCRIPT):
-        pytest.fail(f"找不到 Colab 啟動腳本: {COLAB_RUNNER_SCRIPT}")
-
-    print(f"\n--- 啟動背景服務: {COLAB_RUNNER_SCRIPT} ---")
-    # 使用 Popen 啟動 colab_runner.py，它會再啟動 start_api_service.py
-    process = subprocess.Popen(
-        [sys.executable, COLAB_RUNNER_SCRIPT],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT, # 合併輸出方便除錯
-        text=True,
-        encoding='utf-8'
-    )
-
-    # --- 等待服務啟動 ---
-    # 我們將輪詢 API 端點，直到它成功回傳 200 或超時
-    start_time = time.time()
-    service_ready = False
-    while time.time() - start_time < STARTUP_WAIT_SECONDS:
-        try:
-            # 將後端日誌打印出來，以監控啟動過程
-            # 注意：這裡使用 non-blocking read 可能會更複雜，暫時簡化
-            # for line in process.stdout:
-            #     print(f"  [SERVICE LOG] {line.strip()}")
-
-            with httpx.Client() as client:
-                response = client.get(API_STATUS_URL, timeout=POLL_INTERVAL_SECONDS)
-                if response.status_code == 200:
-                    print(f"\n✅ 服務在 {time.time() - start_time:.2f} 秒後成功啟動。")
-                    service_ready = True
-                    break
-        except (httpx.ConnectError, httpx.ReadTimeout):
-            # 服務尚未就緒，這是預期中的
-            print(f"   - 等待服務啟動... (已過 {time.time() - start_time:.0f}s)")
-            time.sleep(POLL_INTERVAL_SECONDS)
-
-    if not service_ready:
-        # 如果服務啟動失敗，結束測試前先殺掉進程並打印日誌
-        process.terminate()
-        out, _ = process.communicate()
-        print("❌ 服務啟動超時。後端日誌輸出:")
-        print(out)
-        pytest.fail("後端 API 服務未能在指定時間內啟動。")
-
-    # 使用 yield 將控制權交還給測試函式
-    yield process
-
-    # --- 測試結束後的清理工作 ---
-    print(f"\n--- 測試結束，正在關閉背景服務 (PID: {process.pid}) ---")
-    process.terminate()
-    try:
-        process.wait(timeout=5)
-        print("✅ 服務已成功關閉。")
-    except subprocess.TimeoutExpired:
-        print("⚠️ 服務關閉超時，強制終止。")
-        process.kill()
-
-def test_colab_api_status_endpoint(colab_backend_service):
-    """
+    【已簡化】
     測試在 Colab 流程啟動後，其後端 API 的 /api/v1/status 端點是否正常運作。
+
+    這個測試函式現在非常乾淨，它只關心一件事：
+    在 `live_api_service` Fixture 確保服務已就緒的前提下，驗證 API 的回應是否正確。
+    所有關於如何啟動、等待、關閉服務的複雜邏輯都已被抽象到 Fixture 中。
     """
     print("\n--- 執行測試: test_colab_api_status_endpoint ---")
 
     # 1. 發送請求
+    #    此時，我們 100% 確定服務已經在背景成功運行
     print(f"   - 正在請求 API: {API_STATUS_URL}")
     with httpx.Client() as client:
         response = client.get(API_STATUS_URL)
