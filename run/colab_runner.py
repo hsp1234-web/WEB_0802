@@ -144,6 +144,51 @@ def update_status(task=None, log=None):
         if log is not None:
             shared_status["logs"].append(f"[{datetime.now(pytz.timezone(TIMEZONE)).strftime('%H:%M:%S')}] {log}")
 
+def install_core_dependencies(project_path: Path):
+    """安裝核心依賴，包含磁碟檢查和進度顯示。"""
+    update_status(task="安裝核心依賴", log="正在安裝儀表板快速啟動所需的最小依賴...")
+    requirements_path = project_path / "requirements-core.txt"
+    if not requirements_path.exists():
+        update_status(log=f"⚠️ 找不到 {requirements_path}，跳過核心依賴安裝。")
+        return
+
+    # 保護裝置：檢查磁碟空間
+    MIN_REQUIRED_SPACE_GB = 0.5
+    # shutil.disk_usage returns a tuple (total, used, free)
+    free_space_bytes = shutil.disk_usage('/')[2]
+    free_space_gb = free_space_bytes / (1024**3)
+    update_status(log=f"ℹ️ 目前可用磁碟空間: {free_space_gb:.2f} GB。")
+
+    if free_space_gb < MIN_REQUIRED_SPACE_GB:
+        raise RuntimeError(
+            f"可用磁碟空間不足 {MIN_REQUIRED_SPACE_GB} GB，"
+            f"目前僅剩 {free_space_gb:.2f} GB。已中止安裝以保護系統。"
+        )
+
+    # 為了顯示進度條，我們不再使用 -q 參數，並改用 Popen 來即時串流輸出
+    update_status(log="[進度] 開始安裝核心依賴，請稍候...")
+    install_process = subprocess.Popen(
+        [sys.executable, "-m", "pip", "install", "-r", str(requirements_path)],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        encoding='utf-8'
+    )
+
+    # 即時讀取 stdout
+    if install_process.stdout:
+        for line in iter(install_process.stdout.readline, ''):
+            update_status(log=f"[pip] {line.strip()}")
+
+    return_code = install_process.wait()
+
+    if return_code != 0:
+        stderr_output = install_process.stderr.read() if install_process.stderr else ""
+        raise RuntimeError(f"pip install 核心依賴失敗，返回碼: {return_code}\n錯誤訊息:\n{stderr_output}")
+
+    update_status(log="✅ 核心依賴安裝完成。")
+
+
 def background_worker():
     """在背景執行緒中處理所有耗時任務：準備環境並啟動後端服務。"""
     project_path = None
@@ -174,12 +219,10 @@ def background_worker():
 
         # --- 步驟 2: 生成設定檔 ---
         update_status(task="生成專案設定檔", log="正在根據 Colab 表單生成 config.json...")
-        # 決定日誌等級 (取最詳細的那個)
-        log_level = "INFO" # 預設值
+        log_level = "INFO"
         if SHOW_LOG_LEVEL_PERF: log_level = "PERF"
         if SHOW_LOG_LEVEL_CMD: log_level = "CMD"
         if SHOW_LOG_LEVEL_SHELL: log_level = "SHELL"
-        # 在 V23 中，我們假設 DEBUG > INFO，所以如果需要 INFO，就用 DEBUG
         if SHOW_LOG_LEVEL_INFO: log_level = "DEBUG"
 
         config_data = {
@@ -192,14 +235,8 @@ def background_worker():
             json.dump(config_data, f, indent=4, ensure_ascii=False)
         update_status(log=f"✅ Colab 設定檔 (config.json) 已生成，日誌等級設為 {log_level}。")
 
-        # --- 步驟 3: 安裝依賴 ---
-        update_status(task="安裝後端依賴", log="正在安裝後端服務所需的依賴套件...")
-        requirements_path = project_path / "requirements.txt"
-        if requirements_path.exists():
-             subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "-r", str(requirements_path)])
-             update_status(log="✅ 後端依賴安裝完成。")
-        else:
-             update_status(log="⚠️ 找不到 requirements.txt，跳過依賴安裝。")
+        # --- 步驟 3: 安裝核心依賴 ---
+        install_core_dependencies(project_path)
 
         # --- 步驟 4: 啟動後端 API 服務 ---
         update_status(task="啟動後端 API 服務")

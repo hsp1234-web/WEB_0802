@@ -16,6 +16,7 @@ import argparse
 from pathlib import Path
 from aiohttp import web
 from collections import deque
+from datetime import datetime
 
 # --- 全域設定 (可由環境變數覆寫) ---
 DB_PATH = Path(os.environ.get("PHOENIX_DB_PATH", "state.db"))
@@ -61,7 +62,7 @@ shared_state = {
     "current_stage": "初始化中...",
     "cpu_usage": 0.0,
     "ram_usage": 0.0,
-    "apps_status": {}, # 模擬的微服務狀態
+    "apps_status": {"database": "pending", "cache": "pending", "report_system": "pending"},
     "logs": deque(maxlen=100), # 只保留最新的 100 筆日誌在記憶體中
     "shutdown_event": asyncio.Event(),
     "db_conn": None
@@ -158,6 +159,49 @@ async def monitor_resources():
         await asyncio.sleep(2) # 每 2 秒更新一次
     log.info("資源監控任務已停止。")
 
+async def install_feature_dependencies():
+    """
+    在背景安裝非核心但重要的功能性依賴（例如 pandas）。
+    """
+    shared_state["apps_status"]["report_system"] = "installing"
+    update_stage("背景任務：安裝功能性依賴", "正在背景安裝報告系統所需的依賴 (pandas, etc.)...")
+
+    requirements_path = Path(__file__).parent.parent / "requirements-features.txt"
+    if not requirements_path.exists():
+        log.warning(f"找不到功能性依賴文件 {requirements_path}，跳過安裝。")
+        shared_state["apps_status"]["report_system"] = "failed"
+        return
+
+    try:
+        install_process = await asyncio.create_subprocess_exec(
+            sys.executable, "-m", "pip", "install", "-r", str(requirements_path),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+
+        # 異步讀取輸出
+        if install_process.stdout:
+            while True:
+                line = await install_process.stdout.readline()
+                if not line:
+                    break
+                log.info(f"[pip-features] {line.decode('utf-8', errors='ignore').strip()}")
+
+        return_code = await install_process.wait()
+
+        if return_code != 0:
+            stderr_output = await install_process.stderr.read()
+            error_msg = stderr_output.decode('utf-8', errors='ignore')
+            log.error(f"安裝功能性依賴失敗，返回碼: {return_code}\n{error_msg}")
+            shared_state["apps_status"]["report_system"] = "failed"
+        else:
+            log.info("✅ 功能性依賴安裝成功。")
+            shared_state["apps_status"]["report_system"] = "running" # 'running' 表示已就緒
+
+    except Exception as e:
+        log.error(f"安裝功能性依賴時發生未預期錯誤: {e}", exc_info=True)
+        shared_state["apps_status"]["report_system"] = "failed"
+
 def update_stage(stage_name, message=None):
     """輔助函式，用於更新當前階段並記錄日誌。"""
     shared_state["current_stage"] = stage_name
@@ -176,7 +220,8 @@ async def core_task():
     """
     try:
         update_stage("核心任務：啟動中")
-        shared_state["apps_status"] = {"database": "starting", "cache": "pending"}
+        # 更新狀態，而不是覆寫
+        shared_state["apps_status"].update({"database": "starting", "cache": "pending"})
         await asyncio.sleep(2)
 
         update_stage("核心任務：正在設定服務", "核心任務：正在設定服務 (Database)")
@@ -230,6 +275,7 @@ async def main(config=None):
 
     # 啟動背景任務
     resource_monitor_task = asyncio.create_task(monitor_resources())
+    feature_install_task = asyncio.create_task(install_feature_dependencies())
     main_core_task = asyncio.create_task(core_task())
 
     # 設定 web runner
@@ -252,8 +298,9 @@ async def main(config=None):
 
     # 取消背景任務
     resource_monitor_task.cancel()
+    feature_install_task.cancel()
     main_core_task.cancel()
-    await asyncio.gather(resource_monitor_task, main_core_task, return_exceptions=True)
+    await asyncio.gather(resource_monitor_task, feature_install_task, main_core_task, return_exceptions=True)
     log.info("所有背景任務已清理完畢。")
 
     # 將最終狀態寫入資料庫
@@ -306,9 +353,6 @@ if __name__ == "__main__":
     # 為了在 Windows 上良好運作，需要設定事件迴圈策略
     if sys.platform == 'win32':
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-
-    # 匯入 datetime 以便在 update_stage 中使用
-    from datetime import datetime
 
     try:
         asyncio.run(main(config=config_data))
