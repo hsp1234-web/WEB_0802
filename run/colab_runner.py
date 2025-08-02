@@ -24,6 +24,8 @@ import pytz
 from datetime import datetime
 import threading
 from collections import deque
+from src.phoenix_core.kernel.package_utils import get_package_size
+
 # --- 環境相容性處理 ---
 IS_COLAB = 'google.colab' in sys.modules
 
@@ -145,48 +147,108 @@ def update_status(task=None, log=None):
             shared_status["logs"].append(f"[{datetime.now(pytz.timezone(TIMEZONE)).strftime('%H:%M:%S')}] {log}")
 
 def install_core_dependencies(project_path: Path):
-    """安裝核心依賴，包含磁碟檢查和進度顯示。"""
-    update_status(task="安裝核心依賴", log="正在安裝儀表板快速啟動所需的最小依賴...")
+    """
+    安全地安裝核心依賴，採用逐一套件安裝並在安裝前進行動態資源檢查。
+    """
+    update_status(task="安裝核心依賴", log="正在準備安全安裝程序...")
     requirements_path = project_path / "requirements-core.txt"
     if not requirements_path.exists():
-        update_status(log=f"⚠️ 找不到 {requirements_path}，跳過核心依賴安裝。")
+        update_status(log=f"⚠️ 找不到核心依賴檔案: {requirements_path}，跳過安裝。")
         return
 
-    # 保護裝置：檢查磁碟空間
-    MIN_REQUIRED_SPACE_GB = 0.5
-    # shutil.disk_usage returns a tuple (total, used, free)
-    free_space_bytes = shutil.disk_usage('/')[2]
-    free_space_gb = free_space_bytes / (1024**3)
-    update_status(log=f"ℹ️ 目前可用磁碟空間: {free_space_gb:.2f} GB。")
+    # 1. 讀取並解析 requirements 檔案
+    update_status(log=f"正在讀取依賴清單: {requirements_path}")
+    try:
+        with open(requirements_path, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+    except FileNotFoundError:
+        update_status(log=f"⚠️ 找不到核心依賴檔案: {requirements_path}，跳過安裝。")
+        return
 
-    if free_space_gb < MIN_REQUIRED_SPACE_GB:
-        raise RuntimeError(
-            f"可用磁碟空間不足 {MIN_REQUIRED_SPACE_GB} GB，"
-            f"目前僅剩 {free_space_gb:.2f} GB。已中止安裝以保護系統。"
-        )
 
-    # 為了顯示進度條，我們不再使用 -q 參數，並改用 Popen 來即時串流輸出
-    update_status(log="[進度] 開始安裝核心依賴，請稍候...")
-    install_process = subprocess.Popen(
-        [sys.executable, "-m", "pip", "install", "-r", str(requirements_path)],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        encoding='utf-8'
-    )
+    packages_to_install = []
+    for line in lines:
+        # 去除行內註解 (從 '#' 開始的部分)
+        line_content = line.split('#')[0].strip()
+        # 只有在處理後還有內容時才加入列表
+        if line_content:
+            packages_to_install.append(line_content)
 
-    # 即時讀取 stdout
-    if install_process.stdout:
-        for line in iter(install_process.stdout.readline, ''):
-            update_status(log=f"[pip] {line.strip()}")
+    if not packages_to_install:
+        update_status(log="✅ 依賴清單為空，無需安裝。")
+        return
 
-    return_code = install_process.wait()
+    update_status(log=f"發現 {len(packages_to_install)} 個核心依賴需要安裝。")
 
-    if return_code != 0:
-        stderr_output = install_process.stderr.read() if install_process.stderr else ""
-        raise RuntimeError(f"pip install 核心依賴失敗，返回碼: {return_code}\n錯誤訊息:\n{stderr_output}")
+    # 2. 逐一套件安裝與檢查
+    # 使用 httpx.Client 提高效率，避免為每個請求建立新連線
+    with httpx.Client(timeout=20.0, follow_redirects=True) as client:
+        for i, package_spec in enumerate(packages_to_install):
+            task_header = f"[{i+1}/{len(packages_to_install)}] {package_spec}"
+            update_status(task=f"安裝依賴: {package_spec}", log=f"--- {task_header} ---")
 
-    update_status(log="✅ 核心依賴安裝完成。")
+            # 2.1 估算套件大小
+            update_status(log="[檢查] 正在從 PyPI 估算預計安裝大小...")
+            estimated_size_bytes = get_package_size(package_spec, client)
+
+            if estimated_size_bytes == 0:
+                update_status(log=f"⚠️ [警告] 無法估算套件 '{package_spec}' 的大小。將跳過空間檢查直接嘗試安裝。")
+                # 雖然我們無法檢查，但還是要確保至少有基礎的空間
+                required_space_bytes = 10 * 1024 * 1024 # 假設至少需要 10MB
+            else:
+                # 增加 20% 的安全緩衝，以應對解壓縮後的體積和依賴
+                required_space_bytes = int(estimated_size_bytes * 1.2)
+
+            estimated_size_mb = estimated_size_bytes / (1024**2)
+            required_size_mb = required_space_bytes / (1024**2)
+
+            if estimated_size_bytes > 0:
+                 update_status(log=f"[檢查] 預估大小: {estimated_size_mb:.2f} MB。要求可用空間 (含緩衝): {required_size_mb:.2f} MB。")
+
+            # 2.2 檢查可用磁碟空間
+            free_space_bytes = shutil.disk_usage('/')[2]
+            free_space_mb = free_space_bytes / (1024**2)
+
+            update_status(log=f"[檢查] 目前可用磁碟空間: {free_space_mb:.2f} MB。")
+
+            if free_space_bytes < required_space_bytes:
+                error_msg = (
+                    f"可用磁碟空間不足以安裝 '{package_spec}'。 "
+                    f"需要 {required_size_mb:.2f} MB，但僅剩 {free_space_mb:.2f} MB。"
+                )
+                update_status(log=f"❌ [錯誤] {error_msg}")
+                raise RuntimeError(f"安裝中止: {error_msg}")
+
+            update_status(log=f"✅ [檢查] 空間充足，準備開始安裝。")
+
+            # 2.3 執行安裝命令
+            start_time = time.monotonic()
+            # 使用 --no-cache-dir 確保在資源受限環境下不因快取佔用過多空間
+            command = [sys.executable, "-m", "pip", "install", "--no-cache-dir", "--upgrade", package_spec]
+            update_status(log=f"[執行] {' '.join(command)}")
+
+            try:
+                # 使用 subprocess.run 等待命令完成，更簡潔
+                result = subprocess.run(
+                    command,
+                    capture_output=True,
+                    text=True,
+                    check=True,  # 如果返回非零，則引發 CalledProcessError
+                    encoding='utf-8'
+                )
+                duration = time.monotonic() - start_time
+                # 成功時，只記錄關鍵訊息，避免日誌被 pip 輸出淹沒
+                update_status(log=f"✅ {task_header} 安裝成功，耗時 {duration:.2f} 秒。")
+
+            except subprocess.CalledProcessError as e:
+                # 安裝失敗時，提供詳細的錯誤輸出
+                error_details = e.stderr or e.stdout
+                error_msg = f"安裝套件 '{package_spec}' 時發生錯誤。"
+                update_status(log=f"❌ [錯誤] {error_msg}")
+                update_status(log=f"--- pip 輸出 ---\n{error_details}\n--- pip 輸出結束 ---")
+                raise RuntimeError(f"{error_msg} 請檢查日誌以獲取詳細資訊。")
+
+    update_status(log="✅ 所有核心依賴均已成功安裝。")
 
 
 def background_worker():

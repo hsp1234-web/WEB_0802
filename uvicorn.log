@@ -1,1 +1,4 @@
-2025-08-02 00:55:02,851 - INFO - HTTP Request: GET http://testserver/data/stock/AAPL "HTTP/1.1 200 OK"
+2025-08-02 06:07:19,623 - WARNING - 查詢 PyPI API 時收到非預期的狀態碼 (non-existent-package): 404
+2025-08-02 06:07:19,628 - WARNING - 在 PyPI 上找不到套件 'my-package' 的版本 '0.0.1'。
+2025-08-02 06:07:19,632 - WARNING - 查詢 PyPI API 時發生網路錯誤 (my-package): Network error
+2025-08-02 06:07:19,804 - INFO - HTTP Request: GET http://testserver/data/stock/TSMC "HTTP/1.1 200 OK"
