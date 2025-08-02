@@ -25,7 +25,7 @@ from typing import List, Tuple, Optional
 
 # --- 常數定義 ---
 DB_NAME = "logs.sqlite"
-LOG_ARCHIVE_FOLDER = "作戰日誌歸檔"
+LOG_ARCHIVE_FOLDER = "log_archives" # 使用 ASCII 字元以避免路徑問題
 TAIPEI_TZ = pytz.timezone("Asia/Taipei")
 
 class Logger:

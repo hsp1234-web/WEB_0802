@@ -30,7 +30,7 @@ if project_root not in sys.path:
 # 這使得無論從哪裡執行此腳本，都能找到 phoenix_core 模組
 try:
     from src.phoenix_core.utils.logger import logger
-    # from src.phoenix_core.utils.display import DisplayManager # 已停用
+    # from src.phoenix_core.utils.display import DisplayManager # 再次確認停用
     from src.phoenix_core.utils.worker import run_main_tasks
 except ImportError as e:
     print(f"錯誤: 無法匯入核心模組 ({e})。請確保 `src` 目錄與此腳本位於同一專案根目錄下。")
@@ -69,7 +69,6 @@ def main():
 
     # 2. 初始化日誌
     logger.log("BATTLE", "=== 鳳凰之心純日誌系統啟動 ===")
-    # display = DisplayManager(shared_state, log_lines=15) # 已停用
 
     # 3. 建立並準備工作執行緒
     worker_thread = threading.Thread(
@@ -79,7 +78,6 @@ def main():
     )
 
     # 4. 啟動工作執行緒
-    # display.start() # 已停用
     worker_thread.start()
 
     try:
@@ -130,9 +128,6 @@ def main():
             logger.log("WARN", "工作執行緒仍在運行，等待其結束...")
             stop_event.set() # 再次確保事件被設定
             worker_thread.join(timeout=2)
-
-        # 停止顯示執行緒
-        # display.stop() # 已停用
 
         # 確保在所有操作完成後，再進行日誌歸檔
         time.sleep(0.5) # 給顯示執行緒一點時間來打印最後的訊息
