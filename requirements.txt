@@ -1,0 +1,19 @@
+# 鳳凰之心 Linux 獨立儀表板 - 核心依賴
+# Phoenix Heart Linux Standalone Dashboard - Core Dependencies
+
+# 用於獲取系統資源使用率 (CPU, RAM)
+# For fetching system resource usage (CPU, RAM)
+psutil
+
+# 用於處理日誌中的時區，確保時間戳的準確性
+# For handling timezones in logging to ensure accurate timestamps
+pytz
+
+# 用於 kernel 模組中的數據模型 (For data models in kernel module)
+pydantic
+
+# 用於伺服器健康檢查 (For server health checks)
+httpx
+
+# 用於執行測試 (For running tests)
+pytest
