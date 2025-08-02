@@ -1,13 +1,14 @@
 # -*- coding: utf-8 -*-
 # ╔══════════════════════════════════════════════════════════════════╗
 # ║                                                                      ║
-# ║                   📊 離線報告生成器 V28 (穩定後端版)                  ║
+# ║                   📊 離線報告生成器 V29 (測試強化版)                  ║
 # ║                                                                      ║
 # ╠══════════════════════════════════════════════════════════════════╣
 # ║                                                                      ║
 # ║   - 說明: 此腳本旨在 Colab 環境中，在 colab_runner.py 執行完畢後   ║
 # ║           被單獨執行，以生成最終的任務報告。                         ║
 # ║   - 依賴: 它依賴由後端服務產生的 `state.db` (或 `logs.sqlite`)。   ║
+# ║   - 更新: 已整合至 E2E 測試流程中。                                ║
 # ║                                                                      ║
 # ╚══════════════════════════════════════════════════════════════════╝
 
@@ -16,7 +17,7 @@ import sys
 import subprocess
 from IPython.display import display, Markdown
 
-#@title 📊 V28 最終任務報告生成器 { vertical-output: true, display-mode: "form" }
+#@title 📊 V29 最終任務報告生成器 { vertical-output: true, display-mode: "form" }
 #@markdown > **在 `colab_runner` 儲存格執行完畢後，點擊此處以生成報告。**
 #@markdown ---
 

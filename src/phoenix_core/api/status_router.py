@@ -41,15 +41,17 @@ mock_db = {
 }
 
 
+import psutil
+
 @router.get("/performance", response_model=PerformanceStatusResponse, tags=["Status"])
 async def get_performance_status():
     """
     提供高頻率的系統效能指標 (CPU, RAM)。
     """
-    # 注意：這裡的資料最終會來自一個即時的硬體監控服務。
+    # 改為回傳即時的系統數據
     return {
-        "cpu_usage": mock_db["status"]["cpu_usage"],
-        "ram_usage": mock_db["status"]["ram_usage"],
+        "cpu_usage": psutil.cpu_percent(),
+        "ram_usage": psutil.virtual_memory().percent,
     }
 
 @router.get("/dashboard", response_model=DashboardStatusResponse, tags=["Status"])

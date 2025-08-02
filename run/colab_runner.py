@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
 # ╔══════════════════════════════════════════════════════════════════╗
 # ║                                                                      ║
-# ║              🚀 Colab 指揮中心 V27 (日誌過濾版)                      ║
+# ║              🚀 Colab 指揮中心 V29 (功能擴充版)                      ║
 # ║                                                                      ║
 # ╠══════════════════════════════════════════════════════════════════╣
 # ║                                                                      ║
 # ║ - 架構：Colab UI 負責準備環境、啟動後端，並提供一個               ║
 # ║           API 驅動的儀表板來監控狀態。                             ║
-# ║ - 版本：0.2.7 (Jules's Feature Add)                                ║
+# ║ - 版本：0.2.9 (全面測試與功能更新)                                 ║
 # ║                                                                      ║
 # ╚══════════════════════════════════════════════════════════════════╝
 import os
@@ -49,7 +49,7 @@ except ImportError:
 #@markdown 後端程式碼倉庫 (REPOSITORY_URL)
 REPOSITORY_URL = "https://github.com/hsp1234-web/WEB_0802.git" #@param {type:"string"}
 #@markdown 後端版本分支或標籤 (TARGET_BRANCH_OR_TAG)
-TARGET_BRANCH_OR_TAG = "0.1.8" #@param {type:"string"}
+TARGET_BRANCH_OR_TAG = "0.3.0" #@param {type:"string"}
 #@markdown 專案資料夾名稱 (PROJECT_FOLDER_NAME)
 PROJECT_FOLDER_NAME = "WEB1" #@param {type:"string"}
 #@markdown 強制刷新後端程式碼 (FORCE_REPO_REFRESH)
