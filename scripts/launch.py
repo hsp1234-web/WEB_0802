@@ -1,7 +1,7 @@
 # 檔案: scripts/launch.py
 # 說明: 專案的核心後端服務，內建 API 伺服器，負責執行任務並提供狀態更新。
 # 作者: Jules
-# 版本: V23.API
+# 版本: V24
 
 import sqlite3
 import time

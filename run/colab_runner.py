@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
 # ╔══════════════════════════════════════════════════════════════════╗
 # ║                                                                      ║
-# ║             🚀 Colab 指揮中心 V23 (內建複製版)                       ║
+# ║              🚀 Colab 指揮中心 V24 (API 驅動版)                      ║
 # ║                                                                      ║
 # ╠══════════════════════════════════════════════════════════════════╣
 # ║                                                                      ║
-# ║   - 新功能：儀表板內建「複製純文字狀態」按鈕，方便手機操作。         ║
-# ║   - 職責：啟動並以動態 HTML 儀表板持續監控後端服務。                 ║
-# ║   - 報告：詳細的最終報告請在下一個「報告生成器」儲存格中產生。       ║
+# ║   - 架構：純前端，透過 API 輪詢後端狀態，動態渲染儀表板。            ║
+# ║   - 職責：準備環境、啟動後端服務、監控狀態、觸發優雅關機。           ║
+# ║   - 版本：0.1.0                                                      ║
 # ║                                                                      ║
 # ╚══════════════════════════════════════════════════════════════════╝
 
@@ -55,7 +55,7 @@ except ImportError:
             pass
     colab_output = MockColabOutput()
 
-#@title 🚀 v23 鳳凰之心指揮中心 { vertical-output: true, display-mode: "form" }
+#@title 🚀 V24 鳳凰之心指揮中心 { vertical-output: true, display-mode: "form" }
 #@markdown ---
 #@markdown ### **Part 1: 程式碼與環境設定**
 #@markdown > **設定 Git 倉庫、分支或標籤，以及專案資料夾。**
@@ -63,7 +63,7 @@ except ImportError:
 #@markdown **後端程式碼倉庫 (REPOSITORY_URL)**
 REPOSITORY_URL = "https://github.com/hsp1234-web/0721_web" #@param {type:"string"}
 #@markdown **後端版本分支或標籤 (TARGET_BRANCH_OR_TAG)**
-TARGET_BRANCH_OR_TAG = "6.5.3" #@param {type:"string"}
+TARGET_BRANCH_OR_TAG = "main" #@param {type:"string"}
 #@markdown **專案資料夾名稱 (PROJECT_FOLDER_NAME)**
 PROJECT_FOLDER_NAME = "WEB1" #@param {type:"string"}
 #@markdown **強制刷新後端程式碼 (FORCE_REPO_REFRESH)**
@@ -492,7 +492,7 @@ async def serve_proxy_url_with_retry(health_check_url: str, port: int, retries: 
 
 
 def main():
-    update_status(log="指揮中心 V23 API-驅動版啟動。")
+    update_status(log="指揮中心 V24 API-驅動版啟動。")
 
     if IS_COLAB:
         clear_output(wait=True)

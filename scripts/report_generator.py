@@ -1,7 +1,7 @@
 # 檔案: scripts/report_generator.py
 # 說明: 從 state.db 讀取最終狀態並生成 Markdown 報告。
 # 作者: Jules
-# 版本: V23.2.DB
+# 版本: V24
 
 import argparse
 import datetime

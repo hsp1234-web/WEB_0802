@@ -1,155 +1,104 @@
-# 鳳凰之心 v17：權威性架構藍圖
+# 鳳凰之心 V24：API 驅動架構藍圖
 
-這份文件是一份權威性的技術藍圖，旨在精準反映專案 v17 的最終形態。它不僅描繪了檔案結構和自動化流程，更深入闡述了其背後應對現代化開發挑戰的設計哲學與實踐經驗。
-
----
-
-## 一、 核心設計哲學：從問題出發，持續演進
-
-一個健壯的架構不是一次性設計出來的，而是圍繞著解決真實問題，不斷迭代演進的結果。我們的核心哲學是：**先求穩定，再求高效，最後追求智慧**。
-
-### **遇到的三大核心困境 (The Three Bottlenecks)**
-我們的架構是為了解決在現代 CI/CD 與自動化流程中普遍存在的三大瓶頸而設計的：
-1.  **空間瓶頸 (硬碟空間耗盡)**: 在資源受限的容器化環境中，傳統「一次性安裝所有依賴」的流程極易導致硬碟空間不足而失敗。
-2.  **時間瓶頸 (CPU 資源浪費)**: 單線程的循序測試無法充分利用多核心 CPU，導致測試時間過長，嚴重拖慢開發迭代速度。
-3.  **穩定性瓶頸 (流程意外掛起)**: 單一測試案例的意外卡死（如 API 等待、死循環）會導致整個 CI/CD 流程被無限期阻塞，無法自動報告錯誤。
-
-### **對應的三大核心策略 (The Three Solutions)**
--   **策略一：原子化隔離與即時清理 (解決空間瓶頸)**
-    我們將每個測試任務視為一個「原子」單元。透過 `core_utils/safe_installer.py`，在安裝依賴前，系統會先檢查資源。測試前，僅為其建立一個包含最小依賴集的專用虛擬環境；測試結束後，立即徹底刪除該環境，將硬碟空間 100% 釋放。這確保了資源峰值佔用永遠在可控範圍內。
-
--   **策略二：輕量級多核心平行處理 (解決時間瓶頸)**
-    我們透過 `smart_e2e_test.py` 中的 `multiprocessing` 實現應用級平行 (同時測試多個 App)，並利用 `pytest-xdist` 在每個 App 內部實現測試級平行。這套輕量級方案能在不增加空間負擔的前提下，壓榨 CPU 性能，大幅縮短測試總耗時。
-
--   **策略三：主動式超時強制中斷 (解決穩定性瓶頸)**
-    我們為每一個測試案例都設定了一個「生命時鐘」（透過 `pytest-timeout`）。任何超時的測試都會被自動中斷並標記為失敗，確保 CI/CD 流程永遠不會被單一故障點所阻塞。
+這份文件是一份權威性的技術藍圖，旨在精準反映專案 V24 的最終形態。它闡述了專案如何從過去的資料庫輪詢模式，演進為一個更現代、更穩健、更具擴展性的 API 驅動架構。
 
 ---
 
-## 二、 最終檔案結構與核心工具鏈
+## 一、 核心設計哲學：前端與後端的徹底解耦
 
-這是專案的最終檔案結構，精準反映了所有關鍵組件及其職責。
+V24 架構的核心是**「關注點分離 (Separation of Concerns)」**。我們將使用者介面（前端）與核心業務邏輯（後端）徹底分離，兩者之間透過一組定義清晰的 API 進行非同步通訊。
 
-```
-.
-├── README.md
-├── config
-│   └── resource_settings.yml
-├── docs
-│   ├── ARCHITECTURE.md
-│   ├── CHANGELOG.md
-│   ├── Colab_Guide.md
-│   ├── MISSION_DEBRIEFING.md
-│   └── TEST.md
-├── pyproject.toml
-├── pytest.ini
-├── reports
-│   ├── detailed_log_report.md
-│   ├── performance_report.md
-│   └── summary_report.md
-├── requirements-dev.in
-├── requirements-dev.txt
-├── requirements.in
-├── requirements.txt
-├── run
-│   ├── colab_runner.py
-│   └── report.py
-├── scripts
-│   ├── launch.py
-│   └── report_generator.py
-├── src
-│   └── phoenix_core
-│       ├── __init__.py
-│       ├── background
-│       ├── kernel
-│       ├── main.py
-│       └── modules
-└── tests
-    ├── conftest.py
-    ├── integration
-    └── unit
-```
+-   **前端 (`run/colab_runner.py`)**: 作為一個純粹的「顯示層」，它的唯一職責是啟動後端服務，並透過 API 定期輪詢狀態，然後將這些狀態渲染成使用者可見的儀表板。它不關心後端是如何實現其業務邏輯的。
+-   **後端 (`scripts/launch.py`)**: 作為一個常駐的「服務層」，它封裝了所有的核心業務邏輯、資源監控和狀態管理。它透過一個輕量級的 API 端點向外界暴露其狀態，但並不關心是誰在使用這些 API，也不關心前端是如何展示它們的。
 
-### **核心目錄與檔案詳解:**
-
-*   **`README.md`**: 專案的入口文件，提供高層次的概覽和快速上手指南。
-*   **`config/`**: **全域設定中心**。存放專案範圍的設定檔，例如 `resource_settings.yml`。
-*   **`docs/`**: **專案文件庫**。包含此架構藍圖、變更日誌、Colab 使用指南等。
-*   **`reports/`**: **報告輸出目錄**。由報告生成器產生的 Markdown 報告會存放在這裡。
-*   **`run/`**: **特定環境執行器**。
-    *   `colab_runner.py`: 專為 Google Colab 設計的**前端**啟動器，負責輪詢後端狀態並顯示儀表板。
-    *   `report.py`: 任務結束後執行的獨立報告生成觸發腳本。
-*   **`scripts/`**: **主要後端腳本**。
-    *   `launch.py`: 專案的**後端核心**。負責執行主要任務、管理 `state.db` 資料庫，並在結束時觸發報告生成。
-    *   `report_generator.py`: 獨立的**報告生成引擎**，被 `launch.py` 或 `report.py` 呼叫。
-*   **`src/`**: **應用程式原始碼**。
-    *   `phoenix_core`: 專案的主要 Python 套件，包含所有核心業務邏輯、API 端點和模組。
-*   **`tests/`**: **品質保證中心**。包含所有 `pytest` 單元測試和整合測試。
-*   **`requirements.in`, `requirements.txt`**: 使用 `pip-tools` 管理的 Python 依賴檔案。
+這種架構帶來了極大的優勢：
+1.  **穩定性**: 前端的任何錯誤（例如 Colab 的 UI 渲染問題）完全不會影響後端核心任務的執行。
+2.  **可擴展性**: 未來我們可以輕易地為這個後端服務開發新的前端（例如一個本地的 PyQt/Tkinter 應用，或是一個 Web App），而無需改動任何後端程式碼。
+3.  **可測試性**: 前後端可以被獨立測試。我們可以針對後端的 API 編寫整合測試，也可以獨立測試前端的 UI 邏輯（如果需要）。
 
 ---
 
-## 三、 Colab 啟動器與 API 最終架構：資料庫驅動方案
+## 二、 V24 核心技術棧 (Tech Stack)
 
-### 核心概念：讀寫分離與單一真相來源
-我們將**「做事」與「顯示」**完全分離。
-1.  **寫入方 (`launch.py`)**: 作為後端主力部隊，`launch.py` 專心執行所有任務（安裝、啟動 App 等），並將所有狀態與日誌**持續寫入**唯一的真相來源：一個獨立的 **SQLite 資料庫 (`state.db`)**。
-2.  **讀取方 (`run/colab_runner.py` 或其他 API 客戶端)**: 前端顯示器（例如 Colab Cell）或任何需要監控狀態的工具，則專心**讀取**數據。`launch.py` 在啟動時，會一併啟動一個輕量級的 **aiohttp API 伺服器**。這個 API 伺服器的唯一職責就是從 SQLite 資料庫讀取最新狀態，並以 JSON 格式提供給前端。
+| 技術 | 用途 | 在專案中的位置 |
+| :--- | :--- | :--- |
+| **`Aiohttp`** | **後端 Web 框架**：提供高效能的非同步 HTTP 伺服器，處理 API 請求。 | `scripts/launch.py` |
+| **`Asyncio`** | **非同步程式設計**：作為後端服務的基石，讓網路服務與背景任務並行運行。 | `scripts/launch.py` |
+| **`Python in Colab`** | **前端介面**：利用 IPython 的能力渲染動態 HTML 儀表板。 | `run/colab_runner.py` |
+| **`HTML/CSS/JS`** | **儀表板渲染**：前端使用標準 `fetch` API 輪詢後端，動態更新頁面。 | `run/colab_runner.py` |
+| **`SQLite`** | **資料持久化**：作為唯一的「真相來源」，儲存任務結束後的最終狀態。 | `state.db`, `scripts/launch.py` |
+| **`Pandas`** | **數據分析**：用於在報告生成時，方便地從資料庫讀取和處理數據。 | `scripts/report_generator.py` |
+| **`Tabulate`** | **報告格式化**：將 Pandas DataFrame 轉換為精美的 Markdown 表格。 | `scripts/report_generator.py` |
+| **`Pytest`** | **自動化測試**：作為核心測試框架。 | `tests/` |
+| **`pytest-aiohttp`** | **API 測試插件**：專門用於在 Pytest 中測試 Aiohttp 應用。 | `tests/integration/` |
 
-兩者透過資料庫和一個只讀的 API 進行溝通，互不干擾，確保了後端任務的穩定執行不會被前端的任何問題所影響。
+---
 
-### 架構草圖
+## 三、 V24 架構圖
+
 ```mermaid
 graph TD
-    subgraph "後端核心"
-        D["🚀 scripts/launch.py<br>(背景主力部隊)"] -- 寫入 --> C[(state.db)];
-        E["🌐 aiohttp API<br>(由 launch.py 啟動)"] -- 讀取 --> C;
+    subgraph "前端 (Colab 環境)"
+        A[👨‍💻 使用者] --> B["run/colab_runner.py<br>(Python 腳本 + HTML/JS)"];
+        B -- 1. 啟動 --> C;
+        B -- 3. 定期 API 輪詢 (GET /api/v1/status) --> D;
+        B -- 4. 手動中斷 (SIGINT) --> E;
     end
 
-    subgraph "前端顯示"
-        A[👨‍💻 使用者] --> B{Colab Cell};
-        B -- 每秒 API 請求 --> E;
+    subgraph "後端 (背景服務)"
+        C["scripts/launch.py<br>(Asyncio 主迴圈)"] -- 包含 --> D[🌐 aiohttp API 伺服器];
+        C -- 並行運行 --> F[⚙️ 核心業務任務];
+        F -- 更新狀態 --> G{記憶體中<br>shared_state};
+        D -- 讀取狀態 --> G;
+        E[🛑 關機信號] -- 觸發 --> D -- POST /api/v1/shutdown --> C;
+        C -- 5. 優雅關機時寫入 --> H[(state.db)];
     end
 
     subgraph "離線分析"
-        F["📄 scripts/generate_report.py"] -- 讀取 --> C;
+        I["run/report.py"] -- 6. 讀取 --> H;
+        I -- 觸發 --> J["scripts/report_generator.py"];
+        J -- 讀取 --> H;
+        J -- 生成 --> K[📊 Markdown 報告];
     end
 
-    style C fill:#f9f,stroke:#333,stroke-width:2px
+    style H fill:#f9f,stroke:#333,stroke-width:2px
 ```
 
-### 核心優勢
-*   **極致穩定**：前端顯示的崩潰，完全不影響後端核心任務的執行。真相永遠保存在資料庫中。
-*   **架構簡潔**：沒有任何額外的網路服務 (GoTTY, WebSocket)，只有 Python、aiohttp 和 SQLite，除錯和維護成本降至最低。
-*   **數據完整與可重用**：所有事件和狀態都被完整記錄。任務結束後，獨立的 `generate_report.py` 可以隨時從資料庫中重新產生完整的執行報告，用於分析或歸檔。
+---
+
+## 四、 核心組件職責詳解
+
+*   **`run/colab_runner.py` (指揮中心)**
+    *   **職責**: 作為使用者互動的**唯一入口**。
+    *   **流程**:
+        1.  讀取 Colab 表單參數（例如日誌等級）。
+        2.  根據參數生成一個 `config.json` 設定檔。
+        3.  下載或使用本地的程式碼。
+        4.  安裝 `requirements.txt` 中的依賴。
+        5.  以子進程方式，帶著 `--config` 參數啟動後端服務 `scripts/launch.py`。
+        6.  渲染一個包含 JavaScript 的 HTML 儀表板，該儀表板會持續輪詢後端的 API 來顯示狀態。
+        7.  捕獲使用者的 `Ctrl+C` (KeyboardInterrupt) 中斷信號，並向後端發送優雅關機的 API 請求。
+
+*   **`scripts/launch.py` (後端 API 服務)**
+    *   **職責**: **常駐的背景服務**，執行所有核心工作並透過 API 提供狀態。
+    *   **流程**:
+        1.  啟動時，解析 `--config` 參數，並設定日誌等級。
+        2.  初始化 `aiohttp` 應用和 API 端點 (`/api/v1/status`, `/api/v1/shutdown`)。
+        3.  在 `asyncio` 事件迴圈中，並行啟動核心業務邏輯 (`core_task`) 和資源監控等背景任務。
+        4.  所有狀態（目前階段、CPU/RAM 使用率、日誌等）都即時更新到一個記憶體中的 `shared_state` 字典裡。
+        5.  `/api/v1/status` 端點被呼叫時，直接從 `shared_state` 讀取數據並返回 JSON。
+        6.  當接收到關機信號（來自 API 或任務自然結束）時，執行優雅關機程序：停止 API 伺服器、取消背景任務，並將 `shared_state` 中的最終狀態持久化寫入 `state.db`。
+
+*   **`run/report.py` & `scripts/report_generator.py` (離線報告系統)**
+    *   **職責**: **完全獨立的離線分析工具**。
+    *   **流程**:
+        1.  在 `colab_runner.py` 和 `launch.py` 完全結束後，使用者手動執行 `run/report.py`。
+        2.  `run/report.py` 負責準備環境（安裝報告專用的依賴 `scripts/requirements-report.txt`）並呼叫 `scripts/report_generator.py`。
+        3.  `scripts/report_generator.py` 透過唯讀模式連接到 `state.db`，使用 `pandas` 讀取數據，並生成多份 Markdown 格式的分析報告。
+    *   **核心優勢**: 報告系統與主應用完全解耦。即使主應用在執行中崩潰，只要 `state.db` 留存了部分數據，我們依然可以嘗試生成報告進行事後分析。
 
 ---
 
-## 四、架構演進歷程：從錯誤中學習
+## 五、 演進之路：從 V17 到 V24
 
-本節記錄了專案在發展過程中遇到的關鍵挑戰以及對應的解決方案，這些經驗是專案寶貴的無形資產。
-
-### 1. 問題：CI/CD 環境下的儀表板不穩定
-- **遇到的狀況**: 在早期的版本中，我們嘗試使用 `GoTTY` 或直接將 `launch.py` 的 TUI 輸出（包含大量 ANSI escape codes）串流到前端。這種方法非常脆弱，任何 TUI 渲染的微小錯誤、甚至是網路延遲，都會導致整個流程崩潰或卡死。
-- **失敗的嘗試**: 繼續優化 TUI 輸出，試圖用更複雜的控制字元來解決問題。這讓程式碼變得愈加複雜且難以維護，治標不治本。
-- **成功的解決方案 (v12)**: **引入資料庫驅動架構**。我們意識到問題的根源在於「執行」和「顯示」的耦合。透過讓 `launch.py` 只專注於將狀態寫入 SQLite，並讓前端只專注於從一個唯讀的 API 讀取數據，我們徹底切斷了兩者之間的直接聯繫，實現了極高的穩定性。
-
-### 2. 問題：開發環境不一致與依賴地獄
-- **遇到的狀況**: 開發者 A 在本地安裝了 `pandas v2.0`，測試通過；而開發者 B 安裝了 `pandas v2.1`，部分 API 行為發生變化導致測試失敗。這種「在我機器上可以跑」的問題嚴重影響了團隊協作效率。
-- **失敗的嘗試**: 口頭約定大家使用相同的版本，或手動維護一個包含所有間接依賴的 `requirements.txt`。前者不可靠，後者極其繁瑣且容易出錯。
-- **成功的解決方案 (v12+)**: **引入 `pip-tools` 進行依賴鎖定**。我們讓開發者只在 `requirements.in` 中聲明直接依賴，然後使用 `pip-compile` 命令自動生成包含所有層級依賴且版本被完全鎖定的 `requirements.txt`。這保證了任何環境下安裝的依賴都是完全一致的，根治了此問題。
-
-### 3. 問題：報告系統與主邏輯耦合
-- **遇到的狀況**: 最初，報告產生的邏輯是 `launch.py` 的一部分。這導致了幾個問題：
-    1.  要測試報告功能，必須完整運行一次 `launch.py`，非常耗時。
-    2.  報告邏輯的任何改動，都有可能意外影響到主程序的穩定性。
-    3.  如果任務中途失敗，儲存下來的資料庫就無法被用來重新產生報告。
-- **失敗的嘗試**: 在 `ReportGenerator` 類別中增加更多的錯誤處理，試圖隔離其影響。但這無法解決根本的耦合問題。
-- **成功的解決方案 (v16)**: **報告系統插件化**。我們將報告邏輯完全移出，製作成一個獨立的 `generate_report.py` 命令列工具。`launch.py` 在結束時只負責呼叫這個腳本。這使得報告系統可以被獨立測試、獨立擴展，並且可以對任何符合格式的資料庫檔案執行，極大地增強了靈活性和可維護性。
-
-### 4. 問題：核心依賴缺失導致執行失敗
-- **遇到的狀況**: 在測試中發現，`generate_report.py` 在產生 Markdown 表格時，因缺少可選的 `tabulate` 套件而崩潰。
-- **失敗的嘗試**: 僅在使用到該功能的地方加入 `try-except` 區塊。這雖然能防止崩潰，但會導致報告內容不完整，使用者體驗不佳。
-- **成功的解決方案 (v17)**: **核心依賴前置檢查與自動安裝**。我們在 `launch.py` 和 `generate_report.py` 的入口處，加入了對所有核心依賴（包括 `pandas`, `tabulate`, `sparklines` 等）的檢查。如果發現缺少，腳本會嘗試自動安裝，若安裝失敗則會清晰地提示使用者如何手動安裝。這確保了腳本的開箱即用性，極大改善了使用者體驗。
-
----
+本專案的架構並非一蹴可幾，而是經歷了關鍵的演進。從 V17 的**資料庫輪詢**架構，我們升級到了 V24 的 **API 驅動**架構。這次升級解決了舊架構的一些根本性問題，例如前後端耦合過緊、狀態更新不即時等，是專案走向成熟和穩定的重要一步。詳細的演進歷史和從中學到的經驗教訓，請參考 `docs/CHANGELOG.md` 和 `docs/MISSION_DEBRIEFING.md`。
