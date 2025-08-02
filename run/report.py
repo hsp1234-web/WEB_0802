@@ -43,7 +43,7 @@ from IPython.display import display, Markdown, Code
 # --- 設定路徑 ---
 content_root = Path("/content")
 project_path = content_root / PROJECT_FOLDER_NAME
-report_script = project_path / "scripts" / "generate_report.py"
+report_script = project_path / "scripts" / "report_generator.py"
 requirements_file = project_path / "scripts" / "requirements-report.txt"
 db_file = project_path / "state.db"
 config_file = project_path / "config.json"
