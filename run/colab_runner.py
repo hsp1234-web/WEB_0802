@@ -63,6 +63,8 @@ FORCE_REPO_REFRESH = True #@param {type:"boolean"}
 REFRESH_RATE_SECONDS = 1.0 #@param {type:"number"}
 #@markdown 時區設定 (TIMEZONE)
 TIMEZONE = "Asia/Taipei" #@param {type:"string"}
+#@markdown 後端 API 服務埠號 (API_PORT)
+API_PORT = 8088 #@param {type:"integer"}
 
 #@markdown ---
 #@markdown ### Part 3: 日誌顯示設定
@@ -134,7 +136,10 @@ def background_worker():
 
         update_status(task="生成專案設定檔", log="正在生成 config.json...")
         config_data = {
-            "system_settings": { "timezone": TIMEZONE },
+            "system_settings": {
+                "timezone": TIMEZONE,
+                "api_port": API_PORT
+            },
             "log_settings": {
                 "levels": {
                     "BATTLE": SHOW_LOG_LEVEL_BATTLE,
@@ -384,6 +389,8 @@ def main():
 
     if IS_COLAB:
         clear_output(wait=True)
+        # 呼叫 Colab 的輸出服務來代理埠號，這是前端能夠連接到後端的關鍵
+        colab_output.serve_kernel_port_as_window(API_PORT, anchor_text="🚀 點此進入鳳凰之心主控台")
         display(HTML(render_dashboard_html()))
     else:
         print("後端已啟動，儀表板在本地模式下不顯示。")
