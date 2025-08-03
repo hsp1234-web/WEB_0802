@@ -1,13 +1,14 @@
 # -*- coding: utf-8 -*-
 # ╔══════════════════════════════════════════════════════════════════╗
 # ║                                                                      ║
-# ║              🚀 Colab 指揮中心 V29 (功能擴充版)                      ║
+# ║          🚀 Colab 雙模態啟動器 V30 (Comms + DB 架構)               ║
 # ║                                                                      ║
 # ╠══════════════════════════════════════════════════════════════════╣
 # ║                                                                      ║
-# ║ - 架構：Colab UI 負責準備環境、啟動後端，並提供一個               ║
-# ║           API 驅動的儀表板來監控狀態。                             ║
-# ║ - 版本：0.2.9 (全面測試與功能更新)                                 ║
+# ║ - 架構: 根據環境智慧切換模式。                                     ║
+# ║   - Colab 模式: 立即渲染 UI，透過原生 Comms 通訊接收後端數據。     ║
+# ║   - 本地模式: 作為標準 CLI 工具，直接打印後端日誌。                ║
+# ║ - 版本：0.3.0 (雙模態架構)                                         ║
 # ║                                                                      ║
 # ╚══════════════════════════════════════════════════════════════════╝
 import os
@@ -18,30 +19,16 @@ import threading
 import time
 import json
 from pathlib import Path
-from IPython.display import display, HTML, clear_output
-import pytz
 from datetime import datetime
-from collections import deque
 
-# --- 環境相容性處理 ---
+# --- 環境偵測 ---
 IS_COLAB = 'google.colab' in sys.modules
 
-try:
-    if IS_COLAB:
-        from google.colab import output as colab_output
-    else:
-        class MockColabOutput:
-            def serve_kernel_port_as_window(self, port, anchor_text=""): print(f"[本地模式] Colab 'serve_kernel_port_as_window' 被呼叫於 port {port}")
-            def clear_output(self, wait=False): pass
-        colab_output = MockColabOutput()
-except ImportError:
-    class MockColabOutput:
-        def serve_kernel_port_as_window(self, port, anchor_text=""): print(f"[本地模式] Colab 'serve_kernel_port_as_window' 被呼叫於 port {port}")
-        def clear_output(self, wait=False): pass
-    colab_output = MockColabOutput()
+if IS_COLAB:
+    from IPython.display import display, HTML, clear_output
 
-# --- Colab 使用者介面參數 ---
-#@title 🚀 V27 鳳凰之心指揮中心 { vertical-output: true, display-mode: "form" }
+# --- Colab 使用者介面參數 (保持不變) ---
+#@title 🚀 V30 鳳凰之心 (雙模態 Comms 架構) { vertical-output: true, display-mode: "form" }
 #@markdown ---
 #@markdown ### Part 1: 程式碼與環境設定
 #@markdown > 設定 Git 倉庫、分支或標籤，以及專案資料夾。
@@ -54,242 +41,44 @@ TARGET_BRANCH_OR_TAG = "0.3.4" #@param {type:"string"}
 PROJECT_FOLDER_NAME = "WEB1" #@param {type:"string"}
 #@markdown 強制刷新後端程式碼 (FORCE_REPO_REFRESH)
 FORCE_REPO_REFRESH = True #@param {type:"boolean"}
-
-#@markdown ---
-#@markdown ### Part 2: 應用程式參數
-#@markdown > 設定指揮中心的核心運行參數。
-#@markdown ---
-#@markdown 儀表板更新頻率 (秒) (REFRESH_RATE_SECONDS)
-REFRESH_RATE_SECONDS = 1.0 #@param {type:"number"}
 #@markdown 時區設定 (TIMEZONE)
 TIMEZONE = "Asia/Taipei" #@param {type:"string"}
-#@markdown 後端 API 服務埠號 (API_PORT)
-API_PORT = 8088 #@param {type:"integer"}
-
-#@markdown ---
-#@markdown ### Part 3: 日誌顯示設定
-#@markdown > **選擇您想在儀表板上看到的日誌等級。**
-#@markdown ---
-#@markdown **顯示戰鬥日誌 (SHOW_LOG_LEVEL_BATTLE)**
-SHOW_LOG_LEVEL_BATTLE = True #@param {type:"boolean"}
-#@markdown **顯示成功日誌 (SHOW_LOG_LEVEL_SUCCESS)**
-SHOW_LOG_LEVEL_SUCCESS = True #@param {type:"boolean"}
-#@markdown **顯示資訊日誌 (SHOW_LOG_LEVEL_INFO)**
-SHOW_LOG_LEVEL_INFO = False #@param {type:"boolean"}
-#@markdown **顯示命令日誌 (SHOW_LOG_LEVEL_CMD)**
-SHOW_LOG_LEVEL_CMD = False #@param {type:"boolean"}
-#@markdown **顯示系統日誌 (SHOW_LOG_LEVEL_SHELL)**
-SHOW_LOG_LEVEL_SHELL = False #@param {type:"boolean"}
-#@markdown **顯示錯誤日誌 (SHOW_LOG_LEVEL_ERROR)**
-SHOW_LOG_LEVEL_ERROR = True #@param {type:"boolean"}
-#@markdown **顯示嚴重錯誤日誌 (SHOW_LOG_LEVEL_CRITICAL)**
-SHOW_LOG_LEVEL_CRITICAL = True #@param {type:"boolean"}
-#@markdown **顯示效能日誌 (SHOW_LOG_LEVEL_PERF)**
-SHOW_LOG_LEVEL_PERF = False #@param {type:"boolean"}
-#@markdown 日誌顯示行數 (LOG_DISPLAY_LINES)
-LOG_DISPLAY_LINES = 50 #@param {type:"integer"}
-
 
 # ==============================================================================
 # 🚀 核心邏輯
 # ==============================================================================
 
-shared_status = {
-    "current_task": "初始化中...",
-    "logs": deque(maxlen=LOG_DISPLAY_LINES),
-    "backend_process": None,
-}
-status_lock = threading.Lock()
+def get_dependency_free_timestamp():
+    """一個在安裝依賴前可安全使用的、無外部依賴的時間戳函式。"""
+    return datetime.now().strftime('%H:%M:%S')
 
-def update_status(task=None, log=None):
-    with status_lock:
-        if task is not None:
-            shared_status["current_task"] = task
-        if log is not None:
-            log_message = f"[{datetime.now(pytz.timezone(TIMEZONE)).strftime('%H:%M:%S')}] {log}"
-            shared_status["logs"].append(log_message)
-            print(log_message)
+def get_local_timestamp():
+    """一個使用時區設定的時間戳函式，應在依賴安裝後使用。"""
+    import pytz
+    return datetime.now(pytz.timezone(TIMEZONE)).strftime('%H:%M:%S')
 
-def background_worker():
-    project_path = None
-    try:
-        base_path = Path("/content")
-        project_path = base_path / PROJECT_FOLDER_NAME
-
-        # --- 清除快取 ---
-        update_status(log="🧹 正在清除 Python 快取 (`__pycache__`)...")
-        # 遍歷專案資料夾並刪除所有 __pycache__ 目錄
-        if project_path.exists():
-            for path in Path(project_path).rglob("__pycache__"):
-                if path.is_dir():
-                    shutil.rmtree(path)
-            update_status(log="✅ 快取已清除。")
-        else:
-            update_status(log="🟡 專案資料夾尚未建立，跳過快取清除。")
-
-        update_status(task="準備專案環境", log="檢查專案資料夾...")
-        if FORCE_REPO_REFRESH and project_path.exists():
-            update_status(log=f"偵測到強制刷新，正在刪除舊的專案資料夾: {project_path}...")
-            shutil.rmtree(project_path)
-            update_status(log="✅ 舊資料夾已刪除。")
-
-        if not project_path.exists():
-            update_status(log=f"正在從 {REPOSITORY_URL} (分支/標籤: {TARGET_BRANCH_OR_TAG}) 下載程式碼...")
-            process = subprocess.run(
-                ["git", "clone", "--depth", "1", "--branch", TARGET_BRANCH_OR_TAG, REPOSITORY_URL, str(project_path)],
-                capture_output=True, text=True, encoding='utf-8', check=False
-            )
-            if process.returncode != 0:
-                raise RuntimeError(f"Git clone 失敗: {process.stderr}")
-            update_status(log="✅ 程式碼下載成功。")
-        else:
-            update_status(log="專案資料夾已存在，跳過下載。")
-
-        update_status(task="生成專案設定檔", log="正在生成 config.json...")
-        config_data = {
-            "system_settings": {
-                "timezone": TIMEZONE,
-                "api_port": API_PORT
-            },
-            "log_settings": {
-                "levels": {
-                    "BATTLE": SHOW_LOG_LEVEL_BATTLE,
-                    "SUCCESS": SHOW_LOG_LEVEL_SUCCESS,
-                    "INFO": SHOW_LOG_LEVEL_INFO,
-                    "CMD": SHOW_LOG_LEVEL_CMD,
-                    "SHELL": SHOW_LOG_LEVEL_SHELL,
-                    "ERROR": SHOW_LOG_LEVEL_ERROR,
-                    "CRITICAL": SHOW_LOG_LEVEL_CRITICAL,
-                    "PERF": SHOW_LOG_LEVEL_PERF
-                }
-            }
-        }
-        config_file_path = project_path / "config.json"
-        with open(config_file_path, "w", encoding="utf-8") as f:
-            json.dump(config_data, f, indent=4, ensure_ascii=False)
-        update_status(log=f"✅ config.json 已生成於 {config_file_path}")
-
-        # --- VENV 和依賴設定 (改用 uv 以提高穩定性) ---
-        update_status(task="安裝/驗證 uv 工具", log="正在檢查高效能 Python 工具 uv...")
-        # 在 Colab 標準環境中，家目錄通常是 /root，我們將把 uv 安裝到此處
-        uv_path = Path("/root/.local/bin/uv")
-        if not uv_path.exists():
-            update_status(log="uv 工具未找到，正在從 GitHub Releases 直接下載...")
-            uv_dir = Path("/root/.local/bin")
-            uv_dir.mkdir(parents=True, exist_ok=True)
-
-            uv_url = "https://github.com/astral-sh/uv/releases/latest/download/uv-x86_64-unknown-linux-gnu.tar.gz"
-            uv_tar_path = base_path / "uv.tar.gz"
-
-            # 下載
-            download_command = ["curl", "-L", "-o", str(uv_tar_path), uv_url]
-            run_result = subprocess.run(download_command, check=False, capture_output=True, text=True, encoding='utf-8')
-            if run_result.returncode != 0:
-                raise RuntimeError(f"下載 uv 失敗: {run_result.stderr}")
-
-            # 解壓縮
-            extract_command = ["tar", "-zxvf", str(uv_tar_path), "-C", str(base_path)]
-            run_result = subprocess.run(extract_command, check=False, capture_output=True, text=True, encoding='utf-8')
-            if run_result.returncode != 0:
-                raise RuntimeError(f"解壓縮 uv 失敗: {run_result.stderr}")
-
-            # 移動並設定權限
-            extracted_uv_path = base_path / "uv-x86_64-unknown-linux-gnu" / "uv"
-            shutil.move(str(extracted_uv_path), str(uv_path))
-            uv_path.chmod(0o755) # 確保執行權限
-
-            # 清理
-            uv_tar_path.unlink()
-            shutil.rmtree(base_path / "uv-x86_64-unknown-linux-gnu")
-
-            if not uv_path.exists():
-                raise RuntimeError("uv 安裝後仍未找到。")
-            update_status(log="✅ uv 工具安裝成功。")
-        else:
-            update_status(log="✅ uv 工具已存在。")
-
-        update_status(task="設定 Python 虛擬環境", log="正在使用 uv 檢查/建立 .venv...")
-        venv_dir = project_path / ".venv"
-        if not venv_dir.is_dir():
-            update_status(log=f"正在使用 uv 建立虛擬環境於: {venv_dir}")
-            run_result = subprocess.run([str(uv_path), "venv", str(venv_dir), "--seed"], check=False, capture_output=True, text=True, encoding='utf-8')
-            if run_result.returncode != 0:
-                update_status(log=f"❌ Venv 建立失敗: {run_result.stderr}")
-                raise RuntimeError(f"使用 uv 建立 Venv 失敗: {run_result.stderr}")
-            update_status(log="✅ 虛擬環境建立成功。")
-        else:
-            update_status(log="✅ 虛擬環境已存在。")
-
-        update_status(task="安裝依賴", log="正在使用 uv 安裝 requirements/dev.txt...")
-        venv_python = venv_dir / "bin" / "python"
-        requirements_file = project_path / "requirements" / "dev.txt"
-        # 使用 uv 來安裝依賴，它會自動偵測並使用 venv 中的 Python
-        run_result = subprocess.run([str(uv_path), "pip", "install", "--python", str(venv_python), "-r", str(requirements_file)], check=False, capture_output=True, text=True, encoding='utf-8')
-        if run_result.returncode != 0:
-            # 依賴安裝是關鍵步驟，如果失敗，則應中止執行
-            update_status(log=f"❌ 依賴安裝失敗: {run_result.stderr}")
-            raise RuntimeError(f"使用 uv 安裝依賴失敗: {run_result.stderr}")
-        else:
-            update_status(log="✅ 依賴安裝完成。")
-        # --- VENV 設定結束 ---
-
-        update_status(task="啟動後端 API 服務", log="準備啟動後端服務...")
-        launch_script_path = project_path / "scripts" / "start_api_service.py"
-        if not launch_script_path.exists():
-            raise FileNotFoundError(f"找不到後端啟動腳本: {launch_script_path}")
-
-        venv_python = project_path / ".venv" / "bin" / "python"
-        command = [
-            str(venv_python),
-            str(launch_script_path),
-            "--config", str(config_file_path)
-        ]
-
-        update_status(log=f"🚀 正在使用指令啟動後端服務: {' '.join(command)}")
-        log_file = open('api_server.log', 'w')
-        process = subprocess.Popen(
-            command,
-            cwd=project_path,
-            stdout=log_file,
-            stderr=log_file,
-            text=True,
-            encoding='utf-8'
-        )
-
-        with status_lock:
-            shared_status["backend_process"] = process
-
-        update_status(log=f"✅ 後端服務已在背景啟動 (PID: {process.pid})。儀表板將開始輪詢狀態。")
-        update_status(task="後端服務運行中")
-
-    except Exception as e:
-        error_message = f"❌ 背景任務發生致命錯誤: {e}"
-        update_status(task="背景任務失敗", log=error_message)
-        import traceback
-        traceback.print_exc()
-
-# V29.1: 強制刷新，解決潛在的快取問題
-def render_dashboard_html():
-    refresh_interval_ms = int(REFRESH_RATE_SECONDS * 1000)
+def render_initial_html():
+    """
+    渲染儀表板的靜態 HTML 骨架和負責接收 Comms 數據的 JavaScript。
+    """
+    # V30 修復: f-string 語法衝突
+    # 將所有 JavaScript 模板字串中的 { 和 } 分別用 {{ 和 }} 進行轉義
     css = """
     <style>
-        body { background-color: #1a1a1a; color: #e0e0e0; font-family: 'Noto Sans TC', 'Fira Code', monospace; }
+        body { font-family: 'Noto Sans TC', 'Fira Code', monospace; background-color: #1a1a1a; color: #e0e0e0; }
         .container { padding: 1em; }
         .panel { border: 1px solid #444; margin-bottom: 1em; border-radius: 8px; overflow: hidden; }
         .title { font-weight: bold; padding: 0.5em; border-bottom: 1px solid #444; background-color: #2a2a2a;}
         .content { padding: 0.8em; }
         .grid { display: grid; grid-template-columns: 1fr 2fr; gap: 1em; }
-        .log-container { height: 400px; overflow-y: auto; background-color: #222; padding: 0.5em; border-radius: 5px; }
-        .log-entry { font-size: 0.9em; white-space: pre-wrap; word-break: break-all; margin-bottom: 5px; }
-        .footer { text-align: center; padding-top: 1em; border-top: 1px solid #444; font-size: 0.8em; color: #888;}
-        table { width: 100%; border-collapse: collapse; }
-        td { padding: 4px 8px; }
+        .log-container { height: 400px; overflow-y: auto; background-color: #222; padding: 0.5em; border-radius: 5px; font-size: 0.9em; }
+        .log-entry { white-space: pre-wrap; word-break: break-all; margin-bottom: 5px; }
         .log-level-SUCCESS { color: #c3e88d; }
         .log-level-ERROR, .log-level-CRITICAL { color: #ff5370; font-weight: bold; }
         .log-level-INFO { color: #89ddff; }
-        .log-level-WARNING { color: #ffcb6b; }
-        #entry-point-panel { display: none; grid-column: 1 / -1; text-align: center; padding: 1em; background-color: #2d2d2d; border: 1px solid #50fa7b; }
-        #entry-point-button { display: inline-block; padding: 10px 20px; font-size: 1.2em; font-weight: bold; color: #1a1a1a; background-color: #50fa7b; border: none; border-radius: 5px; text-decoration: none; cursor: pointer; }
+        .log-level-PERF { color: #f7b89c; }
+        table { width: 100%; border-collapse: collapse; }
+        td { padding: 4px 8px; }
     </style>
     """
     html_body = """
@@ -297,168 +86,182 @@ def render_dashboard_html():
         <div class="grid">
             <div>
                 <div class="panel">
-                    <div class="title">微服務狀態</div>
-                    <div class="content"><table id="app-status-table"><tbody><tr><td>等待後端回報...</td></tr></tbody></table></div>
+                    <div class="title">後端狀態</div>
+                    <div class="content"><table id="status-table"><tbody><tr><td>等待後端回報...</td></tr></tbody></table></div>
                 </div>
                 <div class="panel">
                     <div class="title">系統資源</div>
                     <div class="content">
                         <table>
-                            <tr><td>CPU</td><td id="cpu-usage">等待中...</td></tr>
-                            <tr><td>RAM</td><td id="ram-usage">等待中...</td></tr>
+                            <tr><td>CPU</td><td id="cpu_usage">等待中...</td></tr>
+                            <tr><td>RAM</td><td id="ram_usage">等待中...</td></tr>
                         </table>
                     </div>
                 </div>
             </div>
             <div class="panel">
-                <div class="title">後端即時日誌</div>
-                <div class="content log-container" id="log-container">等待日誌...</div>
+                <div class="title">前端日誌 (Comms)</div>
+                <div class="content log-container" id="log-container">等待 Comms 連接...</div>
             </div>
-        </div>
-        <div class="footer" id="footer-status">指揮中心前端任務: 初始化中...</div>
-        <div id="entry-point-panel" style="margin-top: 1em;">
-             <a id="entry-point-button" href="#" target="_blank">🚀 進入主控台</a>
-             <p style="font-size:0.9em; margin-top: 8px;">主儀表板已就緒，點擊上方按鈕進入操作介面。</p>
-        </div>
-        <div class="footer-actions" style="text-align: center; margin-top: 1em; padding-top: 1em; border-top: 1px solid #444;">
-            <button id="copy-output-button" style="padding: 8px 16px; font-size: 0.9em; background-color: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer;">
-                📋 複製全部輸出
-            </button>
         </div>
     </div>
     """
     javascript = f"""
     <script type="text/javascript">
-        function copyAllOutput() {{
-            const button = document.getElementById('copy-output-button');
-            const outputElement = button.closest('colab-output');
-            if (outputElement) {{
-                navigator.clipboard.writeText(outputElement.innerText).then(() => {{
-                    const originalText = button.innerHTML;
-                    button.innerHTML = '✅ 已複製!';
-                    setTimeout(() => {{ button.innerHTML = originalText; }}, 2000);
-                }}, () => {{
-                    button.innerHTML = '❌ 複製失敗';
-                }});
-            }} else {{
-                console.error("無法找到 Colab 輸出元素。");
-                button.innerHTML = '❌ 找不到輸出';
-            }}
+        // 確保 logContainer 存在
+        const logContainer = document.getElementById('log-container');
+        function addLog(message, level = 'INFO') {{
+            const entry = document.createElement('div');
+            entry.className = `log-entry log-level-${{level}}`;
+            entry.textContent = `[${{new Date().toLocaleTimeString()}}] ${{message}}`;
+            logContainer.appendChild(entry);
+            logContainer.scrollTop = logContainer.scrollHeight;
         }}
 
-        document.addEventListener('DOMContentLoaded', (event) => {{
-             const copyBtn = document.getElementById('copy-output-button');
-             if(copyBtn) {{
-                copyBtn.addEventListener('click', copyAllOutput);
-             }}
-        }});
+        addLog('前端 JavaScript 已載入，正在註冊 Comms 目標...');
 
-        const statusMap = {{ "running": "🟢 運行中", "pending": "🟡 等待中", "installing": "🛠️ 安裝中", "starting": "🚀 啟動中", "failed": "🔴 失敗", "unknown": "❓ 未知" }};
-        const dashboardApiUrl = '/api/v1/status/dashboard';
-        const perfApiUrl = '/api/v1/status/performance';
-
-        function updateDashboard() {{
-            const fetchDashboard = fetch(dashboardApiUrl).then(res => {{ if (!res.ok) throw new Error('儀表板 API 異常'); return res.json(); }});
-            const fetchPerf = fetch(perfApiUrl).then(res => {{ if (!res.ok) throw new Error('效能 API 異常'); return res.json(); }});
-
-            Promise.all([fetchDashboard, fetchPerf])
-                .then(([dashboardData, perfData]) => {{
-                    document.getElementById('cpu-usage').textContent = `${{perfData.cpu_usage.toFixed(1)}}%`;
-                    document.getElementById('ram-usage').textContent = `${{perfData.ram_usage.toFixed(1)}}%`;
-
-                    const appStatusTable = document.getElementById('app-status-table').querySelector('tbody');
-                    let appRows = '';
-                    if (dashboardData.apps_status && Object.keys(dashboardData.apps_status).length > 0) {{
-                        for (const [appName, status] of Object.entries(dashboardData.apps_status)) {{
-                            const statusText = statusMap[status] || statusMap['unknown'];
-                            appRows += `<tr><td>${{appName}}</td><td>${{statusText}}</td></tr>`;
+        google.colab.kernel.comms.registerTarget('phoenix_comms', (comm, message) => {{
+            addLog('✅ Comms 頻道已連接！');
+            comm.onMsg = (msg) => {{
+                try {{
+                    const data = JSON.parse(msg);
+                    if (data.type === 'status_update') {{
+                        const key = Object.keys(data.payload)[0];
+                        const value = data.payload[key];
+                        let table = document.getElementById('status-table').querySelector('tbody');
+                        let row = document.getElementById(`status-row-${{key}}`);
+                        if (!row) {{
+                            row = table.insertRow();
+                            row.id = `status-row-${{key}}`;
+                            row.innerHTML = `<td>${{key}}</td><td id="status-val-${{key}}"></td>`;
                         }}
-                    }} else {{ appRows = '<tr><td>等待後端回報...</td></tr>'; }}
-                    appStatusTable.innerHTML = appRows;
+                        document.getElementById(`status-val-${{key}}`).textContent = value;
 
-                    const logContainer = document.getElementById('log-container');
-                    let logEntries = '';
-                    if (dashboardData.logs && dashboardData.logs.length > 0) {{
-                        const reversedLogs = [...dashboardData.logs].reverse();
-                        reversedLogs.forEach(log => {{
-                            const time = new Date(log.timestamp).toLocaleTimeString('en-GB');
-                            logEntries += `<div class="log-entry"><span class="log-level-${{log.level}}">[${{time}}] [${{log.level}}]</span> ${{log.message}}</div>`;
-                        }});
-                    }} else {{ logEntries = '沒有符合條件的日誌。'; }}
-                    logContainer.innerHTML = logEntries;
-                    logContainer.scrollTop = logContainer.scrollHeight;
-
-                    const footer = document.getElementById('footer-status');
-                    const entryPointPanel = document.getElementById('entry-point-panel');
-                    const entryPointButton = document.getElementById('entry-point-button');
-                    if (dashboardData.action_url) {{
-                        entryPointPanel.style.display = 'block';
-                        entryPointButton.href = dashboardData.action_url;
-                        footer.textContent = `指揮中心後端任務: ${{dashboardData.current_stage || '所有服務運行中'}}`;
-                    }} else {{
-                        entryPointPanel.style.display = 'none';
-                        footer.textContent = `指揮中心後端任務: ${{dashboardData.current_stage || '執行中...'}}`;
+                        // 特別處理資源監控
+                        if (key === 'cpu_usage' || key === 'ram_usage') {{
+                            document.getElementById(key).textContent = `${{parseFloat(value).toFixed(1)}}%`;
+                        }}
+                    }} else if (data.type === 'log_entry') {{
+                        const log = data.payload;
+                        addLog(`[${{log.source}}] ${{log.message}}`, log.level);
                     }}
-                }})
-                .catch(error => {{
-                    const footer = document.getElementById('footer-status');
-                    // 在後端準備好之前，API 請求失敗是正常現象。顯示一個更友善的訊息。
-                    if (footer.textContent.includes("初始化中")) {
-                        footer.textContent = "🟡 前端狀態: 後端準備中，正在嘗試連接...";
-                    } else {
-                        footer.textContent = `🔴 前端狀態: API 請求失敗 - ${{error.message}}`;
-                    }
-                }});
-        }}
-        setTimeout(() => {{ updateDashboard(); setInterval(updateDashboard, {refresh_interval_ms}); }}, 5000);
+                }} catch (e) {{
+                    addLog(`處理 Comms 訊息時發生錯誤: ${{e}}`, 'ERROR');
+                }}
+            }};
+            comm.onClose = () => {{
+                addLog('Comms 頻道已關閉。', 'ERROR');
+            }};
+        }});
+        addLog('Comms 目標 "phoenix_comms" 已註冊。等待後端連接...');
     </script>
     """
-    return css + html_body + javascript
+    return HTML(css + html_body + javascript)
+
+
+def run_backend_process(project_path: Path, config_file_path: Path, is_colab: bool):
+    """
+    以子程序方式啟動後端工作者 (backend_worker.py)。
+    """
+    # V30.2 修正：路徑邏輯。在本地模式下，腳本相對於專案根目錄，而非 project_path
+    if is_colab:
+        # 在 Colab 中，程式碼被 clone 到 project_path，所以 worker 在那裡面
+        repo_root = project_path
+    else:
+        # 在本地，此腳本在 `run/`，所以根目錄是 `Path(__file__).parent.parent`
+        repo_root = Path(__file__).parent.parent
+
+    launch_script_path = repo_root / "scripts" / "backend_worker.py"
+    if not launch_script_path.exists():
+        raise FileNotFoundError(f"找不到後端工作者腳本: {launch_script_path}")
+
+    venv_python = project_path / ".venv" / "bin" / "python"
+    command = [str(venv_python), str(launch_script_path), "--config", str(config_file_path)]
+
+    # 工作目錄 (cwd) 應始終是 project_path，因為那是資料 (如DB) 和 venv 的所在地
+    cwd = project_path
+
+    if is_colab:
+        # Colab 模式：在背景運行，不阻塞，依賴 Comms 傳遞日誌
+        print(f"[{get_dependency_free_timestamp()}] [Colab模式] 正在背景啟動後端工作者...")
+        subprocess.Popen(command, cwd=cwd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        print(f"[{get_dependency_free_timestamp()}] ✅ 後端已在背景啟動。UI 將透過 Comms 接收更新。")
+    else:
+        # 本地模式：直接在前景運行，並將其 stdout 即時打印到當前終端
+        print(f"[{get_dependency_free_timestamp()}] [本地模式] 正在啟動後端工作者，日誌將直接輸出到此處...")
+        print(f"[{get_dependency_free_timestamp()}] 命令: {' '.join(command)}")
+        process = subprocess.Popen(command, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8', bufsize=1)
+        for line in iter(process.stdout.readline, ''):
+            print(line, end='')
+        process.wait()
+        print(f"[{get_local_timestamp()}] [本地模式] 後端工作者已結束。")
 
 def main():
     """
-    主執行函式。
-    新流程: 先顯示儀表板，然後在背景啟動工作執行緒。
+    主執行函式，實現雙模態邏輯。
     """
-    # --- 步驟 1: 立即顯示儀表板 ---
     if IS_COLAB:
+        from IPython.display import display, HTML, clear_output
         clear_output(wait=True)
-        # 顯示儀表板的靜態 HTML 骨架
-        display(HTML(render_dashboard_html()))
-        # 呼叫 Colab 的輸出服務來代理埠號，這是前端能夠連接到後端的關鍵
-        # 注意：此函式本身不會阻塞，它設定好代理後就會立即返回。
-        colab_output.serve_kernel_port_as_window(API_PORT, anchor_text="🚀 點此進入鳳凰之心主控台")
-    else:
-        print("偵測到本地模式，儀表板不會渲染。")
+        # 步驟 1 (Colab): 立即渲染 UI
+        display(render_initial_html())
+        print(f"[{get_dependency_free_timestamp()}] 儀表板 UI 已渲染。正在準備後端環境...")
 
-    # --- 步驟 2: 在背景啟動環境準備與伺服器啟動流程 ---
-    update_status(log="指揮中心 V27 啟動程序開始。")
-    worker_thread = threading.Thread(target=background_worker, daemon=True)
-    worker_thread.start()
-
-    # --- 步驟 3: 等待背景程序結束 ---
-    # 主執行緒現在的角色是等待背景工作完成，或被使用者中斷。
-    worker_thread.join() # 等待背景緒完成其所有工作（包括啟動子程序）
-
-    backend_process = shared_status.get("backend_process")
-    if backend_process is None:
-        # 如果背景工作執行緒結束了，但沒有成功啟動後端程序，則在此報告錯誤。
-        # (詳細的錯誤日誌應已由 worker_thread 自行打印)
-        print("❌ 背景任務已結束，但後端服務未能成功啟動。")
-        return
+    # --- 環境準備 (對兩種模式都通用) ---
     try:
-        exit_code = backend_process.wait()
-        update_status(log=f"[前端] 後端程序已終止，返回碼: {exit_code}。")
-    except KeyboardInterrupt:
-        print("\n🛑 偵測到手動中斷，正在終止後端服務...")
-        backend_process.terminate()
-        try:
-            backend_process.wait(timeout=5)
-            print("✅ 後端服務已成功終止。")
-        except subprocess.TimeoutExpired:
-            print("⚠️ 終止超時，強制抹除。")
-            backend_process.kill()
-        print("✅ 前端程序已結束。")
+        # V30.3 修正: 統一且清晰地處理路徑
+        if IS_COLAB:
+            # Colab 模式下，所有東西都在 /content/PROJECT_FOLDER_NAME 中
+            project_path = Path("/content") / PROJECT_FOLDER_NAME
+            repo_root = project_path
+            venv_dir = project_path / ".venv"
+
+            if FORCE_REPO_REFRESH and project_path.exists():
+                print(f"[{get_dependency_free_timestamp()}] 偵測到強制刷新，正在刪除舊的專案資料夾: {project_path}...")
+                shutil.rmtree(project_path)
+
+            if not project_path.exists():
+                print(f"[{get_dependency_free_timestamp()}] 正在從 {REPOSITORY_URL} (分支/標籤: {TARGET_BRANCH_OR_TAG}) 下載程式碼...")
+                subprocess.run(
+                    ["git", "clone", "--depth", "1", "--branch", TARGET_BRANCH_OR_TAG, REPOSITORY_URL, str(project_path)],
+                    check=True, capture_output=True, text=True
+                )
+        else:
+            # 本地模式下，repo_root 是當前目錄，venv 也在此。project_path 僅用於放置資料。
+            repo_root = Path(".").resolve()
+            project_path = repo_root / PROJECT_FOLDER_NAME
+            venv_dir = repo_root / ".venv"
+            project_path.mkdir(exist_ok=True)
+            print(f"[{get_dependency_free_timestamp()}] [本地模式] 使用 {repo_root} 作為專案根目錄。")
+
+        # --- 通用設定流程 ---
+        print(f"[{get_dependency_free_timestamp()}] 正在生成 config.json...")
+        config_file_path = project_path / "config.json"
+        with open(config_file_path, "w", encoding="utf-8") as f:
+            json.dump({"system_settings": {"timezone": TIMEZONE}}, f, indent=4)
+
+        print(f"[{get_dependency_free_timestamp()}] 正在設定 Python 虛擬環境於: {venv_dir}")
+        if not venv_dir.is_dir():
+            subprocess.run([sys.executable, "-m", "venv", str(venv_dir)], check=True)
+
+        venv_python = venv_dir / "bin" / "python"
+        requirements_file = repo_root / "requirements" / "dev.txt"
+        print(f"[{get_dependency_free_timestamp()}] 正在從 {requirements_file} 安裝依賴...")
+        subprocess.run([str(venv_python), "-m", "pip", "install", "-r", str(requirements_file)], check=True)
+
+        print(f"[{get_dependency_free_timestamp()}] ✅ 環境準備完成。")
+
+        # --- 啟動後端 (根據模式不同，行為也不同) ---
+        run_backend_process(project_path, config_file_path, IS_COLAB)
+
+    except (subprocess.CalledProcessError, FileNotFoundError) as e:
+        print(f"[{get_dependency_free_timestamp()}] ❌ 發生致命錯誤: {e}", file=sys.stderr)
+        if hasattr(e, 'stderr'):
+            print(f"[{get_dependency_free_timestamp()}] [錯誤詳情]: {e.stderr}", file=sys.stderr)
+    except Exception as e:
+        print(f"[{get_dependency_free_timestamp()}] ❌ 發生未預期的錯誤: {e}", file=sys.stderr)
+        import traceback
+        traceback.print_exc()
 
 if __name__ == "__main__":
     main()
