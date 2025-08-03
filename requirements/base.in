@@ -1,15 +1,4 @@
-# 思路框架: 這裡只放應用程式運行時真正需要的東西。
-
-# --- 應用程式核心 ---
 fastapi
-uvicorn[standard]
-
-# --- 設定管理 ---
+uvicorn
 pydantic
-pydantic-settings
-
-# --- 系統工具 ---
-psutil
 pytz
-pandas
-tabulate

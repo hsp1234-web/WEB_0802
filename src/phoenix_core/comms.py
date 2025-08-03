@@ -58,12 +58,12 @@ class CommManager:
 # 這被稱為「猴子補丁 (Monkey Patching)」，在動態語言中是一種常見的技巧，
 # 用於在不修改原始碼的情況下擴充類別功能。
 
-def db_log_with_comms(self, level: str, message: str, source: str = "backend"):
+def db_write_log_with_comms(self, level: str, message: str, source: str = "backend"):
     """
     擴充後的日誌方法，除了寫入資料庫外，還會透過 Comms 發送日誌。
     """
     # 1. 呼叫原始的日誌方法
-    self.original_log(level, message, source)
+    self.original_write_log(level, message, source)
 
     # 2. 透過 Comms 發送日誌
     timestamp = self.get_status('last_log_timestamp') # 假設時間戳已寫入
@@ -77,12 +77,12 @@ def db_log_with_comms(self, level: str, message: str, source: str = "backend"):
         }
     )
 
-def db_set_status_with_comms(self, key: str, value: str):
+def db_write_status_update_with_comms(self, key: str, value: str):
     """
     擴充後的設定狀態方法，除了寫入資料庫外，還會透過 Comms 發送狀態更新。
     """
     # 1. 呼叫原始的設定狀態方法
-    self.original_set_status(key, value)
+    self.original_write_status_update(key, value)
 
     # 2. 透過 Comms 發送狀態更新
     comm_manager.send_data(
@@ -102,12 +102,12 @@ def patch_database_manager_for_comms():
     comm_manager = CommManager()
 
     # 保存原始方法的參考
-    db_manager.original_log = db_manager.log
-    db_manager.original_set_status = db_manager.set_status
+    db_manager.original_write_log = db_manager.write_log
+    db_manager.original_write_status_update = db_manager.write_status_update
 
     # 用我們的新方法替換原始方法
-    db_manager.log = db_log_with_comms.__get__(db_manager, DatabaseManager)
-    db_manager.set_status = db_set_status_with_comms.__get__(db_manager, DatabaseManager)
+    db_manager.write_log = db_write_log_with_comms.__get__(db_manager, DatabaseManager)
+    db_manager.write_status_update = db_write_status_update_with_comms.__get__(db_manager, DatabaseManager)
     print("[Patcher] ✅ Comms 功能已成功整合。")
 
 # 在模組載入時，如果環境是 Colab，就自動執行補丁

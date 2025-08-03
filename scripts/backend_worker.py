@@ -28,24 +28,30 @@ def print_log(message, level="INFO"):
     print(log_message)
     try:
         # 假設 db_manager 已經被主執行緒初始化
-        db_manager.log(level, message, source="backend_worker")
+        db_manager.write_log(level, message, source="backend_worker")
     except Exception as e:
         print(f"[DB Log Error] 無法寫入日誌到資料庫: {e}")
 
 def hardware_monitor_thread(interval: int):
     """
-    一個專門監控硬體資源 (CPU, RAM) 的執行緒。
+    一個專門監控硬體資源 (CPU, RAM, Disk) 的執行緒。
     """
     print_log("🟢 硬體監控執行緒已啟動。")
     while not stop_event.is_set():
         try:
             cpu_usage = psutil.cpu_percent(interval=1)
             ram_usage = psutil.virtual_memory().percent
+            disk_usage = psutil.disk_usage('/').percent
 
-            db_manager.set_status("cpu_usage", str(cpu_usage))
-            db_manager.set_status("ram_usage", str(ram_usage))
+            # 使用新的結構化方法寫入硬體數據
+            db_manager.write_hardware_stat(
+                cpu_usage=cpu_usage,
+                memory_usage=ram_usage,
+                disk_usage=disk_usage,
+                gpu_temperature=None  # psutil 無法直接獲取 GPU 溫度
+            )
 
-            print_log(f"💻 硬體狀態更新: CPU: {cpu_usage}%, RAM: {ram_usage}%", level="PERF")
+            print_log(f"💻 硬體狀態更新: CPU: {cpu_usage}%, RAM: {ram_usage}%, Disk: {disk_usage}%", level="PERF")
 
         except Exception as e:
             print_log(f"🔴 硬體監控執行緒發生錯誤: {e}", level="ERROR")
@@ -60,13 +66,13 @@ def core_logic_thread(config: dict):
     一個模擬執行核心業務邏輯的執行緒。
     """
     print_log("🟢 核心業務邏輯執行緒已啟動。")
-    db_manager.set_status("current_stage", "核心邏輯啟動")
+    db_manager.write_status_update("current_stage", "核心邏輯啟動")
 
     try:
         # 模擬一些啟動工作
         print_log("⏳ 正在執行啟動任務...")
         time.sleep(5)
-        db_manager.set_status("current_stage", "啟動任務完成")
+        db_manager.write_status_update("current_stage", "啟動任務完成")
         print_log("✅ 啟動任務完成。")
 
         # 模擬一個長時間運行的任務
@@ -75,11 +81,11 @@ def core_logic_thread(config: dict):
             counter += 1
             message = f"核心任務執行中，計數: {counter}"
             print_log(message)
-            db_manager.set_status("core_logic_status", message)
+            db_manager.write_status_update("core_logic_status", message)
 
             if counter >= 10:
                 print_log("🎉 核心業務邏輯執行緒已完成其任務。")
-                db_manager.set_status("current_stage", "核心邏輯完成")
+                db_manager.write_status_update("current_stage", "核心邏輯完成")
                 break
 
             stop_event.wait(2)
@@ -87,8 +93,8 @@ def core_logic_thread(config: dict):
     except Exception as e:
         error_message = f"🔴 核心業務邏輯執行緒發生錯誤: {e}"
         print_log(error_message, level="CRITICAL")
-        db_manager.set_status("current_stage", "核心邏輯失敗")
-        db_manager.set_status("error_message", error_message)
+        db_manager.write_status_update("current_stage", "核心邏輯失敗")
+        db_manager.write_status_update("error_message", error_message)
 
     print_log("🔴 核心業務邏輯執行緒已停止。")
 
@@ -112,7 +118,7 @@ def main():
     # --- 初始化資料庫 ---
     # 這是主執行緒，db_manager 會在此處被首次初始化
     try:
-        db_manager.set_status("backend_status", "starting")
+        db_manager.write_status_update("backend_status", "starting")
         print_log("✅ 資料庫管理器初始化成功。")
     except Exception as e:
         print_log(f"❌ 資料庫初始化失敗: {e}", level="CRITICAL")
@@ -129,7 +135,7 @@ def main():
         t.daemon = True
         t.start()
 
-    db_manager.set_status("backend_status", "running")
+    db_manager.write_status_update("backend_status", "running")
     print_log("✅ 所有背景執行緒已啟動。後端工作者正在運行...")
     print_log("   使用 Ctrl+C 來停止服務。")
 
@@ -141,14 +147,14 @@ def main():
 
     except KeyboardInterrupt:
         print_log("\n🛑 收到手動中斷 (Ctrl+C)，正在優雅關閉...")
-        db_manager.set_status("backend_status", "stopping")
+        db_manager.write_status_update("backend_status", "stopping")
         stop_event.set()
 
     # 等待所有執行緒結束
     for t in threads:
         t.join(timeout=5)
 
-    db_manager.set_status("backend_status", "stopped")
+    db_manager.write_status_update("backend_status", "stopped")
     print_log("✅ 所有執行緒已成功停止。後端工作者已關閉。")
 
 

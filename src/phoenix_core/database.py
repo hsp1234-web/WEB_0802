@@ -53,9 +53,20 @@ class DatabaseManager:
                 source TEXT
             )
             """)
-            # 建立狀態表 (鍵值對儲存)
+            # 建立硬體狀態表
             cursor.execute("""
-            CREATE TABLE IF NOT EXISTS status (
+            CREATE TABLE IF NOT EXISTS hardware_stats (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp TEXT NOT NULL,
+                cpu_usage REAL,
+                memory_usage REAL,
+                disk_usage REAL,
+                gpu_temperature REAL
+            )
+            """)
+            # 建立狀態更新表
+            cursor.execute("""
+            CREATE TABLE IF NOT EXISTS status_updates (
                 key TEXT PRIMARY KEY,
                 value TEXT NOT NULL,
                 timestamp TEXT NOT NULL
@@ -85,7 +96,7 @@ class DatabaseManager:
             self.thread_local.connection.close()
             del self.thread_local.connection
 
-    def log(self, level: str, message: str, source: str = "backend"):
+    def write_log(self, level: str, message: str, source: str = "backend"):
         """
         寫入一條日誌到 logs 表。
         """
@@ -97,15 +108,30 @@ class DatabaseManager:
             )
             conn.commit()
 
-    def set_status(self, key: str, value: str):
+    def write_hardware_stat(self, cpu_usage: float, memory_usage: float, disk_usage: float, gpu_temperature: float):
         """
-        設定一個狀態值到 status 表 (UPSERT 邏輯)。
+        寫入一條硬體狀態到 hardware_stats 表。
         """
         timestamp = datetime.now(pytz.utc).isoformat()
         with self.get_connection() as conn:
             conn.execute(
                 """
-                INSERT INTO status (key, value, timestamp) VALUES (?, ?, ?)
+                INSERT INTO hardware_stats (timestamp, cpu_usage, memory_usage, disk_usage, gpu_temperature)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (timestamp, cpu_usage, memory_usage, disk_usage, gpu_temperature)
+            )
+            conn.commit()
+
+    def write_status_update(self, key: str, value: str):
+        """
+        設定一個狀態值到 status_updates 表 (UPSERT 邏輯)。
+        """
+        timestamp = datetime.now(pytz.utc).isoformat()
+        with self.get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO status_updates (key, value, timestamp) VALUES (?, ?, ?)
                 ON CONFLICT(key) DO UPDATE SET value=excluded.value, timestamp=excluded.timestamp
                 """,
                 (key, value, timestamp)
@@ -114,11 +140,11 @@ class DatabaseManager:
 
     def get_status(self, key: str) -> str | None:
         """
-        從 status 表讀取一個狀態值。
+        從 status_updates 表讀取一個狀態值。
         """
         with self.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT value FROM status WHERE key = ?", (key,))
+            cursor.execute("SELECT value FROM status_updates WHERE key = ?", (key,))
             result = cursor.fetchone()
             return result[0] if result else None
 

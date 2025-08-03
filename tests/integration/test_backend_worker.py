@@ -12,31 +12,38 @@ import threading
 from pathlib import Path
 
 # --- 測試設定 ---
-RUNNER_SCRIPT = Path(__file__).parent.parent.parent / "run" / "colab_runner.py"
-# V30 測試架構：直接在專案根目錄執行，不再創建和清理 WEB1 子目錄
+# 修正：直接測試後端工作者，而不是 Colab 啟動器
+WORKER_SCRIPT = Path(__file__).parent.parent.parent / "scripts" / "backend_worker.py"
 DB_FILE = Path(__file__).parent.parent.parent / "state.db"
-RUN_TIMEOUT = 300  # 大幅延長超時時間 (5分鐘)，以應對 CI 環境中緩慢的首次依賴安裝
+CONFIG_FILE = Path(__file__).parent.parent.parent / "test_worker_config.json"
+RUN_TIMEOUT = 300
 
 @pytest.fixture(scope="module")
 def setup_and_run_backend():
     """
     一個執行完整後端流程的 fixture。
-    1. 在背景執行 colab_runner.py。
-    2. 等待資料庫檔案被建立。
-    3. 在測試結束後，清理程序和資料庫檔案。
+    1. 建立一個臨時設定檔。
+    2. 在背景執行 backend_worker.py。
+    3. 等待資料庫檔案被建立。
+    4. 在測試結束後，清理程序、設定檔和資料庫檔案。
     """
     # --- 前置清理 ---
-    if DB_FILE.exists():
-        DB_FILE.unlink()
+    for f in [DB_FILE, CONFIG_FILE]:
+        if f.exists():
+            f.unlink()
 
-    if not RUNNER_SCRIPT.exists():
-        pytest.fail(f"測試目標腳本不存在: {RUNNER_SCRIPT}")
+    # --- 建立臨時設定檔 ---
+    with open(CONFIG_FILE, "w") as f:
+        f.write("{}") # backend_worker.py 需要一個有效的 JSON 檔案
 
-    # --- 在背景啟動 runner ---
-    print(f"\n🚀 正在背景啟動測試目標: {RUNNER_SCRIPT}")
-    # 在本地模式下，runner 會在前台打印日誌，所以我們用 Popen 在背景運行它
+    if not WORKER_SCRIPT.exists():
+        pytest.fail(f"測試目標腳本不存在: {WORKER_SCRIPT}")
+
+    # --- 在背景啟動 worker ---
+    print(f"\n🚀 正在背景啟動測試目標: {WORKER_SCRIPT}")
+    command = [sys.executable, str(WORKER_SCRIPT), "--config", str(CONFIG_FILE)]
     process = subprocess.Popen(
-        [sys.executable, str(RUNNER_SCRIPT)],
+        command,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
@@ -50,14 +57,14 @@ def setup_and_run_backend():
             if process.poll() is not None:
                 stdout, stderr = process.communicate()
                 pytest.fail(
-                    f"Runner 程序提前終止，資料庫檔案未建立。\n"
+                    f"Worker 程序提前終止，資料庫檔案未建立。\n"
                     f"STDOUT: {stdout}\nSTDERR: {stderr}"
                 )
             if time.time() - start_time > RUN_TIMEOUT:
                 stdout, stderr = process.communicate()
                 process.kill()
                 pytest.fail(
-                    f"執行 runner 超時 ({RUN_TIMEOUT}s)，資料庫檔案未建立。\n"
+                    f"執行 worker 超時 ({RUN_TIMEOUT}s)，資料庫檔案未建立。\n"
                     f"STDOUT: {stdout}\nSTDERR: {stderr}"
                 )
             time.sleep(1)
@@ -74,16 +81,17 @@ def setup_and_run_backend():
         # --- 清理 ---
         print("\n🧹 正在清理測試環境...")
         if process.poll() is None:
-            print("   終止 runner 程序...")
+            print("   終止 worker 程序...")
             process.terminate()
             try:
                 process.wait(timeout=5)
             except subprocess.TimeoutExpired:
                 process.kill()
 
-        if DB_FILE.exists():
-            print(f"   刪除資料庫檔案: {DB_FILE}")
-            DB_FILE.unlink()
+        for f in [DB_FILE, CONFIG_FILE]:
+            if f.exists():
+                print(f"   刪除檔案: {f}")
+                f.unlink()
 
         print("✅ 清理完成。")
 
@@ -99,20 +107,22 @@ def test_database_is_written(setup_and_run_backend):
         conn = sqlite3.connect(DB_FILE)
         cursor = conn.cursor()
 
-        # 驗證 1: status 表是否被寫入
-        cursor.execute("SELECT value FROM status WHERE key = 'backend_status'")
+        # 驗證 1: status_updates 表是否被寫入
+        cursor.execute("SELECT value FROM status_updates WHERE key = 'backend_status'")
         result = cursor.fetchone()
         assert result is not None, "斷言失敗: 'backend_status' 未在資料庫中找到。"
         assert result[0] in ["running", "stopping"], f"斷言失敗: 'backend_status' 狀態不正確 ({result[0]})"
         print(f"   ✅ 狀態 'backend_status' 驗證成功 (值: {result[0]})")
 
-        # 驗證 2: 檢查一個由執行緒寫入的具體狀態
-        cursor.execute("SELECT value FROM status WHERE key = 'cpu_usage'")
+        # 驗證 2: 檢查 hardware_stats 表是否被寫入
+        cursor.execute("SELECT cpu_usage, memory_usage, disk_usage FROM hardware_stats ORDER BY id DESC LIMIT 1")
         result = cursor.fetchone()
-        assert result is not None, "斷言失敗: 'cpu_usage' 未在資料庫中找到。"
-        cpu_val = float(result[0])
-        assert 0.0 <= cpu_val <= 100.0, f"斷言失敗: 'cpu_usage' 值不合理 ({cpu_val})。"
-        print(f"   ✅ 狀態 'cpu_usage' 驗證成功 (值: {cpu_val})")
+        assert result is not None, "斷言失敗: 未在 'hardware_stats' 表中找到任何紀錄。"
+        cpu, mem, disk = result
+        assert 0.0 <= cpu <= 100.0, f"斷言失敗: 'cpu_usage' 值不合理 ({cpu})。"
+        assert 0.0 <= mem <= 100.0, f"斷言失敗: 'memory_usage' 值不合理 ({mem})。"
+        assert 0.0 <= disk <= 100.0, f"斷言失敗: 'disk_usage' 值不合理 ({disk})。"
+        print(f"   ✅ 'hardware_stats' 表驗證成功 (CPU: {cpu}%, Mem: {mem}%, Disk: {disk}%)")
 
         # 驗證 3: 檢查 logs 表是否被寫入
         cursor.execute("SELECT COUNT(*) FROM logs")
