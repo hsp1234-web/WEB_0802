@@ -108,6 +108,7 @@ def start_server(config_path: Path, port: int) -> bool:
     print(f"執行命令: {' '.join(command)}")
     server_process = subprocess.Popen(
         command,
+        cwd=PROJECT_ROOT,  # 關鍵：確保工作目錄與 colab_runner 的行為一致
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
