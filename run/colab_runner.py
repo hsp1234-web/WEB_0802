@@ -116,14 +116,43 @@ from src.phoenix_core.watchdog import check_heartbeat_status
 
 # --- 階段二：後端啟動 ---
 def setup_backend():
+    """
+    安裝依賴並在背景啟動後端 Uvicorn 伺服器。
+    """
     print("🚀 正在準備後端環境...")
-    # 這裡應該有 pip install 等指令，現在我們在專案目錄中，可以相對路徑執行
-    time.sleep(2)
-    print("✅ 後端環境準備就緒。")
-    print("🔥 正在啟動後端服務...")
-    # 這裡應該有啟動 uvicorn 的 subprocess
-    time.sleep(1)
+
+    # 1. 安裝依賴
+    requirements_path = "requirements/base.txt"
+    print(f"--- 正在從 {requirements_path} 安裝依賴... ---")
+    try:
+        subprocess.run([sys.executable, "-m", "pip", "install", "-r", requirements_path], check=True)
+        print("✅ 依賴安裝完成。")
+    except subprocess.CalledProcessError as e:
+        print(f"❌ 依賴安裝失敗: {e}")
+        return False
+
+    # 2. 啟動後端服務
+    print(f"🔥 正在啟動後端服務於埠 {API_PORT}...")
+    # 使用 Popen 在背景執行，並將日誌導出到檔案以便排錯
+    log_file = open("api_server.log", "w")
+    subprocess.Popen([
+        sys.executable, "-m", "uvicorn", "src.phoenix_core.main:app",
+        "--host", "0.0.0.0", "--port", str(API_PORT)
+    ], stdout=log_file, stderr=log_file)
+
     print("✅ 後端服務已在背景啟動。")
+
+    # 3. 等待資料庫檔案生成
+    print("--- 等待 state.db 生成 (最多 10 秒)... ---")
+    db_path = "state.db"
+    for _ in range(10):
+        if os.path.exists(db_path):
+            print("✅ state.db 已找到！")
+            return True
+        time.sleep(1)
+
+    print(f"❌ 錯誤：等待超時，找不到 {db_path}。請檢查 api_server.log 以了解後端啟動詳情。")
+    return False
 
 # --- 階段三：UI 顯示邏輯 ---
 WIDTH = 90
