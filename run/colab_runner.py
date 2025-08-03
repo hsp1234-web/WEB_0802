@@ -61,7 +61,7 @@ def render_initial_html():
     """
     渲染儀表板的靜態 HTML 骨架和負責接收 Comms 數據的 JavaScript。
     """
-    # V31: 新增複製按鈕的 CSS
+    # V32: 為 runner_log 新增 CSS
     css = """
     <style>
         body { font-family: 'Noto Sans TC', 'Fira Code', monospace; background-color: #1a1a1a; color: #e0e0e0; }
@@ -76,6 +76,7 @@ def render_initial_html():
         .log-level-ERROR, .log-level-CRITICAL { color: #ff5370; font-weight: bold; }
         .log-level-INFO { color: #89ddff; }
         .log-level-PERF { color: #f7b89c; }
+        .log-level-RUNNER { color: #e5c07b; } /* Runner log 的新顏色 */
         table { width: 100%; border-collapse: collapse; }
         td { padding: 4px 8px; }
         #copy-btn-container { text-align: center; padding-top: 10px; }
@@ -88,7 +89,6 @@ def render_initial_html():
         #copy-output-btn.copied { background-color: #4caf50; }
     </style>
     """
-    # V31: 將主要內容包裹在一個 div 中以便複製，並新增按鈕
     html_body = """
     <div id="phoenix-main-output">
         <div class="container">
@@ -119,14 +119,18 @@ def render_initial_html():
         <button id="copy-output-btn">📋 複製上方所有儲存格輸出</button>
     </div>
     """
-    # V31: 新增複製按鈕的 JavaScript 邏輯
     javascript = f"""
     <script type="text/javascript">
         const logContainer = document.getElementById('log-container');
         function addLog(message, level = 'INFO') {{
             const entry = document.createElement('div');
             entry.className = `log-entry log-level-${{level}}`;
-            entry.textContent = `[${{new Date().toLocaleTimeString()}}] ${{message}}`;
+            // V32: 對 Runner log 不加時間戳，因為它自帶時間戳
+            if (level === 'RUNNER') {{
+                entry.textContent = message;
+            }} else {{
+                entry.textContent = `[${{new Date().toLocaleTimeString()}}] ${{message}}`;
+            }}
             logContainer.appendChild(entry);
             logContainer.scrollTop = logContainer.scrollHeight;
         }}
@@ -156,6 +160,9 @@ def render_initial_html():
                     }} else if (data.type === 'log_entry') {{
                         const log = data.payload;
                         addLog(`[${{log.source}}] ${{log.message}}`, log.level);
+                    // V32: 新增對 runner_log 的處理
+                    }} else if (data.type === 'runner_log') {{
+                        addLog(data.payload.line, 'RUNNER');
                     }}
                 }} catch (e) {{
                     addLog(`處理 Comms 訊息時發生錯誤: ${{e}}`, 'ERROR');
@@ -192,101 +199,80 @@ def render_initial_html():
     return HTML(css + html_body + javascript)
 
 
-def run_backend_process(project_path: Path, config_file_path: Path, is_colab: bool):
-    """
-    以子程序方式啟動後端工作者 (backend_worker.py)。
-    """
-    # V31: Colab 中不再使用 venv
-    if is_colab:
-        repo_root = project_path
-        # 直接使用系統的 python
-        python_executable = sys.executable
-        cwd = project_path
-    else:
-        # 本地模式維持不變，繼續使用 venv
-        repo_root = Path(__file__).parent.parent
-        python_executable = str(repo_root / ".venv" / "bin" / "python")
-        cwd = repo_root
-
-    launch_script_path = repo_root / "scripts" / "backend_worker.py"
-    if not launch_script_path.exists():
-        raise FileNotFoundError(f"找不到後端工作者腳本: {launch_script_path}")
-
-    command = [python_executable, str(launch_script_path), "--config", str(config_file_path)]
-
-    if is_colab:
-        # Colab 模式：在背景運行，不阻塞，依賴 Comms 傳遞日誌
-        print(f"[{get_dependency_free_timestamp()}] [Colab模式] 正在背景啟動後端工作者...")
-        subprocess.Popen(command, cwd=cwd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        print(f"[{get_dependency_free_timestamp()}] ✅ 後端已在背景啟動。UI 將透過 Comms 接收更新。")
-    else:
-        # 本地模式：直接在前景運行，並將其 stdout 即時打印到當前終端
-        print(f"[{get_dependency_free_timestamp()}] [本地模式] 正在啟動後端工作者，日誌將直接輸出到此處...")
-        print(f"[{get_dependency_free_timestamp()}] 命令: {' '.join(command)}")
-        process = subprocess.Popen(command, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8', bufsize=1)
-        for line in iter(process.stdout.readline, ''):
-            print(line, end='')
-        process.wait()
-        print(f"[{get_local_timestamp()}] [本地模式] 後端工作者已結束。")
-
 def main():
     """
-    主執行函式，實現雙模態邏輯。
+    主執行函式。
+    V32 架構: 本腳本現在是輕量級的「啟動器/監視器」。
+    - Colab 模式: 渲染 UI，然後啟動一個獨立的 setup_worker.py 子程序，並即時轉發其日誌。
+    - 本地模式: 打印一條訊息後退出，因為本地開發應使用其他工具鏈。
     """
-    if IS_COLAB:
-        from IPython.display import display, HTML, clear_output
-        clear_output(wait=True)
-        # 步驟 1 (Colab): 立即渲染 UI
-        display(render_initial_html())
-        print(f"[{get_dependency_free_timestamp()}] 儀表板 UI 已渲染。正在準備後端環境...")
+    if not IS_COLAB:
+        print("此腳本主要設計為在 Google Colab 中運行。對於本地開發，請參閱相關文件。")
+        return
 
-    # --- 環境準備 (對兩種模式都通用) ---
+    # --- Colab 執行流程 ---
+    from IPython.display import display, HTML, clear_output
+    from src.phoenix_core.comms import comm_manager # 延後導入
+
+    # 1. 清理並渲染初始 UI
+    clear_output(wait=True)
+    display(render_initial_html())
+
+    # 這裡的 print 會直接顯示在 Colab 輸出，作為啟動的第一個標記
+    print(f"[{get_dependency_free_timestamp()}] 🚀 Phoenix 啟動器已載入。準備啟動安裝工作程序...")
+
+    def stream_logs(process):
+        """在一個執行緒中讀取和轉發日誌。"""
+        for line in iter(process.stdout.readline, ''):
+            # 將從子程序收到的原始日誌行，透過 comms 發送到前端
+            comm_manager.send_data('runner_log', {'line': line.strip()})
+        process.wait()
+        # 當日誌流結束時，發送一個最終信號
+        comm_manager.send_data('runner_log', {'line': '✅ 安裝工作程序已結束。'})
+
+
     try:
-        if IS_COLAB:
-            # Colab 模式下，所有東西都在 /content/PROJECT_FOLDER_NAME 中
-            project_path = Path("/content") / PROJECT_FOLDER_NAME
-            repo_root = project_path
+        # 2. 準備並啟動 setup_worker.py 子程序
+        setup_script_path = Path(__file__).parent.parent / "scripts" / "setup_worker.py"
+        if not setup_script_path.exists():
+             # 使用 comms 發送致命錯誤
+            comm_manager.send_data('runner_log', {'line': f'❌ 致命錯誤: 找不到安裝腳本 {setup_script_path}'})
+            return
 
-            if FORCE_REPO_REFRESH and project_path.exists():
-                print(f"[{get_dependency_free_timestamp()}] 偵測到強制刷新，正在刪除舊的專案資料夾: {project_path}...")
-                shutil.rmtree(project_path)
+        command = [
+            sys.executable, str(setup_script_path),
+            "--repo-url", REPOSITORY_URL,
+            "--branch", TARGET_BRANCH_OR_TAG,
+            "--project-folder", PROJECT_FOLDER_NAME,
+            "--timezone", TIMEZONE,
+        ]
+        if FORCE_REPO_REFRESH:
+            command.append("--force-refresh")
 
-            if not project_path.exists():
-                print(f"[{get_dependency_free_timestamp()}] 正在從 {REPOSITORY_URL} (分支/標籤: {TARGET_BRANCH_OR_TAG}) 下載程式碼...")
-                subprocess.run(
-                    ["git", "clone", "--depth", "1", "--branch", TARGET_BRANCH_OR_TAG, REPOSITORY_URL, str(project_path)],
-                    check=True, capture_output=True, text=True
-                )
-        else:
-            # 本地模式下，所有操作都在專案根目錄進行
-            repo_root = Path(".").resolve()
-            project_path = repo_root
-            print(f"[{get_dependency_free_timestamp()}] [本地模式] 使用 {repo_root} 作為專案根目錄。")
+        process = subprocess.Popen(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            encoding='utf-8',
+            bufsize=1
+        )
 
-        # --- 通用設定流程 ---
-        print(f"[{get_dependency_free_timestamp()}] 正在生成 config.json...")
-        config_file_path = project_path / "config.json"
-        with open(config_file_path, "w", encoding="utf-8") as f:
-            json.dump({"system_settings": {"timezone": TIMEZONE}}, f, indent=4)
+        # 3. 在背景執行緒中開始串流日誌
+        log_thread = threading.Thread(target=stream_logs, args=(process,))
+        log_thread.start()
 
-        requirements_file = repo_root / "requirements" / "dev.txt"
-        python_executable_for_pip = sys.executable
-
-        # V31: Colab 中不再使用 venv，本地模式維持不變
-        if not IS_COLAB:
-            venv_dir = repo_root / ".venv"
-            print(f"[{get_dependency_free_timestamp()}] [本地模式] 正在設定 Python 虛擬環境於: {venv_dir}")
-            if not venv_dir.is_dir():
-                subprocess.run([sys.executable, "-m", "venv", str(venv_dir)], check=True)
-            python_executable_for_pip = str(venv_dir / "bin" / "python")
-
-        print(f"[{get_dependency_free_timestamp()}] 正在從 {requirements_file} 安裝依賴...")
-        subprocess.run([python_executable_for_pip, "-m", "pip", "install", "-r", str(requirements_file)], check=True)
-
-        print(f"[{get_dependency_free_timestamp()}] ✅ 環境準備完成。")
-
-        # --- 啟動後端 (根據模式不同，行為也不同) ---
-        run_backend_process(project_path, config_file_path, IS_COLAB)
+    except Exception as e:
+        # 捕獲 Popen 或其他早期錯誤
+        error_message = f"❌ 啟動安裝工作程序時發生致命錯誤: {e}"
+        print(error_message) # 直接打印，因為 comms 可能還沒好
+        # 也嘗試透過 comms 發送
+        try:
+            comm_manager.send_data('runner_log', {'line': error_message})
+        except:
+            pass
+        import traceback
+        traceback.print_exc()
 
     except (subprocess.CalledProcessError, FileNotFoundError) as e:
         print(f"[{get_dependency_free_timestamp()}] ❌ 發生致命錯誤: {e}", file=sys.stderr)
