@@ -239,6 +239,11 @@ def main():
     try:
         if IS_COLAB:
             # --- Colab 執行流程 ---
+            # V34: 解決 ModuleNotFoundError 的關鍵步驟
+            # 在導入任何專案模組之前，先將未來的專案路徑加入 sys.path
+            project_path = Path("/content") / PROJECT_FOLDER_NAME
+            sys.path.insert(0, str(project_path))
+
             from IPython.display import display, HTML, clear_output
             from src.phoenix_core.comms import comm_manager
 
