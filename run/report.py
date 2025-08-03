@@ -15,27 +15,33 @@
 import os
 import sys
 import subprocess
+from pathlib import Path
 from IPython.display import display, Markdown
 
 #@title 📊 V29 最終任務報告生成器 { vertical-output: true, display-mode: "form" }
 #@markdown > **在 `colab_runner` 儲存格執行完畢後，點擊此處以生成報告。**
 #@markdown ---
+#@markdown > **請確保下方的專案資料夾名稱與 `colab_runner` 中設定的完全一致。**
+PROJECT_FOLDER_NAME = "WEB1" #@param {type:"string"}
 
 print("🚀 開始生成報告...")
 
-# 在新的架構中，實際的報告生成邏輯由 `scripts/generate_report.py` 處理。
-# 這個 Colab 腳本只是一個簡單的觸發器。
+# --- 路徑設定 ---
+# 為了讓腳本無論從何處執行都能正常工作，我們使用絕對路徑。
+# 在 Colab 環境中，我們根據使用者指定的資料夾名稱來建構根目錄路徑。
+PROJECT_ROOT = Path("/content") / PROJECT_FOLDER_NAME
 
-report_script_path = "scripts/generate_report.py"
-db_path = "logs.sqlite" # 假設後端服務已將 state.db 重命名
-report_dir = "reports"
-requirements_path = "requirements/report.txt"
-venv_python = ".venv_colab_backend/bin/python" # 使用後端建立的 venv
+report_script_path = PROJECT_ROOT / "scripts" / "generate_report.py"
+db_path = PROJECT_ROOT / "logs.sqlite" # 假設後端服務已將 state.db 重命名
+report_dir = PROJECT_ROOT / "reports"
+requirements_path = PROJECT_ROOT / "requirements" / "report.txt"
+# Colab runner 會在專案根目錄下建立此 venv
+venv_python = PROJECT_ROOT / ".venv_colab_backend" / "bin" / "python"
 
 # 1. 檢查必要的檔案是否存在
-if not os.path.exists(report_script_path):
+if not report_script_path.exists():
     print(f"❌ 錯誤: 找不到報告生成腳本: {report_script_path}")
-elif not os.path.exists(db_path):
+elif not db_path.exists():
     print(f"❌ 錯誤: 找不到資料庫檔案: {db_path}。請確認後端服務已成功執行。")
 else:
     try:

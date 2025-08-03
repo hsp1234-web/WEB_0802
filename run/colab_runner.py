@@ -49,7 +49,7 @@ except ImportError:
 #@markdown 後端程式碼倉庫 (REPOSITORY_URL)
 REPOSITORY_URL = "https://github.com/hsp1234-web/WEB_0802.git" #@param {type:"string"}
 #@markdown 後端版本分支或標籤 (TARGET_BRANCH_OR_TAG)
-TARGET_BRANCH_OR_TAG = "0.3.0" #@param {type:"string"}
+TARGET_BRANCH_OR_TAG = "0.3.4" #@param {type:"string"}
 #@markdown 專案資料夾名稱 (PROJECT_FOLDER_NAME)
 PROJECT_FOLDER_NAME = "WEB1" #@param {type:"string"}
 #@markdown 強制刷新後端程式碼 (FORCE_REPO_REFRESH)
@@ -63,6 +63,8 @@ FORCE_REPO_REFRESH = True #@param {type:"boolean"}
 REFRESH_RATE_SECONDS = 1.0 #@param {type:"number"}
 #@markdown 時區設定 (TIMEZONE)
 TIMEZONE = "Asia/Taipei" #@param {type:"string"}
+#@markdown 後端 API 服務埠號 (API_PORT)
+API_PORT = 8088 #@param {type:"integer"}
 
 #@markdown ---
 #@markdown ### Part 3: 日誌顯示設定
@@ -134,7 +136,10 @@ def background_worker():
 
         update_status(task="生成專案設定檔", log="正在生成 config.json...")
         config_data = {
-            "system_settings": { "timezone": TIMEZONE },
+            "system_settings": {
+                "timezone": TIMEZONE,
+                "api_port": API_PORT
+            },
             "log_settings": {
                 "levels": {
                     "BATTLE": SHOW_LOG_LEVEL_BATTLE,
@@ -153,28 +158,66 @@ def background_worker():
             json.dump(config_data, f, indent=4, ensure_ascii=False)
         update_status(log=f"✅ config.json 已生成於 {config_file_path}")
 
-        # --- VENV 和依賴設定 ---
-        update_status(task="設定 Python 虛擬環境", log="正在檢查/建立 .venv...")
+        # --- VENV 和依賴設定 (改用 uv 以提高穩定性) ---
+        update_status(task="安裝/驗證 uv 工具", log="正在檢查高效能 Python 工具 uv...")
+        # 在 Colab 標準環境中，家目錄通常是 /root，我們將把 uv 安裝到此處
+        uv_path = Path("/root/.local/bin/uv")
+        if not uv_path.exists():
+            update_status(log="uv 工具未找到，正在從 GitHub Releases 直接下載...")
+            uv_dir = Path("/root/.local/bin")
+            uv_dir.mkdir(parents=True, exist_ok=True)
+
+            uv_url = "https://github.com/astral-sh/uv/releases/latest/download/uv-x86_64-unknown-linux-gnu.tar.gz"
+            uv_tar_path = base_path / "uv.tar.gz"
+
+            # 下載
+            download_command = ["curl", "-L", "-o", str(uv_tar_path), uv_url]
+            run_result = subprocess.run(download_command, check=False, capture_output=True, text=True, encoding='utf-8')
+            if run_result.returncode != 0:
+                raise RuntimeError(f"下載 uv 失敗: {run_result.stderr}")
+
+            # 解壓縮
+            extract_command = ["tar", "-zxvf", str(uv_tar_path), "-C", str(base_path)]
+            run_result = subprocess.run(extract_command, check=False, capture_output=True, text=True, encoding='utf-8')
+            if run_result.returncode != 0:
+                raise RuntimeError(f"解壓縮 uv 失敗: {run_result.stderr}")
+
+            # 移動並設定權限
+            extracted_uv_path = base_path / "uv-x86_64-unknown-linux-gnu" / "uv"
+            shutil.move(str(extracted_uv_path), str(uv_path))
+            uv_path.chmod(0o755) # 確保執行權限
+
+            # 清理
+            uv_tar_path.unlink()
+            shutil.rmtree(base_path / "uv-x86_64-unknown-linux-gnu")
+
+            if not uv_path.exists():
+                raise RuntimeError("uv 安裝後仍未找到。")
+            update_status(log="✅ uv 工具安裝成功。")
+        else:
+            update_status(log="✅ uv 工具已存在。")
+
+        update_status(task="設定 Python 虛擬環境", log="正在使用 uv 檢查/建立 .venv...")
         venv_dir = project_path / ".venv"
         if not venv_dir.is_dir():
-            update_status(log=f"正在建立虛擬環境於: {venv_dir}")
-            # 使用 subprocess.run 確保此步驟完成後才繼續
-            run_result = subprocess.run([sys.executable, "-m", "venv", str(venv_dir)], check=False, capture_output=True, text=True)
+            update_status(log=f"正在使用 uv 建立虛擬環境於: {venv_dir}")
+            run_result = subprocess.run([str(uv_path), "venv", str(venv_dir), "--seed"], check=False, capture_output=True, text=True, encoding='utf-8')
             if run_result.returncode != 0:
                 update_status(log=f"❌ Venv 建立失敗: {run_result.stderr}")
-                raise RuntimeError(f"Venv 建立失敗: {run_result.stderr}")
+                raise RuntimeError(f"使用 uv 建立 Venv 失敗: {run_result.stderr}")
             update_status(log="✅ 虛擬環境建立成功。")
         else:
             update_status(log="✅ 虛擬環境已存在。")
 
-        update_status(task="安裝依賴", log="正在安裝 requirements/dev.txt...")
+        update_status(task="安裝依賴", log="正在使用 uv 安裝 requirements/dev.txt...")
         venv_python = venv_dir / "bin" / "python"
         requirements_file = project_path / "requirements" / "dev.txt"
-        # 使用 subprocess.run 確保依賴安裝完成
-        run_result = subprocess.run([str(venv_python), "-m", "pip", "install", "-r", str(requirements_file)], check=False, capture_output=True, text=True)
+        # 使用 uv 來安裝依賴，它會自動偵測並使用 venv 中的 Python
+        run_result = subprocess.run([str(uv_path), "pip", "install", "--python", str(venv_python), "-r", str(requirements_file)], check=False, capture_output=True, text=True, encoding='utf-8')
         if run_result.returncode != 0:
+            # 依賴安裝是關鍵步驟，如果失敗，則應中止執行
             update_status(log=f"❌ 依賴安裝失敗: {run_result.stderr}")
-            # 即使失敗也可能繼續，因為某些依賴可能已存在
+            raise RuntimeError(f"使用 uv 安裝依賴失敗: {run_result.stderr}")
         else:
             update_status(log="✅ 依賴安裝完成。")
         # --- VENV 設定結束 ---
@@ -318,7 +361,12 @@ def render_dashboard_html():
                 }})
                 .catch(error => {{
                     const footer = document.getElementById('footer-status');
-                    footer.textContent = `前端狀態: 🔴 API 請求失敗 - ${{error.message}}`;
+                    // 在後端準備好之前，API 請求失敗是正常現象。顯示一個更友善的訊息。
+                    if (footer.textContent.includes("初始化中")) {
+                        footer.textContent = "🟡 前端狀態: 後端準備中，正在嘗試連接...";
+                    } else {
+                        footer.textContent = `🔴 前端狀態: API 請求失敗 - ${error.message}`;
+                    }
                 }});
         }}
         setTimeout(() => {{ updateDashboard(); setInterval(updateDashboard, {refresh_interval_ms}); }}, 5000);
@@ -327,30 +375,36 @@ def render_dashboard_html():
     return css + html_body + javascript
 
 def main():
-    update_status(log="指揮中心 V27 啟動程序開始。")
+    """
+    主執行函式。
+    新流程: 先顯示儀表板，然後在背景啟動工作執行緒。
+    """
+    # --- 步驟 1: 立即顯示儀表板 ---
     if IS_COLAB:
         clear_output(wait=True)
-        display(HTML("<h1>🚀 鳳凰之心指揮中心 V27</h1><p>正在準備環境，請稍候... 初始日誌將顯示於此儲存格下方。</p>"))
+        # 顯示儀表板的靜態 HTML 骨架
+        display(HTML(render_dashboard_html()))
+        # 呼叫 Colab 的輸出服務來代理埠號，這是前端能夠連接到後端的關鍵
+        # 注意：此函式本身不會阻塞，它設定好代理後就會立即返回。
+        colab_output.serve_kernel_port_as_window(API_PORT, anchor_text="🚀 點此進入鳳凰之心主控台")
     else:
-        print("偵測到本地模式，將不會渲染 HTML 儀表板。")
+        print("偵測到本地模式，儀表板不會渲染。")
 
+    # --- 步驟 2: 在背景啟動環境準備與伺服器啟動流程 ---
+    update_status(log="指揮中心 V27 啟動程序開始。")
     worker_thread = threading.Thread(target=background_worker, daemon=True)
     worker_thread.start()
 
-    while shared_status.get("backend_process") is None and worker_thread.is_alive():
-        time.sleep(0.5)
+    # --- 步驟 3: 等待背景程序結束 ---
+    # 主執行緒現在的角色是等待背景工作完成，或被使用者中斷。
+    worker_thread.join() # 等待背景緒完成其所有工作（包括啟動子程序）
 
-    if shared_status.get("backend_process") is None:
-        print("❌ 後端服務啟動失敗，請檢查上方日誌。")
+    backend_process = shared_status.get("backend_process")
+    if backend_process is None:
+        # 如果背景工作執行緒結束了，但沒有成功啟動後端程序，則在此報告錯誤。
+        # (詳細的錯誤日誌應已由 worker_thread 自行打印)
+        print("❌ 背景任務已結束，但後端服務未能成功啟動。")
         return
-
-    if IS_COLAB:
-        clear_output(wait=True)
-        display(HTML(render_dashboard_html()))
-    else:
-        print("後端已啟動，儀表板在本地模式下不顯示。")
-
-    backend_process = shared_status["backend_process"]
     try:
         exit_code = backend_process.wait()
         update_status(log=f"[前端] 後端程序已終止，返回碼: {exit_code}。")

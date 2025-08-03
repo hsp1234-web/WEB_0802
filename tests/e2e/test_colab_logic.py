@@ -31,6 +31,7 @@ PROJECT_ROOT = Path(__file__).parent.parent.parent.resolve()
 VENV_DIR = PROJECT_ROOT / ".venv"
 VENV_PYTHON = VENV_DIR / "bin" / "python"
 VENV_PIP = VENV_DIR / "bin" / "pip"
+VENV_UV = VENV_DIR / "bin" / "uv"  # 為 uv 工具新增路徑變數
 API_SERVICE_SCRIPT = PROJECT_ROOT / "scripts" / "start_api_service.py"
 REQUIREMENTS_BASE = PROJECT_ROOT / "requirements" / "base.txt"
 REQUIREMENTS_DEV = PROJECT_ROOT / "requirements" / "dev.txt"
@@ -55,8 +56,10 @@ def find_free_port() -> int:
         return s.getsockname()[1]
 
 def setup_virtualenv():
-    """設定並準備 Python 虛擬環境，包含報告生成器的依賴。"""
+    """設定並準備 Python 虛擬環境，使用 uv 以提高速度與一致性。"""
     print_header("引導程序: 設定 Python 虛擬環境")
+
+    # 步驟 1: 確保 venv 存在。我們使用標準 venv 模組來建立它，這是一個穩定的基礎。
     if not VENV_DIR.exists():
         print(f"虛擬環境 '{VENV_DIR}' 不存在，正在建立...")
         subprocess.run([sys.executable, "-m", "venv", str(VENV_DIR)], check=True)
@@ -64,15 +67,35 @@ def setup_virtualenv():
     else:
         print(f"✅ 虛擬環境 '{VENV_DIR}' 已存在。")
 
-    print("正在安裝/更新依賴套件 (將顯示詳細日誌)...")
-    # 移除 capture_output=True 以便於除錯
-    requirements_report = PROJECT_ROOT / "requirements" / "report.txt"
-    subprocess.run([str(VENV_PIP), "install", "-U", "pip"], check=True)
-    subprocess.run([str(VENV_PIP), "install", "-r", str(REQUIREMENTS_BASE)], check=True)
-    subprocess.run([str(VENV_PIP), "install", "-r", str(REQUIREMENTS_DEV)], check=True)
-    if requirements_report.exists():
-        print("正在安裝報告依賴...")
-        subprocess.run([str(VENV_PIP), "install", "-r", str(requirements_report)], check=True)
+    # 步驟 2: 在 venv 中安裝或更新 uv，以便後續使用。
+    print("正在 venv 中安裝/更新 uv...")
+    # 使用 -U 確保 uv 是最新版本
+    subprocess.run([str(VENV_PIP), "install", "-U", "uv"], check=True)
+    print("✅ uv 已在 venv 中準備就緒。")
+
+    # 步驟 3: 使用 venv 中的 uv 來高效地安裝所有依賴。
+    print("正在使用 uv 安裝/更新依賴套件...")
+
+    # 建立一個依賴檔案列表
+    requirements_files = [
+        REQUIREMENTS_BASE,
+        REQUIREMENTS_DEV,
+        PROJECT_ROOT / "requirements" / "report.txt"
+    ]
+
+    # 準備 uv install 命令
+    install_command = [str(VENV_UV), "pip", "install"]
+    for req_file in requirements_files:
+        if req_file.exists():
+            install_command.extend(["-r", str(req_file)])
+
+    # 執行安裝命令，並明確指定 venv 的 Python 解釋器
+    # 只有在找到至少一個依賴檔案時才執行
+    if len(install_command) > 3:
+        install_command.extend(["--python", str(VENV_PYTHON)])
+        # 顯示詳細日誌，移除 capture_output=True
+        subprocess.run(install_command, check=True)
+
     print("✅ 依賴套件安裝完成。")
 
 

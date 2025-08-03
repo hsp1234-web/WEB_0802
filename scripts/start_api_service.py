@@ -28,15 +28,14 @@ def main():
         server_env["PHOENIX_CONFIG_PATH"] = config_path
         print(f"✅ 已將設定檔路徑加入環境變數: {server_env['PHOENIX_CONFIG_PATH']}")
 
-        port = "8088"
-        try:
-            with open(config_path, "r") as f:
-                config_data = json.load(f)
-                if "__test_port__" in config_data:
-                    port = str(config_data["__test_port__"])
-                    print(f"ℹ️ 在測試模式下，使用動態埠號: {port}")
-        except Exception:
-            pass
+        # 從設定檔讀取埠號
+        port = "8088" # 保留一個預設值以防萬一
+        print(f"正在從 {config_path} 讀取設定...")
+        with open(config_path, "r", encoding="utf-8") as f:
+            config_data = json.load(f)
+
+        port = str(config_data.get("system_settings", {}).get("api_port", port))
+        print(f"✅ 取得 API 埠號: {port}")
 
         api_server_command = [
             sys.executable, # 直接使用當前的 Python 解譯器 (應為 .venv/bin/python)
