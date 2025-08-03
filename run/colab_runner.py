@@ -49,7 +49,7 @@ except ImportError:
 #@markdown 後端程式碼倉庫 (REPOSITORY_URL)
 REPOSITORY_URL = "https://github.com/hsp1234-web/WEB_0802.git" #@param {type:"string"}
 #@markdown 後端版本分支或標籤 (TARGET_BRANCH_OR_TAG)
-TARGET_BRANCH_OR_TAG = "0.3.0" #@param {type:"string"}
+TARGET_BRANCH_OR_TAG = "0.3.3" #@param {type:"string"}
 #@markdown 專案資料夾名稱 (PROJECT_FOLDER_NAME)
 PROJECT_FOLDER_NAME = "WEB1" #@param {type:"string"}
 #@markdown 強制刷新後端程式碼 (FORCE_REPO_REFRESH)
@@ -155,18 +155,39 @@ def background_worker():
 
         # --- VENV 和依賴設定 (改用 uv 以提高穩定性) ---
         update_status(task="安裝/驗證 uv 工具", log="正在檢查高效能 Python 工具 uv...")
-        # 在 Colab 標準環境中，家目錄通常是 /root
+        # 在 Colab 標準環境中，家目錄通常是 /root，我們將把 uv 安裝到此處
         uv_path = Path("/root/.local/bin/uv")
         if not uv_path.exists():
-            update_status(log="uv 工具未找到，正在從官方來源下載並安裝...")
-            # 使用 shell=True 來處理管道命令
-            install_command = "curl -LsSf https://astral.sh/uv/install.sh | sh"
-            run_result = subprocess.run(install_command, shell=True, check=False, capture_output=True, text=True, encoding='utf-8')
-            if run_result.returncode != 0 or not uv_path.exists():
-                # 如果安裝失敗，提供詳細日誌
-                error_details = run_result.stderr or run_result.stdout
-                update_status(log=f"❌ uv 安裝失敗: {error_details}")
-                raise RuntimeError(f"無法安裝核心工具 uv: {error_details}")
+            update_status(log="uv 工具未找到，正在從 GitHub Releases 直接下載...")
+            uv_dir = Path("/root/.local/bin")
+            uv_dir.mkdir(parents=True, exist_ok=True)
+
+            uv_url = "https://github.com/astral-sh/uv/releases/latest/download/uv-x86_64-unknown-linux-gnu.tar.gz"
+            uv_tar_path = base_path / "uv.tar.gz"
+
+            # 下載
+            download_command = ["curl", "-L", "-o", str(uv_tar_path), uv_url]
+            run_result = subprocess.run(download_command, check=False, capture_output=True, text=True, encoding='utf-8')
+            if run_result.returncode != 0:
+                raise RuntimeError(f"下載 uv 失敗: {run_result.stderr}")
+
+            # 解壓縮
+            extract_command = ["tar", "-zxvf", str(uv_tar_path), "-C", str(base_path)]
+            run_result = subprocess.run(extract_command, check=False, capture_output=True, text=True, encoding='utf-8')
+            if run_result.returncode != 0:
+                raise RuntimeError(f"解壓縮 uv 失敗: {run_result.stderr}")
+
+            # 移動並設定權限
+            extracted_uv_path = base_path / "uv-x86_64-unknown-linux-gnu" / "uv"
+            shutil.move(str(extracted_uv_path), str(uv_path))
+            uv_path.chmod(0o755) # 確保執行權限
+
+            # 清理
+            uv_tar_path.unlink()
+            shutil.rmtree(base_path / "uv-x86_64-unknown-linux-gnu")
+
+            if not uv_path.exists():
+                raise RuntimeError("uv 安裝後仍未找到。")
             update_status(log="✅ uv 工具安裝成功。")
         else:
             update_status(log="✅ uv 工具已存在。")
