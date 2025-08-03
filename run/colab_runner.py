@@ -303,15 +303,44 @@ def render_dashboard_html():
                 <div class="content log-container" id="log-container">等待日誌...</div>
             </div>
         </div>
-        <div id="entry-point-panel">
+        <div class="footer" id="footer-status">指揮中心前端任務: 初始化中...</div>
+        <div id="entry-point-panel" style="margin-top: 1em;">
              <a id="entry-point-button" href="#" target="_blank">🚀 進入主控台</a>
              <p style="font-size:0.9em; margin-top: 8px;">主儀表板已就緒，點擊上方按鈕進入操作介面。</p>
         </div>
-        <div class="footer" id="footer-status">指揮中心前端任務: 初始化中...</div>
+        <div class="footer-actions" style="text-align: center; margin-top: 1em; padding-top: 1em; border-top: 1px solid #444;">
+            <button id="copy-output-button" style="padding: 8px 16px; font-size: 0.9em; background-color: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                📋 複製全部輸出
+            </button>
+        </div>
     </div>
     """
     javascript = f"""
     <script type="text/javascript">
+        function copyAllOutput() {{
+            const button = document.getElementById('copy-output-button');
+            const outputElement = button.closest('colab-output');
+            if (outputElement) {{
+                navigator.clipboard.writeText(outputElement.innerText).then(() => {{
+                    const originalText = button.innerHTML;
+                    button.innerHTML = '✅ 已複製!';
+                    setTimeout(() => {{ button.innerHTML = originalText; }}, 2000);
+                }}, () => {{
+                    button.innerHTML = '❌ 複製失敗';
+                }});
+            }} else {{
+                console.error("無法找到 Colab 輸出元素。");
+                button.innerHTML = '❌ 找不到輸出';
+            }}
+        }}
+
+        document.addEventListener('DOMContentLoaded', (event) => {{
+             const copyBtn = document.getElementById('copy-output-button');
+             if(copyBtn) {{
+                copyBtn.addEventListener('click', copyAllOutput);
+             }}
+        }});
+
         const statusMap = {{ "running": "🟢 運行中", "pending": "🟡 等待中", "installing": "🛠️ 安裝中", "starting": "🚀 啟動中", "failed": "🔴 失敗", "unknown": "❓ 未知" }};
         const dashboardApiUrl = '/api/v1/status/dashboard';
         const perfApiUrl = '/api/v1/status/performance';
