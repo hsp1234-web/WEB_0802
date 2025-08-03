@@ -32,26 +32,18 @@ def print_log(message, level="INFO"):
     except Exception as e:
         print(f"[DB Log Error] 無法寫入日誌到資料庫: {e}")
 
+from src.phoenix_core.utils.resource_monitor import log_system_resources
+
 def hardware_monitor_thread(interval: int):
     """
-    一個專門監控硬體資源 (CPU, RAM, Disk) 的執行緒。
+    一個專門監控硬體資源的執行緒，現在委託給 resource_monitor 模組處理。
     """
     print_log("🟢 硬體監控執行緒已啟動。")
     while not stop_event.is_set():
         try:
-            cpu_usage = psutil.cpu_percent(interval=1)
-            ram_usage = psutil.virtual_memory().percent
-            disk_usage = psutil.disk_usage('/').percent
-
-            # 使用新的結構化方法寫入硬體數據
-            db_manager.write_hardware_stat(
-                cpu_usage=cpu_usage,
-                memory_usage=ram_usage,
-                disk_usage=disk_usage,
-                gpu_temperature=None  # psutil 無法直接獲取 GPU 溫度
-            )
-
-            print_log(f"💻 硬體狀態更新: CPU: {cpu_usage}%, RAM: {ram_usage}%, Disk: {disk_usage}%", level="PERF")
+            # 呼叫統一的資源記錄函數
+            log_system_resources()
+            print_log(f"💻 硬體狀態已記錄到資料庫。", level="PERF")
 
         except Exception as e:
             print_log(f"🔴 硬體監控執行緒發生錯誤: {e}", level="ERROR")
