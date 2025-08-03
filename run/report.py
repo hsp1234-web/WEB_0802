@@ -1,14 +1,14 @@
 # -*- coding: utf-8 -*-
 # ╔══════════════════════════════════════════════════════════════════╗
 # ║                                                                      ║
-# ║              📊 鳳凰之心 - 互動式報告儀表板 V31 (UI)                  ║
+# ║              📊 鳳凰之心 - 互動式報告儀表板 V32 (UI)                  ║
 # ║                                                                      ║
 # ╠══════════════════════════════════════════════════════════════════╣
 # ║                                                                      ║
 # ║ - 說明: 此腳本在 Colab 或 Jupyter 環境中渲染一個互動式儀表板，      ║
-# ║         讓使用者可以選擇、預覽、複製和存檔報告。                   ║
-# ║ - 依賴: `ipywidgets`, `report_generator.py`                        ║
-# ║ - 版本: 0.5.0 (互動式 UI)                                          ║
+# ║         讓使用者可以選擇、預覽、複製和存檔「已經生成」的報告。     ║
+# ║ - 依賴: `ipywidgets`, `src.phoenix_core.report_generator`          ║
+# ║ - 版本: V32                                                          ║
 # ║                                                                      ║
 # ╚══════════════════════════════════════════════════════════════════╝
 
@@ -53,14 +53,14 @@ chk_detail = widgets.Checkbox(value=True, description='📋 詳細日誌報告 (
 checkboxes = [chk_perf, chk_summary, chk_detail]
 
 # 按鈕
-btn_generate = widgets.Button(description='產生報告', button_style='primary', icon='cogs')
+btn_generate = widgets.Button(description='預覽報告', button_style='primary', icon='eye')
 btn_copy = widgets.Button(description='📋 複製選中報告', button_style='info', icon='copy', layout={'visibility': 'hidden'})
 btn_archive = widgets.Button(description='💾 存檔選中報告', button_style='success', icon='archive', layout={'visibility': 'hidden'})
 
 # 輸出區域
 output_area = widgets.Output(layout={'border': '1px solid #ccc', 'padding': '10px', 'margin_top': '10px'})
 with output_area:
-    print("(點擊「產生報告」按鈕後，此處將顯示報告內容)")
+    print("(點擊「預覽報告」按鈕後，此處將顯示報告內容)")
 
 # --- 互動邏輯 ---
 def get_selection():
@@ -78,8 +78,8 @@ def on_chk_all_changed(change):
         chk.value = is_checked
 chk_all.observe(on_chk_all_changed, names='value')
 
-def on_generate_clicked(b):
-    """「產生報告」按鈕的回呼函式"""
+def on_preview_clicked(b):
+    """「預覽報告」按鈕的回呼函式"""
     selection = get_selection()
     output_area.clear_output(wait=True)
     with output_area:
@@ -96,14 +96,14 @@ def on_generate_clicked(b):
                  print(f"⚠️ 在 '{REPORTS_DIR}' 目錄下找不到任何選定的報告檔案。請確認檔案是否存在。")
                  return
             print(report_content)
-            # 成功生成後顯示操作按鈕
+            # 成功預覽後顯示操作按鈕
             btn_copy.layout.visibility = 'visible'
             btn_archive.layout.visibility = 'visible'
         except Exception as e:
             print(f"❌ 讀取報告時發生錯誤: {e}")
 
 
-btn_generate.on_click(on_generate_clicked)
+btn_generate.on_click(on_preview_clicked)
 
 def on_archive_clicked(b):
     """「存檔報告」按鈕的回呼函式"""
