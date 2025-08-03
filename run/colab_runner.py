@@ -116,6 +116,17 @@ def background_worker():
         base_path = Path("/content")
         project_path = base_path / PROJECT_FOLDER_NAME
 
+        # --- 清除快取 ---
+        update_status(log="🧹 正在清除 Python 快取 (`__pycache__`)...")
+        # 遍歷專案資料夾並刪除所有 __pycache__ 目錄
+        if project_path.exists():
+            for path in Path(project_path).rglob("__pycache__"):
+                if path.is_dir():
+                    shutil.rmtree(path)
+            update_status(log="✅ 快取已清除。")
+        else:
+            update_status(log="🟡 專案資料夾尚未建立，跳過快取清除。")
+
         update_status(task="準備專案環境", log="檢查專案資料夾...")
         if FORCE_REPO_REFRESH and project_path.exists():
             update_status(log=f"偵測到強制刷新，正在刪除舊的專案資料夾: {project_path}...")
@@ -257,6 +268,7 @@ def background_worker():
         import traceback
         traceback.print_exc()
 
+# V29.1: 強制刷新，解決潛在的快取問題
 def render_dashboard_html():
     refresh_interval_ms = int(REFRESH_RATE_SECONDS * 1000)
     css = """
