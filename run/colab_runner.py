@@ -89,7 +89,7 @@ def prepare_environment():
     if not os.path.exists(project_path):
         print(f"克隆儲存庫從 {REPOSITORY_URL} 到 {project_path}...")
         subprocess.run([
-            "git", "clone", "--depth", "1", "--branch", TARGET_BRANCH_OR_TAG,
+            "git", "clone", "--branch", TARGET_BRANCH_OR_TAG,
             REPOSITORY_URL, project_path
         ], check=True)
     else:
