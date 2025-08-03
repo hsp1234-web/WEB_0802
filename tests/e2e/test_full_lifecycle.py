@@ -85,10 +85,10 @@ def test_full_lifecycle(setup_e2e_environment):
         json.dump(config_data, f)
 
     # --- 2. 啟動後端服務 ---
-    # 直接執行 start_api_service.py，因為它包含了完整的環境建立流程
+    # 執行 run_server_only.py 來啟動後端服務
     # 使用當前的 pytest venv 中的 python 來執行
     command = [
-        sys.executable, str(project_path / "scripts" / "start_api_service.py"),
+        sys.executable, str(project_path / "scripts" / "run_server_only.py"),
         "--config", str(config_path)
     ]
 
@@ -121,7 +121,7 @@ def test_full_lifecycle(setup_e2e_environment):
             if server_process.poll() is not None:
                 # 伺服器意外終止
                 stdout, stderr = server_process.communicate()
-                all_logs = stdout + stderr
+                all_logs = (stdout or "") + (stderr or "")
                 pytest.fail(f"伺服器提前崩潰。\n--- LOGS ---\n{all_logs}")
 
             try:

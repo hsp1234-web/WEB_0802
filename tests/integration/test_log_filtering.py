@@ -37,10 +37,10 @@ def live_server(request):
         shutil.rmtree(tmp_test_dir)
     tmp_test_dir.mkdir()
 
-    # 使用與主專案相同的 venv，因為依賴已經安裝好了
-    python_executable = PROJECT_ROOT / ".venv" / "bin" / "python"
-    if not python_executable.exists():
-        pytest.fail("找不到 .venv/bin/python，請先執行依賴安裝步驟。")
+    # 使用當前正在執行 pytest 的 Python 直譯器，這樣更具可移植性
+    python_executable = sys.executable
+    if not Path(python_executable).exists():
+        pytest.fail(f"無法找到 Python 直譯器: {python_executable}")
 
     port = find_free_port()
     config_path = tmp_test_dir / "config.json"

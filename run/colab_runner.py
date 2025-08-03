@@ -1,19 +1,19 @@
 # -*- coding: utf-8 -*-
 # ╔══════════════════════════════════════════════════════════════════╗
 # ║                                                                      ║
-# ║                  🚀 鳳凰之心 - 監控面板 V31 (整合版)                   ║
+# ║                  🚀 鳳凰之心 - 監控面板 V32 (整合版)                   ║
 # ║                                                                      ║
 # ╠══════════════════════════════════════════════════════════════════╣
 # ║                                                                      ║
 # ║ - 說明: 此腳本為 Colab 中的主要進入點，用於啟動後端並顯示即時監控   ║
 # ║         儀表板。                                                     ║
-# ║ - 依賴: `db_queries.py`, `watchdog.py`                               ║
-# ║ - 版本: 0.4.0 (監控面板整合)                                       ║
+# ║ - 依賴: `db_queries.py`, `watchdog.py`, `psutil`                     ║
+# ║ - 版本: 0.5.0 (整合動態資源監控)                                   ║
 # ║                                                                      ║
 # ╚══════════════════════════════════════════════════════════════════╝
 
 # --- Colab 使用者介面參數 ---
-#@title 🚀 V31 鳳凰之心指揮中心 { vertical-output: true, display-mode: "form" }
+#@title 🚀 V32 鳳凰之心指揮中心 { vertical-output: true, display-mode: "form" }
 #@markdown ---
 #@markdown ### Part 1: 程式碼與環境設定
 #@markdown > 設定 Git 倉庫、分支或標籤，以及專案資料夾。
@@ -69,6 +69,7 @@ import subprocess
 import shutil
 from datetime import datetime
 from IPython.display import display, clear_output
+import psutil # 用於獲取系統資源使用率
 
 # --- 階段一：環境準備 ---
 def prepare_environment():
@@ -202,12 +203,25 @@ def print_log_panel(conn):
     print_box_footer()
 
 def print_status_panel(conn):
+    """顯示即時狀態面板，包含動態的 CPU 和 RAM 資訊。"""
     print_box_header("⚡️ 即時狀態")
     now = datetime.now()
     ts = now.strftime("%H:%M:%S")
-    status_line = f"  {ts} | CPU: 18.5% | RAM: 4.8/12.7 GB | [🟢 任務完成]"
+
+    # 動態獲取系統資源
+    cpu_percent = psutil.cpu_percent()
+    ram = psutil.virtual_memory()
+    ram_used_gb = ram.used / (1024**3)
+    ram_total_gb = ram.total / (1024**3)
+
+    # 獲取心跳狀態
     heartbeat_status = check_heartbeat_status(conn, 15)
-    status_line += " | [💓 心跳正常]" if heartbeat_status == 'OK' else f" | [🚨 心跳異常: {heartbeat_status}]"
+    heartbeat_text = "[💓 心跳正常]" if heartbeat_status == 'OK' else f"[🚨 心跳異常: {heartbeat_status}]"
+
+    # 根據心跳決定主要狀態
+    main_status = "[🟢 核心運行中]" if heartbeat_status == 'OK' else "[🔴 核心無回應]"
+
+    status_line = f"  {ts} | CPU: {cpu_percent:5.1f}% | RAM: {ram_used_gb:.1f}/{ram_total_gb:.1f} GB | {main_status} {heartbeat_text}"
     print(f"│{status_line:<{WIDTH - 2}}│")
     print_box_footer()
 
