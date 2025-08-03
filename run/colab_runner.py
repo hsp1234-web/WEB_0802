@@ -61,8 +61,7 @@ def render_initial_html():
     """
     渲染儀表板的靜態 HTML 骨架和負責接收 Comms 數據的 JavaScript。
     """
-    # V30 修復: f-string 語法衝突
-    # 將所有 JavaScript 模板字串中的 { 和 } 分別用 {{ 和 }} 進行轉義
+    # V31: 新增複製按鈕的 CSS
     css = """
     <style>
         body { font-family: 'Noto Sans TC', 'Fira Code', monospace; background-color: #1a1a1a; color: #e0e0e0; }
@@ -79,36 +78,50 @@ def render_initial_html():
         .log-level-PERF { color: #f7b89c; }
         table { width: 100%; border-collapse: collapse; }
         td { padding: 4px 8px; }
+        #copy-btn-container { text-align: center; padding-top: 10px; }
+        #copy-output-btn {
+            background-color: #0d47a1; color: white; border: none;
+            padding: 10px 20px; border-radius: 5px; cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        #copy-output-btn:hover { background-color: #1565c0; }
+        #copy-output-btn.copied { background-color: #4caf50; }
     </style>
     """
+    # V31: 將主要內容包裹在一個 div 中以便複製，並新增按鈕
     html_body = """
-    <div class="container">
-        <div class="grid">
-            <div>
-                <div class="panel">
-                    <div class="title">後端狀態</div>
-                    <div class="content"><table id="status-table"><tbody><tr><td>等待後端回報...</td></tr></tbody></table></div>
-                </div>
-                <div class="panel">
-                    <div class="title">系統資源</div>
-                    <div class="content">
-                        <table>
-                            <tr><td>CPU</td><td id="cpu_usage">等待中...</td></tr>
-                            <tr><td>RAM</td><td id="ram_usage">等待中...</td></tr>
-                        </table>
+    <div id="phoenix-main-output">
+        <div class="container">
+            <div class="grid">
+                <div>
+                    <div class="panel">
+                        <div class="title">後端狀態</div>
+                        <div class="content"><table id="status-table"><tbody><tr><td>等待後端回報...</td></tr></tbody></table></div>
+                    </div>
+                    <div class="panel">
+                        <div class="title">系統資源</div>
+                        <div class="content">
+                            <table>
+                                <tr><td>CPU</td><td id="cpu_usage">等待中...</td></tr>
+                                <tr><td>RAM</td><td id="ram_usage">等待中...</td></tr>
+                            </table>
+                        </div>
                     </div>
                 </div>
-            </div>
-            <div class="panel">
-                <div class="title">前端日誌 (Comms)</div>
-                <div class="content log-container" id="log-container">等待 Comms 連接...</div>
+                <div class="panel">
+                    <div class="title">前端日誌 (Comms)</div>
+                    <div class="content log-container" id="log-container">等待 Comms 連接...</div>
+                </div>
             </div>
         </div>
     </div>
+    <div id="copy-btn-container">
+        <button id="copy-output-btn">📋 複製上方所有儲存格輸出</button>
+    </div>
     """
+    # V31: 新增複製按鈕的 JavaScript 邏輯
     javascript = f"""
     <script type="text/javascript">
-        // 確保 logContainer 存在
         const logContainer = document.getElementById('log-container');
         function addLog(message, level = 'INFO') {{
             const entry = document.createElement('div');
@@ -137,7 +150,6 @@ def render_initial_html():
                         }}
                         document.getElementById(`status-val-${{key}}`).textContent = value;
 
-                        // 特別處理資源監控
                         if (key === 'cpu_usage' || key === 'ram_usage') {{
                             document.getElementById(key).textContent = `${{parseFloat(value).toFixed(1)}}%`;
                         }}
@@ -154,6 +166,27 @@ def render_initial_html():
             }};
         }});
         addLog('Comms 目標 "phoenix_comms" 已註冊。等待後端連接...');
+
+        // --- 新增的複製按鈕邏輯 ---
+        const copyBtn = document.getElementById('copy-output-btn');
+        copyBtn.addEventListener('click', () => {{
+            const outputContainer = document.getElementById('phoenix-main-output');
+            if (navigator.clipboard) {{
+                navigator.clipboard.writeText(outputContainer.innerText).then(() => {{
+                    const originalText = copyBtn.textContent;
+                    copyBtn.textContent = '✅ 已複製！';
+                    copyBtn.classList.add('copied');
+                    setTimeout(() => {{
+                        copyBtn.textContent = originalText;
+                        copyBtn.classList.remove('copied');
+                    }}, 2000);
+                }}).catch(err => {{
+                    addLog('複製失敗: ' + err, 'ERROR');
+                }});
+            }} else {{
+                addLog('瀏覽器不支援 Clipboard API', 'ERROR');
+            }}
+        }});
     </script>
     """
     return HTML(css + html_body + javascript)
@@ -163,24 +196,23 @@ def run_backend_process(project_path: Path, config_file_path: Path, is_colab: bo
     """
     以子程序方式啟動後端工作者 (backend_worker.py)。
     """
-    # V30.2 修正：路徑邏輯。在本地模式下，腳本相對於專案根目錄，而非 project_path
+    # V31: Colab 中不再使用 venv
     if is_colab:
-        # 在 Colab 中，程式碼被 clone 到 project_path，所以 worker 和 venv 都在那裡面
         repo_root = project_path
-        venv_python = project_path / ".venv" / "bin" / "python"
+        # 直接使用系統的 python
+        python_executable = sys.executable
         cwd = project_path
     else:
-        # 在本地，此腳本在 `run/`，所以根目錄是 `Path(__file__).parent.parent`
-        # venv 和 cwd 也位於根目錄
+        # 本地模式維持不變，繼續使用 venv
         repo_root = Path(__file__).parent.parent
-        venv_python = repo_root / ".venv" / "bin" / "python"
+        python_executable = str(repo_root / ".venv" / "bin" / "python")
         cwd = repo_root
 
     launch_script_path = repo_root / "scripts" / "backend_worker.py"
     if not launch_script_path.exists():
         raise FileNotFoundError(f"找不到後端工作者腳本: {launch_script_path}")
 
-    command = [str(venv_python), str(launch_script_path), "--config", str(config_file_path)]
+    command = [python_executable, str(launch_script_path), "--config", str(config_file_path)]
 
     if is_colab:
         # Colab 模式：在背景運行，不阻塞，依賴 Comms 傳遞日誌
@@ -210,12 +242,10 @@ def main():
 
     # --- 環境準備 (對兩種模式都通用) ---
     try:
-        # V30.3 修正: 統一且清晰地處理路徑
         if IS_COLAB:
             # Colab 模式下，所有東西都在 /content/PROJECT_FOLDER_NAME 中
             project_path = Path("/content") / PROJECT_FOLDER_NAME
             repo_root = project_path
-            venv_dir = project_path / ".venv"
 
             if FORCE_REPO_REFRESH and project_path.exists():
                 print(f"[{get_dependency_free_timestamp()}] 偵測到強制刷新，正在刪除舊的專案資料夾: {project_path}...")
@@ -228,36 +258,30 @@ def main():
                     check=True, capture_output=True, text=True
                 )
         else:
-            # V30.4 修正: 本地模式下，所有操作都在專案根目錄進行
+            # 本地模式下，所有操作都在專案根目錄進行
             repo_root = Path(".").resolve()
-            project_path = repo_root  # 在本地模式，專案路徑就是根目錄
-            venv_dir = repo_root / ".venv"
+            project_path = repo_root
             print(f"[{get_dependency_free_timestamp()}] [本地模式] 使用 {repo_root} 作為專案根目錄。")
 
         # --- 通用設定流程 ---
         print(f"[{get_dependency_free_timestamp()}] 正在生成 config.json...")
-        config_file_path = project_path / "config.json" # 在本地模式下，這將是 repo_root/config.json
+        config_file_path = project_path / "config.json"
         with open(config_file_path, "w", encoding="utf-8") as f:
             json.dump({"system_settings": {"timezone": TIMEZONE}}, f, indent=4)
 
-        print(f"[{get_dependency_free_timestamp()}] 正在設定 Python 虛擬環境於: {venv_dir}")
-        if not venv_dir.is_dir():
-            # V30.5 修正: 在 Colab 中，需要確保 python3-venv 已安裝
-            if IS_COLAB:
-                print(f"[{get_dependency_free_timestamp()}] [Colab 環境] 正在確保 venv 套件已安裝...")
-                try:
-                    subprocess.run(["apt-get", "update"], check=True, capture_output=True)
-                    subprocess.run(["apt-get", "install", "-y", "python3-venv"], check=True, capture_output=True)
-                    print(f"[{get_dependency_free_timestamp()}] ✅ venv 套件已準備就緒。")
-                except subprocess.CalledProcessError as e:
-                    print(f"[{get_dependency_free_timestamp()}] ❌ 安裝 venv 套件失敗: {e.stderr.decode('utf-8') if e.stderr else 'No stderr'}", file=sys.stderr)
-                    raise
-            subprocess.run([sys.executable, "-m", "venv", str(venv_dir)], check=True)
-
-        venv_python = venv_dir / "bin" / "python"
         requirements_file = repo_root / "requirements" / "dev.txt"
+        python_executable_for_pip = sys.executable
+
+        # V31: Colab 中不再使用 venv，本地模式維持不變
+        if not IS_COLAB:
+            venv_dir = repo_root / ".venv"
+            print(f"[{get_dependency_free_timestamp()}] [本地模式] 正在設定 Python 虛擬環境於: {venv_dir}")
+            if not venv_dir.is_dir():
+                subprocess.run([sys.executable, "-m", "venv", str(venv_dir)], check=True)
+            python_executable_for_pip = str(venv_dir / "bin" / "python")
+
         print(f"[{get_dependency_free_timestamp()}] 正在從 {requirements_file} 安裝依賴...")
-        subprocess.run([str(venv_python), "-m", "pip", "install", "-r", str(requirements_file)], check=True)
+        subprocess.run([python_executable_for_pip, "-m", "pip", "install", "-r", str(requirements_file)], check=True)
 
         print(f"[{get_dependency_free_timestamp()}] ✅ 環境準備完成。")
 
