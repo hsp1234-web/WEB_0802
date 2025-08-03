@@ -153,28 +153,45 @@ def background_worker():
             json.dump(config_data, f, indent=4, ensure_ascii=False)
         update_status(log=f"✅ config.json 已生成於 {config_file_path}")
 
-        # --- VENV 和依賴設定 ---
-        update_status(task="設定 Python 虛擬環境", log="正在檢查/建立 .venv...")
+        # --- VENV 和依賴設定 (改用 uv 以提高穩定性) ---
+        update_status(task="安裝/驗證 uv 工具", log="正在檢查高效能 Python 工具 uv...")
+        # 在 Colab 標準環境中，家目錄通常是 /root
+        uv_path = Path("/root/.local/bin/uv")
+        if not uv_path.exists():
+            update_status(log="uv 工具未找到，正在從官方來源下載並安裝...")
+            # 使用 shell=True 來處理管道命令
+            install_command = "curl -LsSf https://astral.sh/uv/install.sh | sh"
+            run_result = subprocess.run(install_command, shell=True, check=False, capture_output=True, text=True, encoding='utf-8')
+            if run_result.returncode != 0 or not uv_path.exists():
+                # 如果安裝失敗，提供詳細日誌
+                error_details = run_result.stderr or run_result.stdout
+                update_status(log=f"❌ uv 安裝失敗: {error_details}")
+                raise RuntimeError(f"無法安裝核心工具 uv: {error_details}")
+            update_status(log="✅ uv 工具安裝成功。")
+        else:
+            update_status(log="✅ uv 工具已存在。")
+
+        update_status(task="設定 Python 虛擬環境", log="正在使用 uv 檢查/建立 .venv...")
         venv_dir = project_path / ".venv"
         if not venv_dir.is_dir():
-            update_status(log=f"正在建立虛擬環境於: {venv_dir}")
-            # 使用 subprocess.run 確保此步驟完成後才繼續
-            run_result = subprocess.run([sys.executable, "-m", "venv", str(venv_dir)], check=False, capture_output=True, text=True)
+            update_status(log=f"正在使用 uv 建立虛擬環境於: {venv_dir}")
+            run_result = subprocess.run([str(uv_path), "venv", str(venv_dir), "--seed"], check=False, capture_output=True, text=True, encoding='utf-8')
             if run_result.returncode != 0:
                 update_status(log=f"❌ Venv 建立失敗: {run_result.stderr}")
-                raise RuntimeError(f"Venv 建立失敗: {run_result.stderr}")
+                raise RuntimeError(f"使用 uv 建立 Venv 失敗: {run_result.stderr}")
             update_status(log="✅ 虛擬環境建立成功。")
         else:
             update_status(log="✅ 虛擬環境已存在。")
 
-        update_status(task="安裝依賴", log="正在安裝 requirements/dev.txt...")
+        update_status(task="安裝依賴", log="正在使用 uv 安裝 requirements/dev.txt...")
         venv_python = venv_dir / "bin" / "python"
         requirements_file = project_path / "requirements" / "dev.txt"
-        # 使用 subprocess.run 確保依賴安裝完成
-        run_result = subprocess.run([str(venv_python), "-m", "pip", "install", "-r", str(requirements_file)], check=False, capture_output=True, text=True)
+        # 使用 uv 來安裝依賴，它會自動偵測並使用 venv 中的 Python
+        run_result = subprocess.run([str(uv_path), "pip", "install", "--python", str(venv_python), "-r", str(requirements_file)], check=False, capture_output=True, text=True, encoding='utf-8')
         if run_result.returncode != 0:
+            # 依賴安裝是關鍵步驟，如果失敗，則應中止執行
             update_status(log=f"❌ 依賴安裝失敗: {run_result.stderr}")
-            # 即使失敗也可能繼續，因為某些依賴可能已存在
+            raise RuntimeError(f"使用 uv 安裝依賴失敗: {run_result.stderr}")
         else:
             update_status(log="✅ 依賴安裝完成。")
         # --- VENV 設定結束 ---

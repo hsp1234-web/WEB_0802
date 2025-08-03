@@ -58,3 +58,6 @@ Thumbs.db
 
 # Colab 後端專用 venv
 .venv_colab_backend/
+
+# 本地偵錯執行器產生的虛擬環境
+.venv_debug/
