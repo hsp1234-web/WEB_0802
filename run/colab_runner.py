@@ -13,7 +13,7 @@
 # ╚══════════════════════════════════════════════════════════════════╝
 
 # --- Colab 使用者介面參數 ---
-#@title 🚀 V32 鳳凰之心指揮中心 { vertical-output: true, display-mode: "form" }
+#@title 🚀 V33 鳳凰之心指揮中心 { vertical-output: true, display-mode: "form" }
 #@markdown ---
 #@markdown ### Part 1: 程式碼與環境設定
 #@markdown > 設定 Git 倉庫、分支或標籤，以及專案資料夾。
@@ -21,7 +21,7 @@
 #@markdown 後端程式碼倉庫 (REPOSITORY_URL)
 REPOSITORY_URL = "https://github.com/hsp1234-web/WEB_0802.git" #@param {type:"string"}
 #@markdown 後端版本分支或標籤 (TARGET_BRANCH_OR_TAG)
-TARGET_BRANCH_OR_TAG = "0.4.6" #@param {type:"string"}
+TARGET_BRANCH_OR_TAG = "0.4.8" #@param {type:"string"}
 #@markdown 專案資料夾名稱 (PROJECT_FOLDER_NAME)
 PROJECT_FOLDER_NAME = "WEB1" #@param {type:"string"}
 #@markdown 強制刷新後端程式碼 (FORCE_REPO_REFRESH)
