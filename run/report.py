@@ -21,17 +21,15 @@ from IPython.display import display, Markdown
 #@title 📊 V29 最終任務報告生成器 { vertical-output: true, display-mode: "form" }
 #@markdown > **在 `colab_runner` 儲存格執行完畢後，點擊此處以生成報告。**
 #@markdown ---
+#@markdown > **請確保下方的專案資料夾名稱與 `colab_runner` 中設定的完全一致。**
+PROJECT_FOLDER_NAME = "WEB1" #@param {type:"string"}
 
 print("🚀 開始生成報告...")
 
 # --- 路徑設定 ---
 # 為了讓腳本無論從何處執行都能正常工作，我們使用絕對路徑。
-# 專案根目錄被定義為此腳本 (run/report.py) 所在位置的上一層目錄。
-try:
-    PROJECT_ROOT = Path(__file__).resolve().parent.parent
-except NameError:
-    # 在 Colab/IPython 環境中 __file__ 未定義，我們假設工作目錄就是專案根目錄
-    PROJECT_ROOT = Path.cwd()
+# 在 Colab 環境中，我們根據使用者指定的資料夾名稱來建構根目錄路徑。
+PROJECT_ROOT = Path("/content") / PROJECT_FOLDER_NAME
 
 report_script_path = PROJECT_ROOT / "scripts" / "generate_report.py"
 db_path = PROJECT_ROOT / "logs.sqlite" # 假設後端服務已將 state.db 重命名
