@@ -315,92 +315,92 @@ def render_dashboard_html():
         </div>
     </div>
     """
-    javascript = f"""
+    # 將 JS 主體定義為常規字串，以避免 f-string 和 JS 樣板字面值的衝突
+    js_template = """
     <script type="text/javascript">
-        function copyAllOutput() {{
+        function copyAllOutput() {
             const button = document.getElementById('copy-output-button');
             const outputElement = button.closest('colab-output');
-            if (outputElement) {{
-                navigator.clipboard.writeText(outputElement.innerText).then(() => {{
+            if (outputElement) {
+                navigator.clipboard.writeText(outputElement.innerText).then(() => {
                     const originalText = button.innerHTML;
                     button.innerHTML = '✅ 已複製!';
-                    setTimeout(() => {{ button.innerHTML = originalText; }}, 2000);
-                }}, () => {{
+                    setTimeout(() => { button.innerHTML = originalText; }, 2000);
+                }, () => {
                     button.innerHTML = '❌ 複製失敗';
-                }});
-            }} else {{
+                });
+            } else {
                 console.error("無法找到 Colab 輸出元素。");
                 button.innerHTML = '❌ 找不到輸出';
-            }}
-        }}
+            }
+        }
 
-        document.addEventListener('DOMContentLoaded', (event) => {{
-             const copyBtn = document.getElementById('copy-output-button');
-             if(copyBtn) {{
-                copyBtn.addEventListener('click', copyAllOutput);
-             }}
-        }});
+        const copyBtn = document.getElementById('copy-output-button');
+        if(copyBtn) {
+            copyBtn.addEventListener('click', copyAllOutput);
+        }
 
-        const statusMap = {{ "running": "🟢 運行中", "pending": "🟡 等待中", "installing": "🛠️ 安裝中", "starting": "🚀 啟動中", "failed": "🔴 失敗", "unknown": "❓ 未知" }};
+        const statusMap = { "running": "🟢 運行中", "pending": "🟡 等待中", "installing": "🛠️ 安裝中", "starting": "🚀 啟動中", "failed": "🔴 失敗", "unknown": "❓ 未知" };
         const dashboardApiUrl = '/api/v1/status/dashboard';
         const perfApiUrl = '/api/v1/status/performance';
 
-        function updateDashboard() {{
-            const fetchDashboard = fetch(dashboardApiUrl).then(res => {{ if (!res.ok) throw new Error('儀表板 API 異常'); return res.json(); }});
-            const fetchPerf = fetch(perfApiUrl).then(res => {{ if (!res.ok) throw new Error('效能 API 異常'); return res.json(); }});
+        function updateDashboard() {
+            const fetchDashboard = fetch(dashboardApiUrl).then(res => { if (!res.ok) throw new Error('儀表板 API 異常'); return res.json(); });
+            const fetchPerf = fetch(perfApiUrl).then(res => { if (!res.ok) throw new Error('效能 API 異常'); return res.json(); });
 
             Promise.all([fetchDashboard, fetchPerf])
-                .then(([dashboardData, perfData]) => {{
-                    document.getElementById('cpu-usage').textContent = `${{perfData.cpu_usage.toFixed(1)}}%`;
-                    document.getElementById('ram-usage').textContent = `${{perfData.ram_usage.toFixed(1)}}%`;
+                .then(([dashboardData, perfData]) => {
+                    document.getElementById('cpu-usage').textContent = `${perfData.cpu_usage.toFixed(1)}%`;
+                    document.getElementById('ram-usage').textContent = `${perfData.ram_usage.toFixed(1)}%`;
 
                     const appStatusTable = document.getElementById('app-status-table').querySelector('tbody');
                     let appRows = '';
-                    if (dashboardData.apps_status && Object.keys(dashboardData.apps_status).length > 0) {{
-                        for (const [appName, status] of Object.entries(dashboardData.apps_status)) {{
+                    if (dashboardData.apps_status && Object.keys(dashboardData.apps_status).length > 0) {
+                        for (const [appName, status] of Object.entries(dashboardData.apps_status)) {
                             const statusText = statusMap[status] || statusMap['unknown'];
-                            appRows += `<tr><td>${{appName}}</td><td>${{statusText}}</td></tr>`;
-                        }}
-                    }} else {{ appRows = '<tr><td>等待後端回報...</td></tr>'; }}
+                            appRows += `<tr><td>${appName}</td><td>${statusText}</td></tr>`;
+                        }
+                    } else { appRows = '<tr><td>等待後端回報...</td></tr>'; }
                     appStatusTable.innerHTML = appRows;
 
                     const logContainer = document.getElementById('log-container');
                     let logEntries = '';
-                    if (dashboardData.logs && dashboardData.logs.length > 0) {{
+                    if (dashboardData.logs && dashboardData.logs.length > 0) {
                         const reversedLogs = [...dashboardData.logs].reverse();
-                        reversedLogs.forEach(log => {{
+                        reversedLogs.forEach(log => {
                             const time = new Date(log.timestamp).toLocaleTimeString('en-GB');
-                            logEntries += `<div class="log-entry"><span class="log-level-${{log.level}}">[${{time}}] [${{log.level}}]</span> ${{log.message}}</div>`;
-                        }});
-                    }} else {{ logEntries = '沒有符合條件的日誌。'; }}
+                            logEntries += `<div class="log-entry"><span class="log-level-${log.level}">[${time}] [${log.level}]</span> ${log.message}</div>`;
+                        });
+                    } else { logEntries = '沒有符合條件的日誌。'; }
                     logContainer.innerHTML = logEntries;
                     logContainer.scrollTop = logContainer.scrollHeight;
 
                     const footer = document.getElementById('footer-status');
                     const entryPointPanel = document.getElementById('entry-point-panel');
                     const entryPointButton = document.getElementById('entry-point-button');
-                    if (dashboardData.action_url) {{
+                    if (dashboardData.action_url) {
                         entryPointPanel.style.display = 'block';
                         entryPointButton.href = dashboardData.action_url;
-                        footer.textContent = `指揮中心後端任務: ${{dashboardData.current_stage || '所有服務運行中'}}`;
-                    }} else {{
+                        footer.textContent = `指揮中心後端任務: ${dashboardData.current_stage || '所有服務運行中'}`;
+                    } else {
                         entryPointPanel.style.display = 'none';
-                        footer.textContent = `指揮中心後端任務: ${{dashboardData.current_stage || '執行中...'}}`;
-                    }}
+                        footer.textContent = `指揮中心後端任務: ${dashboardData.current_stage || '執行中...'}`;
+                    }
                 }})
-                .catch(error => {{
+                .catch(error => {
                     const footer = document.getElementById('footer-status');
-                    // 在後端準備好之前，API 請求失敗是正常現象。顯示一個更友善的訊息。
                     if (footer.textContent.includes("初始化中")) {
                         footer.textContent = "🟡 前端狀態: 後端準備中，正在嘗試連接...";
                     } else {
-                        footer.textContent = `🔴 前端狀態: API 請求失敗 - ${error.message}`;
+                        footer.textContent = "🔴 前端狀態: API 請求失敗 - " + error.message;
                     }
-                }});
-        }}
-        setTimeout(() => {{ updateDashboard(); setInterval(updateDashboard, {refresh_interval_ms}); }}, 5000);
+                });
+        }
+        setTimeout(() => { updateDashboard(); setInterval(updateDashboard, %s); }, 5000);
     </script>
     """
+    # 使用字串格式化來安全地注入 Python 變數
+    javascript = js_template % (refresh_interval_ms)
     return css + html_body + javascript
 
 def main():
