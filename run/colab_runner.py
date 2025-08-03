@@ -242,6 +242,16 @@ def main():
 
         print(f"[{get_dependency_free_timestamp()}] 正在設定 Python 虛擬環境於: {venv_dir}")
         if not venv_dir.is_dir():
+            # V30.5 修正: 在 Colab 中，需要確保 python3-venv 已安裝
+            if IS_COLAB:
+                print(f"[{get_dependency_free_timestamp()}] [Colab 環境] 正在確保 venv 套件已安裝...")
+                try:
+                    subprocess.run(["apt-get", "update"], check=True, capture_output=True)
+                    subprocess.run(["apt-get", "install", "-y", "python3-venv"], check=True, capture_output=True)
+                    print(f"[{get_dependency_free_timestamp()}] ✅ venv 套件已準備就緒。")
+                except subprocess.CalledProcessError as e:
+                    print(f"[{get_dependency_free_timestamp()}] ❌ 安裝 venv 套件失敗: {e.stderr.decode('utf-8') if e.stderr else 'No stderr'}", file=sys.stderr)
+                    raise
             subprocess.run([sys.executable, "-m", "venv", str(venv_dir)], check=True)
 
         venv_python = venv_dir / "bin" / "python"
