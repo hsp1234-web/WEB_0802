@@ -21,15 +21,9 @@ import sys
 import os
 
 # --- 路徑修正 ---
-# 在 Colab 環境中，`__file__` 未定義，因此我們使用當前工作目錄。
-# 假設此腳本在專案根目錄下執行。
-try:
-    # 標準 Python 腳本執行方式
-    project_root = os.path.abspath(os.path.dirname(__file__))
-except NameError:
-    # Colab/Jupyter 互動式環境
-    project_root = os.getcwd()
-
+# 假設此腳本在 `colab_runner.py` 建立的環境中執行，
+# 此時當前工作目錄 `os.getcwd()` 已經是專案的根目錄。
+project_root = os.getcwd()
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 

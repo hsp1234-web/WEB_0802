@@ -65,50 +65,59 @@ import os
 import sys
 import time
 import sqlite3
-
-# --- 路徑修正 ---
-# 在 Colab 環境中，`__file__` 未定義，因此我們使用當前工作目錄。
-# 假設此腳本在專案根目錄或 /content 下執行。
-# 我們需要將專案的根目錄加入到 sys.path，以便能找到 src 模組。
-try:
-    # 這種方法在標準 Python 腳本執行時有效
-    project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-except NameError:
-    # 在 Colab/Jupyter 的互動式環境中，`__file__` 未定義，改用 getcwd()
-    # 我們假設使用者在專案根目錄下執行，或者 colab_runner.py 已經在專案根目錄/run
-    # colab 的預設工作目錄是 /content
-    project_root = os.getcwd()
-    # 如果 runner 在 run/ 子目錄，我們需要上移一層
-    if os.path.basename(project_root) == 'run':
-        project_root = os.path.dirname(project_root)
-
-
-if project_root not in sys.path:
-    sys.path.insert(0, project_root)
 import subprocess
+import shutil
 from datetime import datetime
 from IPython.display import display, clear_output
 
-# 假設這些模組與 runner 在同一個 Python 環境中
-# 在真實 Colab 環境中，這需要透過 !pip install 或路徑設定來確保
-try:
-    from src.phoenix_core.db_queries import query_logs_by_level
-    from src.phoenix_core.watchdog import check_heartbeat_status
-except ImportError:
-    print("錯誤：無法導入 'phoenix_core' 模組。請確保已正確安裝或設定 PYTHONPATH。")
-    # 在 Colab 中，我們可能需要動態加入路徑
-    # sys.path.insert(0, '/content/your_project_path')
-    # from src.phoenix_core.db_queries import query_logs_by_level
-    # from src.phoenix_core.watchdog import check_heartbeat_status
-    # 為了簡化，此處暫不處理動態路徑
-    sys.exit(1)
+# --- 階段一：環境準備 ---
+def prepare_environment():
+    """
+    準備執行環境，包括下載程式碼、切換目錄和設定 Python 路徑。
+    這是解決 Colab 中 ModuleNotFoundError 的根本方法。
+    """
+    # 在 Colab 中，內容通常位於 /content
+    base_path = "/content"
+    project_path = os.path.join(base_path, PROJECT_FOLDER_NAME)
+
+    print(f"📁 專案目錄設定為: {project_path}")
+
+    if FORCE_REPO_REFRESH and os.path.exists(project_path):
+        print(f"🔄 偵測到強制刷新，正在刪除舊目錄...")
+        shutil.rmtree(project_path)
+
+    if not os.path.exists(project_path):
+        print(f"克隆儲存庫從 {REPOSITORY_URL} 到 {project_path}...")
+        subprocess.run([
+            "git", "clone", "--depth", "1", "--branch", TARGET_BRANCH_OR_TAG,
+            REPOSITORY_URL, project_path
+        ], check=True)
+    else:
+        print("✅ 專案目錄已存在，跳過下載。")
+
+    # 關鍵步驟：切換當前工作目錄到專案根目錄
+    os.chdir(project_path)
+    print(f"pwd: {os.getcwd()}")
 
 
-# --- 環境準備 ---
-# (此處應放入真實的後端啟動邏輯，為簡化，我們僅作示意)
+    # 關鍵步驟：將當前目錄（即專案根目錄）加入到 sys.path
+    if project_path not in sys.path:
+        sys.path.insert(0, project_path)
+
+    print("✅ 環境準備完成，Python 路徑已設定。")
+
+# --- 執行環境準備 ---
+prepare_environment()
+
+# --- 現在可以安全地導入專案模組了 ---
+from src.phoenix_core.db_queries import query_logs_by_level
+from src.phoenix_core.watchdog import check_heartbeat_status
+
+
+# --- 階段二：後端啟動 ---
 def setup_backend():
     print("🚀 正在準備後端環境...")
-    # 這裡應該有 git clone, pip install 等指令
+    # 這裡應該有 pip install 等指令，現在我們在專案目錄中，可以相對路徑執行
     time.sleep(2)
     print("✅ 後端環境準備就緒。")
     print("🔥 正在啟動後端服務...")
@@ -116,16 +125,13 @@ def setup_backend():
     time.sleep(1)
     print("✅ 後端服務已在背景啟動。")
 
-# --- 顯示邏輯 (來自 4.3 驗證過的邏輯) ---
+# --- 階段三：UI 顯示邏輯 ---
 WIDTH = 90
 
-def print_line(char='─', width=WIDTH):
-    print(char * width)
-
 def print_header(title):
-    print('┌' + '─' * (width - 2) + '┐')
-    print(f"│{title.center(width - 2)}│")
-    print('└' + '─' * (width - 2) + '┘')
+    print('┌' + '─' * (WIDTH - 2) + '┐')
+    print(f"│{title.center(WIDTH - 2)}│")
+    print('└' + '─' * (WIDTH - 2) + '┘')
 
 def print_box_header(title):
     print('\n┌─ ' + title + ' ' + '─' * (WIDTH - len(title) - 5) + '┐')
@@ -149,48 +155,30 @@ def get_selected_log_levels():
 
 def print_log_panel(conn):
     print_box_header("📜 近況彙報")
-
     levels_to_show = get_selected_log_levels()
     all_logs = []
     for level in levels_to_show:
-        # 假設 query_logs_by_level 返回的 row 格式為 (id, timestamp, level, source, message)
-        # 我們需要轉換它以符合顯示需求
         logs = query_logs_by_level(conn, level, limit=LOG_DISPLAY_LINES)
         for log in logs:
-            # 假設 timestamp 是 ISO 格式字串
             dt_obj = datetime.fromisoformat(log[1])
-            all_logs.append((dt_obj, log[2], log[4])) # (datetime, level, message)
-
-    # 按時間倒序排序
+            all_logs.append((dt_obj, log[2], log[4]))
     all_logs.sort(key=lambda x: x[0], reverse=True)
-
     display_logs = all_logs[:LOG_DISPLAY_LINES]
-
     for log_time, level, message in display_logs:
         ts = log_time.strftime("%H:%M:%S")
-        # 簡易的 icon 對應
         icon_map = {'SUCCESS': '✅', 'ERROR': '❌', 'BATTLE': '⚔️', 'INFO': '▶️'}
         icon = icon_map.get(level, '🔹')
         log_line = f" [{ts}] [{level}] {icon} {message}"
         print(f"│{log_line:<{WIDTH - 2}}│")
-
     print_box_footer()
 
 def print_status_panel(conn):
     print_box_header("⚡️ 即時狀態")
-
-    # 這裡我們需要一個查詢硬體狀態的函式，暫時使用假資料
     now = datetime.now()
     ts = now.strftime("%H:%M:%S")
     status_line = f"  {ts} | CPU: 18.5% | RAM: 4.8/12.7 GB | [🟢 任務完成]"
-
-    # 整合心跳檢查
     heartbeat_status = check_heartbeat_status(conn, 15)
-    if heartbeat_status == 'OK':
-        status_line += " | [💓 心跳正常]"
-    else:
-        status_line += f" | [🚨 心跳異常: {heartbeat_status}]"
-
+    status_line += " | [💓 心跳正常]" if heartbeat_status == 'OK' else f" | [🚨 心跳異常: {heartbeat_status}]"
     print(f"│{status_line:<{WIDTH - 2}}│")
     print_box_footer()
 
@@ -203,18 +191,15 @@ def print_action_panel():
     print(f"│{line2:<{WIDTH - 2}}│")
     print_box_footer()
 
-# --- 主執行迴圈 ---
+# --- 階段四：主執行迴圈 ---
 def main_loop():
-    DB_PATH = f"{PROJECT_FOLDER_NAME}/state.db"
-
+    DB_PATH = "state.db" # 現在我們在專案根目錄，可以直接使用相對路徑
     if not os.path.exists(DB_PATH):
         print(f"❌ 錯誤：找不到資料庫檔案 '{DB_PATH}'。後端服務是否已正確啟動並生成了資料庫？")
         return
-
     conn = None
     try:
         conn = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True)
-
         while True:
             clear_output(wait=True)
             print_header("🚀 鳳凰之心 - 監控面板 🚀")
@@ -222,7 +207,6 @@ def main_loop():
             print_status_panel(conn)
             print_action_panel()
             time.sleep(REFRESH_RATE_SECONDS)
-
     except sqlite3.Error as e:
         print(f"❌ 資料庫錯誤: {e}")
     except KeyboardInterrupt:
@@ -231,9 +215,9 @@ def main_loop():
         if conn:
             conn.close()
 
+# --- 主程式入口 ---
 if __name__ == "__main__":
     # 1. 執行環境設定
     setup_backend()
-
     # 2. 進入主迴圈
     main_loop()
