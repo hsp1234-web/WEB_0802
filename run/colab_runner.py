@@ -65,6 +65,13 @@ import os
 import sys
 import time
 import sqlite3
+
+# --- 路徑修正 ---
+# 將專案根目錄（此檔案所在目錄的上一層）加入到 Python 的模組搜尋路徑中
+# 這樣無論從哪裡執行此腳本，都能正確找到 src 模組
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
 import subprocess
 from datetime import datetime
 from IPython.display import display, clear_output

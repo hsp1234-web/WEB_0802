@@ -17,6 +17,16 @@ import ipywidgets as widgets
 from IPython.display import display, Javascript
 from pathlib import Path
 import time
+import sys
+import os
+
+# --- 路徑修正 ---
+# 將專案根目錄（此檔案所在目錄）加入到 Python 的模組搜尋路徑中
+# 這樣無論從哪裡執行此腳本，都能正確找到 src 模組
+# Note: 因為此檔案在根目錄，所以 os.path.dirname(__file__) 就是根目錄
+project_root = os.path.abspath(os.path.dirname(__file__))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
 
 # --- 導入我們在階段五中經過驗證的後端邏輯 ---
 # 假設 report_generator 模組與此腳本在同一個 Python 環境中
