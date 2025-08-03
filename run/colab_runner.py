@@ -394,7 +394,7 @@ def render_dashboard_html():
                     if (footer.textContent.includes("初始化中")) {
                         footer.textContent = "🟡 前端狀態: 後端準備中，正在嘗試連接...";
                     } else {
-                        footer.textContent = `🔴 前端狀態: API 請求失敗 - ${error.message}`;
+                        footer.textContent = `🔴 前端狀態: API 請求失敗 - ${{error.message}}`;
                     }
                 }});
         }}
