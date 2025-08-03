@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import sys
 import json
-from .database import db_manager
+from .database import db_manager, DatabaseManager
 
 # 偵測是否在 Colab 環境中
 IS_COLAB = 'google.colab' in sys.modules

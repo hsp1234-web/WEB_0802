@@ -12,7 +12,7 @@ import threading
 from pathlib import Path
 
 # --- 測試設定 ---
-RUNNER_SCRIPT = Path(__file__).parent.parent.parent / "run" / "colab_runner.py"
+RUNNER_SCRIPT = Path(__file__).parent.parent.parent / "run" / "local_runner.py"
 # V30 測試架構：直接在專案根目錄執行，不再創建和清理 WEB1 子目錄
 DB_FILE = Path(__file__).parent.parent.parent / "state.db"
 RUN_TIMEOUT = 300  # 大幅延長超時時間 (5分鐘)，以應對 CI 環境中緩慢的首次依賴安裝

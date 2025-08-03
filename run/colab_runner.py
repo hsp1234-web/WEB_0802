@@ -199,119 +199,76 @@ def render_initial_html():
     return HTML(css + html_body + javascript)
 
 
-def run_local_backend_process(repo_root: Path, config_file_path: Path):
-    """
-    一個簡化的、僅用於本地模式的後端啟動函式。
-    它直接在前台運行 backend_worker 並打印日誌。
-    """
-    venv_python = repo_root / ".venv" / "bin" / "python"
-    backend_script_path = repo_root / "scripts" / "backend_worker.py"
-
-    if not backend_script_path.exists():
-        raise FileNotFoundError(f"找不到後端工作者腳本: {backend_script_path}")
-
-    command = [str(venv_python), str(backend_script_path), "--config", str(config_file_path)]
-
-    print(f"[{get_dependency_free_timestamp()}] [本地模式] 正在啟動後端工作者，日誌將直接輸出到此處...")
-    print(f"[{get_dependency_free_timestamp()}] 命令: {' '.join(command)}")
-
-    process = subprocess.Popen(
-        command,
-        cwd=repo_root,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        encoding='utf-8',
-        bufsize=1
-    )
-    for line in iter(process.stdout.readline, ''):
-        print(line, end='')
-    process.wait()
-    print(f"[{get_local_timestamp()}] [本地模式] 後端工作者已結束。")
-
-
 def main():
     """
-    主執行函式 (V33 - 真雙模態)。
-    - Colab 模式: 採用健壯的「啟動器-工作者」架構，以實現即時日誌和錯誤回報。
-    - 本地模式: 採用直接執行流程，以方便本地整合測試。
+    主執行函式 (V34 - Colab 專用)。
+    本腳本現在只為 Colab 環境服務，採用「啟動器-工作者」架構。
     """
+    if not IS_COLAB:
+        print("此腳本專為 Google Colab 設計。對於本地開發，請使用 `run/local_runner.py`。")
+        return
+
+    # --- Colab 執行流程 ---
     try:
-        if IS_COLAB:
-            # --- Colab 執行流程 ---
-            # V34: 解決 ModuleNotFoundError 的關鍵步驟
-            # 在導入任何專案模組之前，先將未來的專案路徑加入 sys.path
-            project_path = Path("/content") / PROJECT_FOLDER_NAME
-            sys.path.insert(0, str(project_path))
+        # V34: 解決 ModuleNotFoundError 的關鍵步驟
+        # 在導入任何專案模組之前，先將未來的專案路徑加入 sys.path
+        project_path = Path("/content") / PROJECT_FOLDER_NAME
+        sys.path.insert(0, str(project_path))
 
-            from IPython.display import display, HTML, clear_output
-            from src.phoenix_core.comms import comm_manager
+        from IPython.display import display, HTML, clear_output
+        from src.phoenix_core.comms import comm_manager
 
-            clear_output(wait=True)
-            display(render_initial_html())
-            print(f"[{get_dependency_free_timestamp()}] 🚀 Phoenix 啟動器已載入。準備啟動安裝工作程序...")
+        clear_output(wait=True)
+        display(render_initial_html())
+        print(f"[{get_dependency_free_timestamp()}] 🚀 Phoenix 啟動器已載入。準備啟動安裝工作程序...")
 
-            def stream_logs(process):
-                for line in iter(process.stdout.readline, ''):
-                    comm_manager.send_data('runner_log', {'line': line.strip()})
-                process.wait()
-                comm_manager.send_data('runner_log', {'line': '✅ 安裝工作程序已結束。'})
+        def stream_logs(process):
+            """在一個執行緒中讀取和轉發日誌。"""
+            for line in iter(process.stdout.readline, ''):
+                comm_manager.send_data('runner_log', {'line': line.strip()})
+            process.wait()
+            comm_manager.send_data('runner_log', {'line': '✅ 安裝工作程序已結束。'})
 
-            setup_script_path = Path(__file__).parent.parent / "scripts" / "setup_worker.py"
-            if not setup_script_path.exists():
-                comm_manager.send_data('runner_log', {'line': f'❌ 致命錯誤: 找不到安裝腳本 {setup_script_path}'})
-                return
+        setup_script_path = project_path / "scripts" / "setup_worker.py"
 
-            command = [
-                sys.executable, str(setup_script_path),
-                "--repo-url", REPOSITORY_URL, "--branch", TARGET_BRANCH_OR_TAG,
-                "--project-folder", PROJECT_FOLDER_NAME, "--timezone", TIMEZONE,
-            ]
-            if FORCE_REPO_REFRESH:
-                command.append("--force-refresh")
+        # 這裡我們不預先檢查 setup_script_path 是否存在，
+        # 因為它是由子程序自己下載的。如果子程序失敗，日誌會回報。
 
-            process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8', bufsize=1)
-            log_thread = threading.Thread(target=stream_logs, args=(process,))
-            log_thread.start()
+        command = [
+            sys.executable, str(setup_script_path),
+            "--repo-url", REPOSITORY_URL, "--branch", TARGET_BRANCH_OR_TAG,
+            "--project-folder", PROJECT_FOLDER_NAME, "--timezone", TIMEZONE,
+        ]
+        if FORCE_REPO_REFRESH:
+            command.append("--force-refresh")
 
-        else:
-            # --- 本地執行流程 (為整合測試設計) ---
-            print(f"[{get_dependency_free_timestamp()}] [本地模式] 開始執行...")
-            repo_root = Path(".").resolve()
+        # 在啟動子程序前，先確保 /content/WEB1 的父目錄存在
+        project_path.parent.mkdir(parents=True, exist_ok=True)
 
-            # 1. 設定虛擬環境
-            venv_dir = repo_root / ".venv"
-            print(f"[{get_dependency_free_timestamp()}] 正在設定 Python 虛擬環境於: {venv_dir}")
-            if not venv_dir.is_dir():
-                subprocess.run([sys.executable, "-m", "venv", str(venv_dir)], check=True)
+        # 工作目錄 cwd 應該是 /content，因為 setup_worker.py 預期在那裡創建 WEB1
+        process = subprocess.Popen(
+            command,
+            cwd=project_path.parent,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            encoding='utf-8',
+            bufsize=1
+        )
 
-            # 2. 安裝依賴
-            venv_python = str(venv_dir / "bin" / "python")
-            requirements_file = repo_root / "requirements" / "dev.txt"
-            print(f"[{get_dependency_free_timestamp()}] 正在從 {requirements_file} 安裝依賴...")
-            subprocess.run([venv_python, "-m", "pip", "install", "-r", str(requirements_file)], check=True)
-
-            # 3. 建立設定檔
-            print(f"[{get_dependency_free_timestamp()}] 正在生成 config.json...")
-            config_file_path = repo_root / "config.json"
-            with open(config_file_path, "w", encoding="utf-8") as f:
-                json.dump({"system_settings": {"timezone": TIMEZONE}}, f, indent=4)
-
-            print(f"[{get_dependency_free_timestamp()}] ✅ 環境準備完成。")
-
-            # 4. 啟動後端
-            run_local_backend_process(repo_root, config_file_path)
+        log_thread = threading.Thread(target=stream_logs, args=(process,))
+        log_thread.start()
 
     except Exception as e:
         # 通用的頂層錯誤捕獲
-        error_message = f"❌ 發生致命錯誤: {e}"
+        error_message = f"❌ 啟動器發生致命錯誤: {e}"
         print(error_message, file=sys.stderr)
-        if IS_COLAB:
-            try:
-                from src.phoenix_core.comms import comm_manager
-                comm_manager.send_data('runner_log', {'line': error_message})
-            except:
-                pass
+        try:
+            # 再次嘗試導入 comms 以回報錯誤
+            from src.phoenix_core.comms import comm_manager
+            comm_manager.send_data('runner_log', {'line': error_message})
+        except:
+            pass # 如果連 comms 都導入不了，也沒辦法了
         import traceback
         traceback.print_exc()
 
