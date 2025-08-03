@@ -153,13 +153,40 @@ def background_worker():
             json.dump(config_data, f, indent=4, ensure_ascii=False)
         update_status(log=f"✅ config.json 已生成於 {config_file_path}")
 
+        # --- VENV 和依賴設定 ---
+        update_status(task="設定 Python 虛擬環境", log="正在檢查/建立 .venv...")
+        venv_dir = project_path / ".venv"
+        if not venv_dir.is_dir():
+            update_status(log=f"正在建立虛擬環境於: {venv_dir}")
+            # 使用 subprocess.run 確保此步驟完成後才繼續
+            run_result = subprocess.run([sys.executable, "-m", "venv", str(venv_dir)], check=False, capture_output=True, text=True)
+            if run_result.returncode != 0:
+                update_status(log=f"❌ Venv 建立失敗: {run_result.stderr}")
+                raise RuntimeError(f"Venv 建立失敗: {run_result.stderr}")
+            update_status(log="✅ 虛擬環境建立成功。")
+        else:
+            update_status(log="✅ 虛擬環境已存在。")
+
+        update_status(task="安裝依賴", log="正在安裝 requirements/dev.txt...")
+        venv_python = venv_dir / "bin" / "python"
+        requirements_file = project_path / "requirements" / "dev.txt"
+        # 使用 subprocess.run 確保依賴安裝完成
+        run_result = subprocess.run([str(venv_python), "-m", "pip", "install", "-r", str(requirements_file)], check=False, capture_output=True, text=True)
+        if run_result.returncode != 0:
+            update_status(log=f"❌ 依賴安裝失敗: {run_result.stderr}")
+            # 即使失敗也可能繼續，因為某些依賴可能已存在
+        else:
+            update_status(log="✅ 依賴安裝完成。")
+        # --- VENV 設定結束 ---
+
         update_status(task="啟動後端 API 服務", log="準備啟動後端服務...")
         launch_script_path = project_path / "scripts" / "start_api_service.py"
         if not launch_script_path.exists():
             raise FileNotFoundError(f"找不到後端啟動腳本: {launch_script_path}")
 
+        venv_python = project_path / ".venv" / "bin" / "python"
         command = [
-            sys.executable,
+            str(venv_python),
             str(launch_script_path),
             "--config", str(config_file_path)
         ]
