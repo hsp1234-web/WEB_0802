@@ -1,19 +1,18 @@
 # -*- coding: utf-8 -*-
 # ╔══════════════════════════════════════════════════════════════════╗
 # ║                                                                      ║
-# ║              🚀 鳳凰之心 - V42 Colab 指揮中心 (最佳實踐版)         ║
+# ║           🚀 鳳凰之心 - V43 Colab 指揮中心 (穩定架構版)            ║
 # ║                                                                      ║
 # ╠══════════════════════════════════════════════════════════════════╣
 # ║                                                                      ║
-# ║ - V42 更新日誌:                                                      ║
-# ║   - **採用 uv venv**: 使用 uv 原生指令創建 venv，速度與穩定性最佳。  ║
-# ║   - **移除 os.chdir**: 所有路徑均為絕對路徑，規避環境檢測問題。      ║
-# ║   - **--python 旗標**: 強制 uv/pip 在指定 venv 中安裝。              ║
-# ║   - 恢復完整 UI，此為最終交付版本。                                  ║
+# ║ - V43 更新日誌:                                                      ║
+# ║   - **同步設定，非同步執行**：將耗時的環境準備工作與看門狗監控分離。 ║
+# ║   - **解決競爭條件**：確保在UI渲染前，所有環境均已準備就緒。         ║
+# ║   - **提升啟動穩定性**：徹底解決前端因後端未就緒而連線失敗的問題。   ║
 # ║                                                                      ║
 # ╚══════════════════════════════════════════════════════════════════╝
 
-#@title 💎 鳳凰之心指揮中心 V42 { vertical-output: true, display-mode: "form" }
+#@title 💎 鳳凰之心指揮中心 V43 { vertical-output: true, display-mode: "form" }
 #@markdown ---
 #@markdown ### **Part 1: 程式碼與環境設定**
 #@markdown > **設定 Git 倉庫、分支或標籤。**
@@ -82,50 +81,39 @@ def log_message(message):
     logs_deque.append(f"[{timestamp}] {message}")
 
 # --- 看門狗 (Watchdog) 設定 ---
-HEARTBEAT_TIMEOUT_SECONDS = 30  # 心跳超時閾值 (秒)
-HEARTBEAT_CHECK_INTERVAL_SECONDS = 10 # 檢查心跳的頻率 (秒)
-HEARTBEAT_DB_KEY = "last_heartbeat" # 資料庫中的心跳鍵名
-DB_FILENAME = "state.db" # 資料庫檔案名稱
+HEARTBEAT_TIMEOUT_SECONDS = 30
+HEARTBEAT_CHECK_INTERVAL_SECONDS = 10
+HEARTBEAT_DB_KEY = "last_heartbeat"
+DB_FILENAME = "state.db"
 
 def get_db_connection(db_path):
-    """安全地獲取資料庫連接。需要延遲導入 sqlite3。"""
     import sqlite3
     try:
-        # isolation_level=None 啟用自動提交模式
-        # timeout 參數防止在資料庫被鎖定時出錯
         return sqlite3.connect(db_path, isolation_level=None, timeout=5)
     except sqlite3.Error as e:
         log_message(f"❌ 無法連接到資料庫 {db_path}: {e}")
         return None
 
 def get_last_heartbeat(db_conn):
-    """從資料庫讀取最後心跳時間。"""
     import sqlite3
     try:
         cursor = db_conn.cursor()
-        # 使用 ? 作為佔位符來防止 SQL 注入
         cursor.execute("SELECT value FROM status_updates WHERE key = ?", (HEARTBEAT_DB_KEY,))
         row = cursor.fetchone()
         if row:
-            # 返回 ISO 格式的時間字串
             return row[0]
     except sqlite3.Error as e:
-        # 如果 status_updates 表格還不存在，這可能會發生錯誤
         log_message(f"🟡 讀取心跳時發生資料庫錯誤 (可能服務尚未完全啟動): {e}")
     return None
 
-def background_worker():
+def setup_environment():
     """
-    此函式作為一個常駐的背景執行緒，執行以下任務：
-    1.  **一次性環境設置**：下載程式碼、建立 uv 虛擬環境、安裝依賴。
-    2.  **看門狗 (Watchdog) 監控**：在一個無限迴圈中，啟動並監控後端服務。
-        - 如果服務進程不存在或心跳超時，則終止該進程並重新啟動。
+    執行所有耗時的一次性環境準備工作。
+    此函式會同步執行，直到所有步驟完成或發生錯誤。
+    返回準備好的路徑資訊供後續步驟使用。
     """
     try:
-        # ======================================================================
-        # 1. 一次性環境設置 (One-Time Environment Setup)
-        # ======================================================================
-        log_message("▶️ [階段 1/2] 準備專案環境...")
+        log_message("▶️ [階段 1/3] 準備專案環境...")
         base_path = Path(".").resolve()
         project_path = base_path / PROJECT_FOLDER_NAME
 
@@ -153,9 +141,31 @@ def background_worker():
             log_message("✅ 虛擬環境已存在，跳過建立。")
 
         venv_python = (venv_path / "bin" / "python").resolve()
+
+        log_message("⏳ 正在使用 uv 安裝/同步核心依賴...")
+        core_requirements_path = project_path / "requirements/requirements-core.txt"
+        uv_install_command = ["uv", "pip", "sync", "--python", str(venv_python), str(core_requirements_path)]
+        subprocess.run(uv_install_command, check=True, capture_output=True, text=True)
+        log_message("✅ 核心依賴安裝完成。")
+
+        log_message("✅ 環境準備完成。")
+        return {"project_path": project_path, "venv_python": venv_python}
+
+    except Exception as e:
+        log_message(f"❌ 在環境準備階段發生致命錯誤: {e}")
+        return None
+
+def watchdog_worker(project_path: Path, venv_python: Path):
+    """
+    此函式作為一個常駐的背景執行緒，在一個無限迴圈中，啟動並監控後端服務。
+    """
+    try:
+        log_message(f"▶️ [階段 2/3] 進入看門狗監控模式...")
+
+        db_path = project_path / DB_FILENAME
         process_env = os.environ.copy()
-        process_env["VIRTUAL_ENV"] = str(venv_path)
-        process_env["PATH"] = f"{venv_path / 'bin'}:{process_env.get('PATH', '')}"
+        process_env["VIRTUAL_ENV"] = str(venv_python.parent.parent)
+        process_env["PATH"] = f"{venv_python.parent}:{process_env.get('PATH', '')}"
 
         log_message("⏳ 正在生成後端設定檔...")
         config_data = {"log_settings": {
@@ -169,30 +179,15 @@ def background_worker():
             json.dump(config_data, f, indent=4)
         log_message(f"✅ 後端設定檔已生成。")
         process_env["PHOENIX_CONFIG_PATH"] = str(config_file_path.resolve())
-
-        log_message("⏳ 正在使用 uv 安裝/同步核心依賴...")
-        core_requirements_path = project_path / "requirements/requirements-core.txt"
-        uv_install_command = ["uv", "pip", "sync", "--python", str(venv_python), str(core_requirements_path)]
-        subprocess.run(uv_install_command, check=True, env=process_env, capture_output=True, text=True)
-        log_message("✅ 核心依賴安裝完成。")
-
-        db_path = project_path / DB_FILENAME
-
-        log_message("✅ 環境準備完成。")
-
-        # ======================================================================
-        # 2. 看門狗監控迴圈 (Watchdog Monitoring Loop)
-        # ======================================================================
-        log_message(f"▶️ [階段 2/2] 進入看門狗監控模式...")
+        # 確保後端服務也在同一個資料庫上操作
+        process_env["PHOENIX_DB_PATH"] = str(db_path)
 
         server_process = None
-
         while True:
             log_message(f"🔥 正在啟動後端核心服務 (埠 {API_PORT})...")
             log_file = project_path / "api_server.log"
             uvicorn_command = [str(venv_python), "-m", "uvicorn", "src.phoenix_core.main:app", "--host", "0.0.0.0", "--port", str(API_PORT)]
 
-            # 使用 Popen 啟動非阻塞子進程
             server_process = subprocess.Popen(
                 uvicorn_command,
                 stdout=open(log_file, "w"),
@@ -202,41 +197,33 @@ def background_worker():
             )
             log_message(f"✅ 後端服務已啟動，進程 PID: {server_process.pid}。")
             log_message("⏳ 觀察期...等待服務回報初始心跳。")
-            time.sleep(HEARTBEAT_CHECK_INTERVAL_SECONDS) # 給服務一點啟動時間
+            time.sleep(HEARTBEAT_CHECK_INTERVAL_SECONDS)
 
-            # 內部監控迴圈
             while True:
-                # 檢查進程是否還在運行
                 if server_process.poll() is not None:
                     log_message(f"🔴 偵測到後端服務意外終止 (返回碼: {server_process.returncode})。")
-                    break # 跳出內部迴圈以重啟
+                    break
 
-                # 檢查心跳
                 db_conn = get_db_connection(db_path)
                 if db_conn:
                     heartbeat_str = get_last_heartbeat(db_conn)
                     db_conn.close()
-
                     if heartbeat_str:
                         last_heartbeat_time = datetime.fromisoformat(heartbeat_str)
                         time_since_heartbeat = (datetime.now(last_heartbeat_time.tzinfo) - last_heartbeat_time).total_seconds()
-
                         log_message(f"❤️  心跳正常 (最後更新於 {int(time_since_heartbeat)} 秒前)。")
-
                         if time_since_heartbeat > HEARTBEAT_TIMEOUT_SECONDS:
                             log_message(f"🔴 心跳超時！(超過 {HEARTBEAT_TIMEOUT_SECONDS} 秒未更新)。服務可能已卡死。")
-                            break # 跳出內部迴圈以重啟
+                            break
                     else:
                         log_message("🟡 未能讀取到心跳數據。")
                 else:
                     log_message("🔴 無法連接資料庫，無法檢查心跳。")
-
                 time.sleep(HEARTBEAT_CHECK_INTERVAL_SECONDS)
 
-            # 如果跳出了內部迴圈，意味著需要重啟服務
             log_message(f"♻️ 準備重啟服務...首先終止舊進程 (PID: {server_process.pid})。")
-            server_process.kill() # 確保卡死的進程被終止
-            server_process.wait() # 等待進程完全終止
+            server_process.kill()
+            server_process.wait()
             log_message("✅ 舊進程已終止。將在 5 秒後重啟...")
             time.sleep(5)
 
@@ -409,31 +396,50 @@ def render_dashboard_html():
     return css + html_body + javascript
 
 def main():
+    # 顯示一個靜態的啟動日誌容器
     clear_output(wait=True)
     log_display_html = f"""
-    <div id="startup-log-container" style="white-space: pre-wrap; font-family: monospace;"></div>
+    <div id="startup-log-container" style="white-space: pre-wrap; font-family: monospace; background-color: #1e1e1e; color: #d4d4d4; padding: 1em; border-radius: 5px;"></div>
     <script>
         const startupLogContainer = document.getElementById('startup-log-container');
         let logFetchInterval;
         function fetchStartupLogs() {{
             const logs = {json.dumps(list(logs_deque))};
-            startupLogContainer.innerHTML = logs.join('<br>');
-            startupLogContainer.scrollTop = startupLogContainer.scrollHeight;
+            if (logs.length > 0) {{
+                startupLogContainer.innerHTML = logs.join('<br>');
+                startupLogContainer.scrollTop = startupLogContainer.scrollHeight;
+            }}
         }}
-        logFetchInterval = setInterval(fetchStartupLogs, 1000);
+        logFetchInterval = setInterval(fetchStartupLogs, 500);
     </script>
     """
     display(HTML(log_display_html))
-    # 將背景工作設為守護執行緒 (daemon)，這樣主程式結束時它會自動退出
-    worker_thread = threading.Thread(target=background_worker, daemon=True)
-    worker_thread.start()
 
-    # 不再等待 (join)，立即渲染儀表板
-    # 由儀表板的 JS 和背景看門狗負責後續的狀態更新
-    clear_output(wait=True)
-    final_html = render_dashboard_html()
-    display(HTML(final_html))
-    log_message("✅ 指揮中心前端渲染完畢，背景看門狗已啟動。")
+    # [第一步] 同步執行環境準備
+    env_paths = setup_environment()
+
+    if env_paths:
+        log_message("✅ [階段 1/3] 環境準備成功。")
+
+        # [第二步] 在背景啟動看門狗
+        watchdog_thread = threading.Thread(
+            target=watchdog_worker,
+            args=(env_paths["project_path"], env_paths["venv_python"]),
+            daemon=True
+        )
+        watchdog_thread.start()
+
+        # [第三步] 渲染最終的互動式儀表板
+        log_message("▶️ [階段 3/3] 渲染互動儀表板...")
+        time.sleep(1) # 短暫延遲，讓使用者看到上面的訊息
+        clear_output(wait=True)
+        final_html = render_dashboard_html()
+        display(HTML(final_html))
+    else:
+        log_message("❌ 由於環境準備失敗，啟動流程已中止。")
+        # 清除定時器
+        display(HTML("<script>clearInterval(logFetchInterval);</script>"))
+
 
 if __name__ == "__main__":
     main()
