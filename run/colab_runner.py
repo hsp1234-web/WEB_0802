@@ -1,18 +1,18 @@
 # -*- coding: utf-8 -*-
 # ╔══════════════════════════════════════════════════════════════════╗
 # ║                                                                      ║
-# ║        🚀 鳳凰之心 - V45 Colab 指揮中心 (純文字除錯模式)           ║
+# ║        🚀 鳳凰之心 - V46 Colab 指揮中心 (純文字除錯模式)           ║
 # ║                                                                      ║
 # ╠══════════════════════════════════════════════════════════════════╣
 # ║                                                                      ║
-# ║ - V45 更新日誌:                                                      ║
-# ║   - **分支更新**: 將預設分支從 0.6.2 更新至 0.6.4。                ║
-# ║   - **依賴安裝修正**: 改善 `uv pip sync` 的執行方式，提高相容性。  ║
-# ║   - V44: 移除UI，改為同步阻塞，專注於除錯。                      ║
+# ║ - V46 更新日誌:                                                      ║
+# ║   - **安裝策略變更**: 改用 `pip install`，解決 `uv` 的相容性問題。 ║
+# ║   - **分支更新**: 將預設分支更新至 0.6.5。                         ║
+# ║   - V45: 更新分支至 0.6.4，修正 `uv` 執行方式。                  ║
 # ║                                                                      ║
 # ╚══════════════════════════════════════════════════════════════════╝
 
-#@title 💎 鳳凰之心指揮中心 V45 (純文字除錯模式) { vertical-output: true, display-mode: "form" }
+#@title 💎 鳳凰之心指揮中心 V46 (純文字除錯模式) { vertical-output: true, display-mode: "form" }
 #@markdown ---
 #@markdown ### **Part 1: 程式碼與環境設定**
 #@markdown > **設定 Git 倉庫、分支或標籤。**
@@ -20,7 +20,7 @@
 #@markdown **後端程式碼倉庫 (REPOSITORY_URL)**
 REPOSITORY_URL = "https://github.com/hsp1234-web/WEB_0802.git" #@param {type:"string"}
 #@markdown **後端版本分支或標籤 (TARGET_BRANCH_OR_TAG)**
-TARGET_BRANCH_OR_TAG = "0.6.4" #@param {type:"string"}
+TARGET_BRANCH_OR_TAG = "0.6.5" #@param {type:"string"}
 #@markdown **專案資料夾名稱 (PROJECT_FOLDER_NAME)**
 PROJECT_FOLDER_NAME = "WEB1" #@param {type:"string"}
 #@markdown **強制刷新後端程式碼 (FORCE_REPO_REFRESH)**
@@ -94,28 +94,28 @@ def setup_environment():
 
         venv_python = (venv_path / "bin" / "python").resolve()
 
-        log_message("⏳ 正在使用 uv 安裝/同步核心依賴...")
+        log_message("⏳ [策略變更] 正在改用 'pip install' 來安裝核心依賴，以提高穩定性...")
         core_requirements_path = project_path / "requirements/requirements-core.txt"
         if not core_requirements_path.exists():
             log_message(f"❌ 找不到依賴檔案: {core_requirements_path}", level="ERROR")
             return None
 
-        install_env = os.environ.copy()
-        install_env["VIRTUAL_ENV"] = str(venv_path)
-        install_env["PATH"] = f"{venv_path / 'bin'}:{install_env.get('PATH', '')}"
-
-        uv_install_command = ["uv", "pip", "sync", str(core_requirements_path)]
+        pip_install_command = [
+            str(venv_python),
+            "-m", "pip",
+            "install",
+            "-r", str(core_requirements_path)
+        ]
 
         result = subprocess.run(
-            uv_install_command,
+            pip_install_command,
             check=False,
             capture_output=True,
             text=True,
-            encoding='utf-8',
-            env=install_env
+            encoding='utf-8'
         )
         if result.returncode != 0:
-            log_message(f"❌ 安裝依賴失敗。返回碼: {result.returncode}", level="ERROR")
+            log_message(f"❌ 使用 pip 安裝依賴失敗。返回碼: {result.returncode}", level="ERROR")
             log_message(f"--- STDERR ---\n{result.stderr}\n------------", level="ERROR")
             return None
         log_message("✅ 核心依賴安裝完成。")
@@ -155,14 +155,21 @@ def main():
                 "--port", str(API_PORT)
             ]
 
-            subprocess.run(
+            # 使用 subprocess.run 並設定 check=False，手動處理錯誤
+            result = subprocess.run(
                 uvicorn_command,
                 cwd=str(project_path),
                 env=process_env,
-                check=True
+                capture_output=True, # 捕獲輸出以便日誌記錄
+                text=True,
+                encoding='utf-8'
             )
-        except subprocess.CalledProcessError as e:
-            log_message(f"❌ Uvicorn 伺服器執行失敗，返回碼: {e.returncode}", level="ERROR")
+            if result.returncode != 0:
+                log_message(f"❌ Uvicorn 伺服器執行失敗，返回碼: {result.returncode}", level="ERROR")
+                # 將 Uvicorn 的詳細錯誤打印出來
+                log_message(f"--- Uvicorn STDOUT ---\n{result.stdout}\n------------", level="DEBUG")
+                log_message(f"--- Uvicorn STDERR ---\n{result.stderr}\n------------", level="DEBUG")
+
         except KeyboardInterrupt:
             log_message("\n✅ 手動中斷，程式結束。")
         except Exception as e:
