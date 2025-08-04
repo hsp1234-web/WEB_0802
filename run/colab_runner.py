@@ -6,6 +6,7 @@
 # ╠══════════════════════════════════════════════════════════════════╣
 # ║                                                                      ║
 # ║ - V55 更新日誌:                                                      ║
+# ║   - **V55.2 增強**: 新增獲取 Colab 代理連結的重試機制，提高穩定性。  ║
 # ║   - **V55.1 修正**: 重新加入防禦性的 pip 引導程序，解決偶發性的環境問題。      ║
 # ║   - **最終修正**: 移除錯誤的 pip 引導程序，信任 uv venv。          ║
 # ║   - **外觀更新**: 根據要求更新標題與圖示。                         ║
@@ -322,8 +323,28 @@ def main():
         server_ready = server_manager.server_ready_event.wait(timeout=SERVER_READY_TIMEOUT)
 
         if server_ready:
-            url = colab_output.eval_js(f'google.colab.kernel.proxyPort({API_PORT})')
-            shared_stats['proxy_url'] = url
+            max_retries = 10
+            retry_delay = 3  # seconds
+            url_obtained = False
+            for attempt in range(max_retries):
+                try:
+                    log_manager.log("INFO", f"正在嘗試取得代理連結... (第 {attempt + 1}/{max_retries} 次)")
+                    url = colab_output.eval_js(f'google.colab.kernel.proxyPort({API_PORT})')
+                    if url and url.strip():
+                        shared_stats['proxy_url'] = url
+                        log_manager.log("SUCCESS", "✅ 成功取得代理連結！")
+                        url_obtained = True
+                        break  # Exit loop on success
+                    else:
+                        log_manager.log("WARN", "取得的代理連結為空，將於 {retry_delay} 秒後重試...")
+                except Exception as e:
+                    log_manager.log("WARN", f"取得代理連結時發生錯誤: {e}，將於 {retry_delay} 秒後重試...")
+
+                time.sleep(retry_delay)
+
+            if not url_obtained:
+                shared_stats['status'] = "❌ 取得代理連結失敗"
+                log_manager.log("CRITICAL", f"在 {max_retries} 次嘗試後，仍無法取得有效的代理連結。")
         else:
             shared_stats['status'] = "❌ 伺服器啟動超時"
             log_manager.log("CRITICAL", f"伺服器在 {SERVER_READY_TIMEOUT} 秒內未能就緒。")
