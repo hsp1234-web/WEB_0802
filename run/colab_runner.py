@@ -1,17 +1,17 @@
 # -*- coding: utf-8 -*-
 # ╔══════════════════════════════════════════════════════════════════╗
 # ║                                                                      ║
-# ║    🐦‍🔥 鳳凰之心 - V62 作戰指揮中心 (最終交付版)                  🐦‍🔥 ║
+# ║    🐦‍🔥 鳳凰之心 - V63 作戰指揮中心 (加速安裝版)                  🐦‍🔥 ║
 # ║                                                                      ║
 # ╠══════════════════════════════════════════════════════════════════╣
 # ║                                                                      ║
-# ║ - V62 更新日誌:                                                      ║
-# ║   - **ANSI 上色**: 移除 rich 依賴，改用 ANSI Escape Codes 為日誌      ║
-# ║     等級標籤上色，實現零依賴、高效能的視覺化。                       ║
+# ║ - V63 更新日誌:                                                      ║
+# ║   - **安裝器修正**: 移除 `uv` 不支援的 `--ignore-installed` 參數。    ║
+# ║   - **版本號統一**: 將顯示版本全面更新至 V63。                         ║
 # ║                                                                      ║
 # ╚══════════════════════════════════════════════════════════════════╝
 
-#@title 🐦‍🔥 鳳凰之心 V62 作戰指揮中心 { vertical-output: true, display-mode: "form" }
+#@title 🐦‍🔥 鳳凰之心 V63 作戰指揮中心 { vertical-output: true, display-mode: "form" }
 #@markdown ---
 #@markdown ### **Part 1: 專案與環境設定**
 #@markdown > **設定 Git 倉庫、分支或標籤，以及專案資料夾。**
@@ -139,8 +139,8 @@ class DisplayManager:
         """建立儀表板的輸出內容緩衝區。"""
         output_buffer = []
 
-        # V0.8.1: 加速安裝版
-        output_buffer.append("🐦‍🔥 鳳凰之心 - V0.8.1 作戰指揮中心 (加速安裝版) 🐦‍🔥")
+        # V63: 加速安裝版
+        output_buffer.append("🐦‍🔥 鳳凰之心 - V63 作戰指揮中心 (加速安裝版) 🐦‍🔥")
         # V65: Add a blank line for spacing after title
         output_buffer.append("")
 
@@ -284,8 +284,8 @@ class ServerManager:
             for dep in dependencies:
                 self._stats['status'] = f"⚙️ 正在安裝: {dep}..."
                 self._log_manager.log("INFO", f"正在安裝套件: {dep}")
-                # V65: Use uv for installation as recommended by research.md for speed.
-                install_command = ["uv", "pip", "install", "--python", str(venv_python), "--ignore-installed", dep]
+                # V65: 使用 uv 加速安裝。根據 research.md，uv 能正確處理 venv，不需 --ignore-installed。
+                install_command = ["uv", "pip", "install", "--python", str(venv_python), dep]
                 result = subprocess.run(install_command, check=False, capture_output=True, text=True, encoding='utf-8')
 
                 if result.returncode != 0:
