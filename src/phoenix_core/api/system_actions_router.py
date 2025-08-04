@@ -2,6 +2,7 @@
 import sys
 import subprocess
 import asyncio
+import os
 from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from src.phoenix_core.main import app, discover_and_load_modules
@@ -25,16 +26,19 @@ async def install_features():
 
     async with install_lock:
         try:
-            print("Starting feature package installation...")
+            print("Starting feature package installation using uv...")
+            # CWD is the project root ('WEB1'), so venv is at './.venv'
             venv_path = Path(".venv").resolve()
             venv_python = (venv_path / "bin" / "python").resolve()
 
+            # This env setup is crucial for uv to work correctly within the subprocess
             process_env = os.environ.copy()
             process_env["VIRTUAL_ENV"] = str(venv_path)
             process_env["PATH"] = f"{venv_path / 'bin'}:{process_env.get('PATH', '')}"
 
             requirements_path = "requirements/requirements-features.txt"
-            uv_install_command = [str(venv_python), "-m", "uv", "pip", "install", "-q", "-r", requirements_path]
+            # We don't need the --python flag if VIRTUAL_ENV is set correctly
+            uv_install_command = ["uv", "pip", "install", "-r", requirements_path]
 
             process = await asyncio.create_subprocess_exec(
                 *uv_install_command,
