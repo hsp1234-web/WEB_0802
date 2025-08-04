@@ -79,103 +79,60 @@ DASHBOARD_UI_HTML = """
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>鳳凰之心 - 互動式報告儀表板</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&family=Noto+Sans+TC:wght@400;500;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
     <style>
-        body {
-            font-family: 'Inter', 'Noto Sans TC', sans-serif;
-            background-color: transparent; /* 適應 Colab 主題 */
-            color: var(--colab-primary-text-color, #333);
-        }
-        .font-code { font-family: 'Fira Code', monospace; }
-        .dashboard-panel {
-            background-color: var(--colab-secondary-surface-color, #f7f7f7);
-            border: 1px solid var(--colab-border-color, #e0e0e0);
-            border-radius: 0.75rem;
-            margin-bottom: 1.5rem;
-        }
-        .panel-title {
-            padding: 0.75rem 1.25rem;
-            border-bottom: 1px solid var(--colab-border-color, #e0e0e0);
-            color: var(--colab-secondary-text-color, #555);
-            font-weight: 500;
-        }
-        .custom-checkbox {
-            appearance: none;
-            background-color: var(--colab-secondary-surface-color, #eee);
-            border: 1px solid var(--colab-border-color, #ccc);
-            border-radius: 0.25rem; width: 1.25rem; height: 1.25rem;
-            cursor: pointer; position: relative; transition: all 0.2s;
-        }
-        .custom-checkbox:checked {
-            background-color: #3b82f6; /* blue-500 */
-            border-color: #3b82f6;
-        }
-        .custom-checkbox:checked::after {
-            content: '✓'; color: white; position: absolute;
-            left: 50%; top: 50%; transform: translate(-50%, -50%);
-            font-size: 0.875rem;
-        }
-        #report-preview {
-            background-color: var(--colab-secondary-surface-color, #fdfdfd);
-            border: 1px solid var(--colab-border-color, #e0e0e0);
-            border-radius: 0.5rem;
-            color: var(--colab-primary-text-color, #333);
-        }
+        body {{ background-color: transparent; color: var(--colab-primary-text-color, #e0e0e0); font-family: 'Noto Sans TC', 'Fira Code', monospace; }}
+        .container {{ padding: 1em; }}
+        .panel {{ border: 1px solid var(--colab-border-color, #444); margin-bottom: 1em; border-radius: 8px; overflow: hidden; background-color: var(--colab-secondary-surface-color, #2d2d2d);}}
+        .title {{ font-weight: bold; padding: 0.5em 1em; border-bottom: 1px solid var(--colab-border-color, #444); background-color: var(--colab-section-header-color, #2a2a2a);}}
+        .content {{ padding: 1em; }}
+        .button {{ background-color: #444; color: #eee; border: 1px solid #666; padding: 10px 20px; cursor: pointer; border-radius: 5px; transition: background-color 0.2s; }}
+        .button:hover {{ background-color: #555; }}
+        .button:disabled {{ background-color: #333; color: #888; cursor: not-allowed; }}
+        .checkbox-label {{ display: flex; align-items: center; margin-bottom: 0.5em; cursor: pointer; }}
+        #report-preview {{ height: 400px; overflow-y: auto; white-space: pre-wrap; word-break: break-all; background-color: var(--colab-secondary-surface-color, #1e1e1e); padding: 1em; border-radius: 5px; border: 1px solid var(--colab-border-color, #444);}}
+        #toast-container {{ position: fixed; bottom: 1rem; right: 1rem; z-index: 999; }}
+        .toast {{ padding: 1rem; margin-top: 0.5rem; border-radius: 5px; color: white; opacity: 0; transform: translateY(20px); transition: all 0.3s; }}
+        .toast.show {{ opacity: 1; transform: translateY(0); }}
+        .toast-success {{ background-color: #2E7D32; }}
+        .toast-error {{ background-color: #C62828; }}
+        .toast-info {{ background-color: #1565C0; }}
     </style>
 </head>
-<body class="p-4 sm:p-6 md:p-8">
-    <div class="max-w-4xl mx-auto">
-        <header class="text-center mb-8">
-            <h1 class="text-2xl sm:text-3xl font-bold" style="color: #1E88E5;">
-                📊 鳳凰之心 - 互動式報告儀表板 📊
-            </h1>
-        </header>
+<body>
+    <div class="container">
+        <h1 style="text-align: center; font-size: 1.5em; margin-bottom: 1em;">📊 鳳凰之心 - 互動式報告儀表板 📊</h1>
 
-        <section class="dashboard-panel">
-            <div class="panel-title">請選擇您需要產生的報告類型</div>
-            <div class="p-6 space-y-4">
-                <label class="flex items-center space-x-3 cursor-pointer">
-                    <input type="checkbox" id="select-all" class="custom-checkbox" checked>
-                    <span>全部報告</span>
-                </label>
-                <div id="report-options" class="pl-8 space-y-3">
-                    <label class="flex items-center space-x-3 cursor-pointer">
-                        <input type="checkbox" name="report-option" value="performance_report.md" class="custom-checkbox" checked>
-                        <span>📈 效能分析報告 (performance_report.md)</span>
-                    </label>
-                    <label class="flex items-center space-x-3 cursor-pointer">
-                        <input type="checkbox" name="report-option" value="summary_report.md" class="custom-checkbox" checked>
-                        <span>📄 總結報告 (summary_report.md)</span>
-                    </label>
-                    <label class="flex items-center space-x-3 cursor-pointer">
-                        <input type="checkbox" name="report-option" value="detailed_log_report.md" class="custom-checkbox" checked>
-                        <span>📋 詳細日誌報告 (detailed_log_report.md)</span>
-                    </label>
+        <div class="panel">
+            <div class="title">報告選擇</div>
+            <div class="content">
+                <div id="report-options">
+                    <label class="checkbox-label"><input type="checkbox" id="select-all" checked> <strong>全部報告</strong></label>
+                    <div style="padding-left: 2em;">
+                        <label class="checkbox-label"><input type="checkbox" name="report-option" value="performance_report.md" checked> 📈 效能分析報告 (performance_report.md)</label>
+                        <label class="checkbox-label"><input type="checkbox" name="report-option" value="summary_report.md" checked> 📄 總結報告 (summary_report.md)</label>
+                        <label class="checkbox-label"><input type="checkbox" name="report-option" value="detailed_log_report.md" checked> 📋 詳細日誌報告 (detailed_log_report.md)</label>
+                    </div>
                 </div>
-                <div class="pt-4 flex justify-center">
-                    <button id="generate-button" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105">
-                        產生報告
-                    </button>
+                <div style="text-align: center; margin-top: 1em;">
+                    <button id="generate-button" class="button">產生報告</button>
                 </div>
             </div>
         </section>
 
-        <div id="output-section" class="hidden">
-            <section class="dashboard-panel">
-                <div class="panel-title">報告內容預覽</div>
-                <div id="report-preview" class="p-6 font-code text-sm leading-relaxed h-80 overflow-y-auto whitespace-pre-wrap"></div>
-            </section>
-
-            <section class="dashboard-panel">
-                <div class="panel-title">📋 面板內容操作</div>
-                <div class="p-4 flex flex-wrap justify-center gap-4">
-                    <button id="copy-button" class="bg-violet-600 hover:bg-violet-700 text-white font-bold py-2 px-4 rounded-lg">複製預覽內容</button>
-                    <button id="archive-button" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg">存檔選中報告</button>
+        <div id="output-section" style="display: none;">
+            <div class="panel">
+                <div class="title">報告內容預覽</div>
+                <div class="content">
+                    <div id="report-preview"></div>
                 </div>
-            </section>
+            </div>
+            <div class="panel">
+                <div class="title">面板內容操作</div>
+                <div class="content" style="text-align: center;">
+                    <button id="copy-button" class="button">複製預覽內容</button>
+                    <button id="archive-button" class="button">存檔選中報告</button>
+                </div>
+            </div>
         </div>
     </div>
 
