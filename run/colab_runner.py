@@ -1,18 +1,18 @@
 # -*- coding: utf-8 -*-
 # ╔══════════════════════════════════════════════════════════════════╗
 # ║                                                                      ║
-# ║           🚀 鳳凰之心 - V43 Colab 指揮中心 (穩定架構版)            ║
+# ║        🚀 鳳凰之心 - V44 Colab 指揮中心 (純文字除錯模式)           ║
 # ║                                                                      ║
 # ╠══════════════════════════════════════════════════════════════════╣
 # ║                                                                      ║
-# ║ - V43 更新日誌:                                                      ║
-# ║   - **同步設定，非同步執行**：將耗時的環境準備工作與看門狗監控分離。 ║
-# ║   - **解決競爭條件**：確保在UI渲染前，所有環境均已準備就緒。         ║
-# ║   - **提升啟動穩定性**：徹底解決前端因後端未就緒而連線失敗的問題。   ║
+# ║ - V44 更新日誌:                                                      ║
+# ║   - **移除所有UI**：專注於後端邏輯，直接輸出純文字日誌。           ║
+# ║   - **改為同步阻塞**：移除所有多執行緒，改為線性執行流程。         ║
+# ║   - **目標**：幫助使用者在他們的環境中進行最直接的除錯。           ║
 # ║                                                                      ║
 # ╚══════════════════════════════════════════════════════════════════╝
 
-#@title 💎 鳳凰之心指揮中心 V43 { vertical-output: true, display-mode: "form" }
+#@title 💎 鳳凰之心指揮中心 V44 (純文字除錯模式) { vertical-output: true, display-mode: "form" }
 #@markdown ---
 #@markdown ### **Part 1: 程式碼與環境設定**
 #@markdown > **設定 Git 倉庫、分支或標籤。**
@@ -30,37 +30,11 @@ FORCE_REPO_REFRESH = True #@param {type:"boolean"}
 #@markdown ### Part 2: 應用程式參數
 #@markdown > **設定指揮中心的核心運行參數。**
 #@markdown ---
-#@markdown **儀表板更新頻率 (秒) (REFRESH_RATE_SECONDS)**
-REFRESH_RATE_SECONDS = 1.5 #@param {type:"number"}
 #@markdown **後端 API 服務埠號 (API_PORT)**
 API_PORT = 8088 #@param {type:"integer"}
-#@markdown **日誌顯示行數 (LOG_DISPLAY_LINES)**
-LOG_DISPLAY_LINES = 50 #@param {type:"integer"}
-
-#@markdown ---
-#@markdown ### Part 3: 日誌顯示設定
-#@markdown > **選擇您想在儀表板上看到的日誌等級。**
-#@markdown ---
-#@markdown **顯示戰鬥日誌 (SHOW_LOG_LEVEL_BATTLE)**
-SHOW_LOG_LEVEL_BATTLE = True #@param {type:"boolean"}
-#@markdown **顯示成功日誌 (SHOW_LOG_LEVEL_SUCCESS)**
-SHOW_LOG_LEVEL_SUCCESS = True #@param {type:"boolean"}
-#@markdown **顯示資訊日誌 (SHOW_LOG_LEVEL_INFO)**
-SHOW_LOG_LEVEL_INFO = False #@param {type:"boolean"}
-#@markdown **顯示命令日誌 (SHOW_LOG_LEVEL_CMD)**
-SHOW_LOG_LEVEL_CMD = False #@param {type:"boolean"}
-#@markdown **顯示系統日誌 (SHOW_LOG_LEVEL_LOG_SHELL)**
-SHOW_LOG_LEVEL_LOG_SHELL = False #@param {type:"boolean"}
-#@markdown **顯示錯誤日誌 (SHOW_LOG_LEVEL_ERROR)**
-SHOW_LOG_LEVEL_ERROR = True #@param {type:"boolean"}
-#@markdown **顯示嚴重錯誤日誌 (SHOW_LOG_LEVEL_CRITICAL)**
-SHOW_LOG_LEVEL_CRITICAL = True #@param {type:"boolean"}
-#@markdown **顯示效能日誌 (SHOW_LOG_LEVEL_PERF)**
-SHOW_LOG_LEVEL_PERF = False #@param {type:"boolean"}
-
 
 # ==============================================================================
-# 🚀 核心邏輯
+# 🚀 核心邏輯 (除錯模式)
 # ==============================================================================
 import os
 import sys
@@ -69,42 +43,12 @@ import subprocess
 from pathlib import Path
 import time
 import json
-from IPython.display import display, HTML, clear_output
-import threading
-from collections import deque
 from datetime import datetime
 
-logs_deque = deque(maxlen=LOG_DISPLAY_LINES)
-
 def log_message(message):
-    timestamp = datetime.now().strftime('%H:%M:%S')
-    logs_deque.append(f"[{timestamp}] {message}")
-
-# --- 看門狗 (Watchdog) 設定 ---
-HEARTBEAT_TIMEOUT_SECONDS = 30
-HEARTBEAT_CHECK_INTERVAL_SECONDS = 10
-HEARTBEAT_DB_KEY = "last_heartbeat"
-DB_FILENAME = "state.db"
-
-def get_db_connection(db_path):
-    import sqlite3
-    try:
-        return sqlite3.connect(db_path, isolation_level=None, timeout=5)
-    except sqlite3.Error as e:
-        log_message(f"❌ 無法連接到資料庫 {db_path}: {e}")
-        return None
-
-def get_last_heartbeat(db_conn):
-    import sqlite3
-    try:
-        cursor = db_conn.cursor()
-        cursor.execute("SELECT value FROM status_updates WHERE key = ?", (HEARTBEAT_DB_KEY,))
-        row = cursor.fetchone()
-        if row:
-            return row[0]
-    except sqlite3.Error as e:
-        log_message(f"🟡 讀取心跳時發生資料庫錯誤 (可能服務尚未完全啟動): {e}")
-    return None
+    """一個簡單的日誌函式，直接打印到標準輸出。"""
+    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    print(f"[{timestamp}] {message}", flush=True)
 
 def setup_environment():
     """
@@ -113,7 +57,7 @@ def setup_environment():
     返回準備好的路徑資訊供後續步驟使用。
     """
     try:
-        log_message("▶️ [階段 1/3] 準備專案環境...")
+        log_message("▶️ [階段 1/2] 準備專案環境...")
         base_path = Path(".").resolve()
         project_path = base_path / PROJECT_FOLDER_NAME
 
@@ -151,295 +95,67 @@ def setup_environment():
         log_message("✅ 環境準備完成。")
         return {"project_path": project_path, "venv_python": venv_python}
 
+    except subprocess.CalledProcessError as e:
+        log_message(f"❌ 在環境準備階段發生指令錯誤: {e}")
+        log_message(f"--- STDERR ---\n{e.stderr}\n------------")
+        log_message(f"--- STDOUT ---\n{e.stdout}\n------------")
+        return None
     except Exception as e:
         log_message(f"❌ 在環境準備階段發生致命錯誤: {e}")
         return None
 
-def watchdog_worker(project_path: Path, venv_python: Path):
-    """
-    此函式作為一個常駐的背景執行緒，在一個無限迴圈中，啟動並監控後端服務。
-    """
-    try:
-        log_message(f"▶️ [階段 2/3] 進入看門狗監控模式...")
-
-        db_path = project_path / DB_FILENAME
-        process_env = os.environ.copy()
-        process_env["VIRTUAL_ENV"] = str(venv_python.parent.parent)
-        process_env["PATH"] = f"{venv_python.parent}:{process_env.get('PATH', '')}"
-
-        log_message("⏳ 正在生成後端設定檔...")
-        config_data = {"log_settings": {
-            "BATTLE": SHOW_LOG_LEVEL_BATTLE, "SUCCESS": SHOW_LOG_LEVEL_SUCCESS,
-            "INFO": SHOW_LOG_LEVEL_INFO, "CMD": SHOW_LOG_LEVEL_CMD,
-            "LOG_SHELL": SHOW_LOG_LEVEL_LOG_SHELL, "ERROR": SHOW_LOG_LEVEL_ERROR,
-            "CRITICAL": SHOW_LOG_LEVEL_CRITICAL, "PERF": SHOW_LOG_LEVEL_PERF
-        }}
-        config_file_path = project_path / "temp_config_for_runner.json"
-        with open(config_file_path, "w", encoding="utf-8") as f:
-            json.dump(config_data, f, indent=4)
-        log_message(f"✅ 後端設定檔已生成。")
-        process_env["PHOENIX_CONFIG_PATH"] = str(config_file_path.resolve())
-        # 確保後端服務也在同一個資料庫上操作
-        process_env["PHOENIX_DB_PATH"] = str(db_path)
-
-        server_process = None
-        while True:
-            log_message(f"🔥 正在啟動後端核心服務 (埠 {API_PORT})...")
-            log_file = project_path / "api_server.log"
-            uvicorn_command = [str(venv_python), "-m", "uvicorn", "src.phoenix_core.main:app", "--host", "0.0.0.0", "--port", str(API_PORT)]
-
-            server_process = subprocess.Popen(
-                uvicorn_command,
-                stdout=open(log_file, "w"),
-                stderr=subprocess.STDOUT,
-                cwd=str(project_path),
-                env=process_env
-            )
-            log_message(f"✅ 後端服務已啟動，進程 PID: {server_process.pid}。")
-            log_message("⏳ 觀察期...等待服務回報初始心跳。")
-            time.sleep(HEARTBEAT_CHECK_INTERVAL_SECONDS)
-
-            while True:
-                if server_process.poll() is not None:
-                    log_message(f"🔴 偵測到後端服務意外終止 (返回碼: {server_process.returncode})。")
-                    break
-
-                db_conn = get_db_connection(db_path)
-                if db_conn:
-                    heartbeat_str = get_last_heartbeat(db_conn)
-                    db_conn.close()
-                    if heartbeat_str:
-                        last_heartbeat_time = datetime.fromisoformat(heartbeat_str)
-                        time_since_heartbeat = (datetime.now(last_heartbeat_time.tzinfo) - last_heartbeat_time).total_seconds()
-                        log_message(f"❤️  心跳正常 (最後更新於 {int(time_since_heartbeat)} 秒前)。")
-                        if time_since_heartbeat > HEARTBEAT_TIMEOUT_SECONDS:
-                            log_message(f"🔴 心跳超時！(超過 {HEARTBEAT_TIMEOUT_SECONDS} 秒未更新)。服務可能已卡死。")
-                            break
-                    else:
-                        log_message("🟡 未能讀取到心跳數據。")
-                else:
-                    log_message("🔴 無法連接資料庫，無法檢查心跳。")
-                time.sleep(HEARTBEAT_CHECK_INTERVAL_SECONDS)
-
-            log_message(f"♻️ 準備重啟服務...首先終止舊進程 (PID: {server_process.pid})。")
-            server_process.kill()
-            server_process.wait()
-            log_message("✅ 舊進程已終止。將在 5 秒後重啟...")
-            time.sleep(5)
-
-    except Exception as e:
-        log_message(f"❌ 背景看門狗任務發生致命錯誤: {e}")
-
-def render_dashboard_html():
-    refresh_interval_ms = int(REFRESH_RATE_SECONDS * 1000)
-    css = f"""
-    <style>
-        body {{ background-color: transparent; color: var(--colab-primary-text-color, #e0e0e0); font-family: 'Noto Sans TC', 'Fira Code', monospace; }}
-        .container {{ padding: 1em; width: 100%; box-sizing: border-box; }}
-        .panel {{ border: 1px solid var(--colab-border-color, #444); margin-bottom: 1em; border-radius: 8px; overflow: hidden; }}
-        .title {{ font-weight: bold; padding: 0.5em 1em; border-bottom: 1px solid var(--colab-border-color, #444); background-color: var(--colab-section-header-color, #2a2a2a);}}
-        .content {{ padding: 1em; }}
-        .grid {{ display: grid; grid-template-columns: 1fr; gap: 1em; width: 100%; }}
-        @media (min-width: 768px) {{ .grid {{ grid-template-columns: 1fr 2fr; }} }}
-        .log-panel {{ height: {LOG_DISPLAY_LINES * 20}px; overflow-y: auto; background-color: var(--colab-secondary-surface-color, #2d2d2d); font-size: 0.9em; white-space: pre-wrap; word-break: break-all; border-radius: 4px; }}
-        .footer {{ text-align: center; padding-top: 1em; border-top: 1px solid #444; font-size: 0.8em; color: #888;}}
-        table {{ width: 100%; border-collapse: collapse; }}
-        td {{ padding: 4px 8px; }}
-        .log-entry {{ margin-bottom: 5px; }}
-        .log-level-BATTLE {{ color: #82aaff; }} .log-level-SUCCESS {{ color: #c3e88d; }}
-        .log-level-ERROR, .log-level-CRITICAL {{ color: #ff5370; }} .log-level-INFO {{ color: #89ddff; }}
-        .log-level-WARN, .log-level-LOG_SHELL, .log-level-CMD {{ color: #ffcb6b; }}
-        #entry-point-panel {{ display: none; grid-column: 1 / -1; text-align: center; padding: 1em; background-color: #2d2d2d; border: 1px solid #50fa7b; border-radius: 8px; }}
-        #entry-point-button, #install-features-button {{ display: inline-block; padding: 10px 20px; font-size: 1.2em; font-weight: bold; color: #1a1a1a; background-color: #50fa7b; border: none; border-radius: 5px; text-decoration: none; cursor: pointer; }}
-        #install-features-button {{ background-color: #f1c40f; }}
-        #copy-status-button {{ margin-top: 10px; padding: 8px 15px; font-size: 1em; background-color: #3498db; color: white; border: none; border-radius: 5px; cursor: pointer; }}
-    </style>
-    """
-    html_body = """
-    <div class="container">
-        <div class="grid">
-            <div>
-                <div class="panel">
-                    <div class="title">📊 微服務狀態</div>
-                    <div class="content"><table id="app-status-table"><tbody><tr><td>等待後端回報...</td></tr></tbody></table></div>
-                </div>
-                <div class="panel">
-                    <div class="title">⚙️ 系統資源</div>
-                    <div class="content">
-                        <table><tbody>
-                            <tr><td>CPU</td><td id="cpu-usage">--%</td></tr>
-                            <tr><td>RAM</td><td id="ram-usage">--%</td></tr>
-                        </tbody></table>
-                    </div>
-                </div>
-                <div class="panel" id="feature-panel">
-                    <div class="title">🧩 功能擴充</div>
-                    <div class="content">
-                        <p>點擊下方按鈕來安裝額外的功能模組。</p>
-                        <button id="install-features-button">安裝資料分析模組</button>
-                        <p id="install-status" style="font-size:0.9em; margin-top: 8px;"></p>
-                    </div>
-                </div>
-            </div>
-            <div class="panel">
-                <div class="title">📜 運行日誌</div>
-                <div class="content log-panel" id="log-container">日誌初始化中...</div>
-            </div>
-        </div>
-        <div id="entry-point-panel">
-             <a id="entry-point-button" href="#" target="_blank">🚀 進入主控台</a>
-             <p style="font-size:0.9em; margin-top: 8px;">主儀表板已就緒，點擊上方按鈕進入操作介面。</p>
-        </div>
-        <div class="footer" id="footer-status">指揮中心前端任務: 初始化中...</div>
-        <div style="text-align: center; margin-top: 1em;"><button id="copy-status-button">📋 複製純文字狀態</button></div>
-    </div>
-    """
-    javascript = f"""
-    <script>
-        const apiUrl = 'http://localhost:{API_PORT}/api/v1/status/dashboard';
-        const wsUrl = `ws://localhost:{API_PORT}/ws/logs`;
-        const logContainer = document.getElementById('log-container');
-        const appStatusTable = document.getElementById('app-status-table').querySelector('tbody');
-        const cpuUsageTd = document.getElementById('cpu-usage');
-        const ramUsageTd = document.getElementById('ram-usage');
-        const footerStatus = document.getElementById('footer-status');
-        const entryPointPanel = document.getElementById('entry-point-panel');
-        const entryPointButton = document.getElementById('entry-point-button');
-        const copyStatusButton = document.getElementById('copy-status-button');
-        const installFeaturesButton = document.getElementById('install-features-button');
-        const installStatus = document.getElementById('install-status');
-        let currentStatusData = {{}};
-
-        const statusMap = {{ "running": "🟢 運行中", "pending": "🟡 等待中", "installing": "🛠️ 安裝中", "starting": "🚀 啟動中", "failed": "🔴 失敗", "stopped": "⚪️ 已停止", "unknown": "❓ 未知" }};
-
-        function formatStatusForCopy(data) {{
-            if (!data || Object.keys(data).length === 0) return "狀態資訊不完整。";
-            let text = `鳳凰之心狀態報告\\n========================\\n`;
-            text += `核心階段: ${{data.current_stage || 'N/A'}}\\n`;
-            text += `CPU: ${{data.cpu_usage != null ? data.cpu_usage.toFixed(1) : 'N/A'}}%, RAM: ${{data.ram_usage != null ? data.ram_usage.toFixed(1) : 'N/A'}}%\\n\\n`;
-            text += `微服務狀態:\\n`;
-            if (data.apps_status && Object.keys(data.apps_status).length > 0) {{
-                 for (const [name, status] of Object.entries(data.apps_status)) {{ text += `- ${{name}}: ${{statusMap[status] || status}}\\n`; }}
-            }} else {{ text += `- 尚無服務狀態回報\\n`; }}
-            text += `\\n最新日誌:\\n${{logContainer.innerText || logContainer.textContent || ""}}`;
-            return text;
-        }}
-
-        copyStatusButton.onclick = () => {{
-            const text = formatStatusForCopy(currentStatusData);
-            navigator.clipboard.writeText(text).then(() => {{
-                copyStatusButton.textContent = '✅ 已複製！';
-                setTimeout(() => {{ copyStatusButton.textContent = '📋 複製純文字狀態'; }}, 2000);
-            }}, () => {{ copyStatusButton.textContent = '❌ 複製失敗'; }});
-        }};
-
-        function renderLogs(logs) {{
-            let logEntries = '';
-            if (logs && logs.length > 0) {{
-                logs.forEach(log => {{
-                    const time = new Date(log.timestamp).toLocaleTimeString('en-GB');
-                    const level = log.level.toUpperCase();
-                    const message = (log.message || '').replace(/</g, "&lt;").replace(/>/g, "&gt;");
-                    logEntries += `<div class="log-entry"><span class="log-level-${{level}}">[${{time}}] [${{level}}]</span> ${{message}}</div>`;
-                }});
-            }}
-            logContainer.innerHTML += logEntries;
-            logContainer.scrollTop = logContainer.scrollHeight;
-        }}
-
-        function setupLogWebSocket() {{
-            const socket = new WebSocket(wsUrl);
-            socket.onopen = () => {{ footerStatus.textContent = "日誌串流已連接"; logContainer.innerHTML = ''; }};
-            socket.onmessage = (event) => {{ renderLogs(JSON.parse(event.data)); }};
-            socket.onclose = () => {{ footerStatus.textContent = "日誌串流已中斷，3秒後嘗試重連..."; setTimeout(setupLogWebSocket, 3000); }};
-            socket.onerror = () => {{ footerStatus.textContent = "日誌串流發生錯誤。"; }};
-        }}
-
-        function updateDashboard() {{
-            fetch(apiUrl).then(response => {{
-                if (!response.ok) {{ console.warn(`Dashboard fetch failed: HTTP ${{response.status}}`); return; }}
-                return response.json();
-            }}).then(data => {{
-                if (!data) return;
-                currentStatusData = data;
-                let appRows = '';
-                if (data.apps_status && Object.keys(data.apps_status).length > 0) {{
-                    for (const [appName, status] of Object.entries(data.apps_status)) {{ appRows += `<tr><td>${{appName}}</td><td>${{statusMap[status] || statusMap['unknown']}}</td></tr>`; }}
-                }} else {{ appRows = '<tr><td>等待後端回報...</td></tr>'; }}
-                appStatusTable.innerHTML = appRows;
-                cpuUsageTd.textContent = data.cpu_usage != null ? `${{data.cpu_usage.toFixed(1)}}%` : '--%';
-                ramUsageTd.textContent = data.ram_usage != null ? `${{data.ram_usage.toFixed(1)}}%` : '--%';
-                if (data.current_stage && !footerStatus.textContent.startsWith("日誌串流")) {{ footerStatus.textContent = `指揮中心後端任務: ${{data.current_stage}}`; }}
-                entryPointPanel.style.display = data.action_url ? 'block' : 'none';
-                if(data.action_url) entryPointButton.href = data.action_url;
-            }}).catch(error => {{ console.error("Dashboard update error:", error); }});
-        }}
-
-        installFeaturesButton.onclick = () => {{
-            installStatus.textContent = '正在發送安裝指令...';
-            installFeaturesButton.disabled = true;
-            fetch('/api/v1/system/install-features', {{ method: 'POST' }}).then(response => {{
-                if (response.status === 202) {{
-                    installStatus.innerHTML = '✅ 指令已接受，後端正在非同步安裝...';
-                }} else {{ return response.json().then(data => {{ throw new Error(data.detail || '未知錯誤'); }}); }}
-            }}).catch(error => {{
-                installStatus.textContent = `❌ 指令失敗: ${{error.message}}`;
-                installFeaturesButton.disabled = false;
-            }});
-        }};
-
-        setInterval(updateDashboard, {refresh_interval_ms});
-        updateDashboard();
-        setupLogWebSocket();
-    </script>
-    """
-    return css + html_body + javascript
-
 def main():
-    # 顯示一個靜態的啟動日誌容器
-    clear_output(wait=True)
-    log_display_html = f"""
-    <div id="startup-log-container" style="white-space: pre-wrap; font-family: monospace; background-color: #1e1e1e; color: #d4d4d4; padding: 1em; border-radius: 5px;"></div>
-    <script>
-        const startupLogContainer = document.getElementById('startup-log-container');
-        let logFetchInterval;
-        function fetchStartupLogs() {{
-            const logs = {json.dumps(list(logs_deque))};
-            if (logs.length > 0) {{
-                startupLogContainer.innerHTML = logs.join('<br>');
-                startupLogContainer.scrollTop = startupLogContainer.scrollHeight;
-            }}
-        }}
-        logFetchInterval = setInterval(fetchStartupLogs, 500);
-    </script>
-    """
-    display(HTML(log_display_html))
+    log_message("🚀 指揮中心啟動 (純文字除錯模式)...")
 
     # [第一步] 同步執行環境準備
     env_paths = setup_environment()
 
     if env_paths:
-        log_message("✅ [階段 1/3] 環境準備成功。")
+        log_message("✅ [階段 1/2] 環境準備成功。")
 
-        # [第二步] 在背景啟動看門狗
-        watchdog_thread = threading.Thread(
-            target=watchdog_worker,
-            args=(env_paths["project_path"], env_paths["venv_python"]),
-            daemon=True
-        )
-        watchdog_thread.start()
+        project_path = env_paths["project_path"]
+        venv_python = env_paths["venv_python"]
 
-        # [第三步] 渲染最終的互動式儀表板
-        log_message("▶️ [階段 3/3] 渲染互動儀表板...")
-        time.sleep(1) # 短暫延遲，讓使用者看到上面的訊息
-        clear_output(wait=True)
-        final_html = render_dashboard_html()
-        display(HTML(final_html))
+        # [第二步] 直接以阻塞方式啟動後端伺服器
+        log_message(f"▶️ [階段 2/2] 嘗試以阻塞模式啟動後端服務...")
+        log_message("您應該會在這裡看到 Uvicorn 伺服器的日誌。")
+        log_message("如果程式卡在這裡且沒有任何輸出，代表伺服器啟動時可能發生了問題。")
+        log_message("您可以手動中斷執行來查看錯誤堆疊。")
+
+        process_env = os.environ.copy()
+        process_env["VIRTUAL_ENV"] = str(venv_python.parent.parent)
+        process_env["PATH"] = f"{venv_python.parent}:{process_env.get('PATH', '')}"
+
+        # 在這個模式下，我們不使用外部設定檔，以減少變數
+        # process_env["PHOENIX_CONFIG_PATH"] = ...
+        # process_env["PHOENIX_DB_PATH"] = ...
+
+        try:
+            uvicorn_command = [
+                str(venv_python), "-m", "uvicorn",
+                "src.phoenix_core.main:app",
+                "--host", "0.0.0.0",
+                "--port", str(API_PORT)
+            ]
+
+            # 使用 subprocess.run 來阻塞執行，並將輸出直接流到當前終端
+            subprocess.run(
+                uvicorn_command,
+                cwd=str(project_path),
+                env=process_env,
+                check=True # 如果返回非零碼，將會拋出 CalledProcessError
+            )
+        except subprocess.CalledProcessError as e:
+            log_message(f"❌ Uvicorn 伺服器執行失敗，返回碼: {e.returncode}")
+            log_message(f"--- STDERR ---\n{e.stderr}\n------------")
+            log_message(f"--- STDOUT ---\n{e.stdout}\n------------")
+        except KeyboardInterrupt:
+            log_message("\n✅ 手動中斷，程式結束。")
+        except Exception as e:
+            log_message(f"❌ 啟動伺服器時發生未預期的錯誤: {e}")
+
     else:
         log_message("❌ 由於環境準備失敗，啟動流程已中止。")
-        # 清除定時器
-        display(HTML("<script>clearInterval(logFetchInterval);</script>"))
-
 
 if __name__ == "__main__":
     main()
