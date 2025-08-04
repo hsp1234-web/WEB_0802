@@ -1,18 +1,18 @@
 # -*- coding: utf-8 -*-
 # ╔══════════════════════════════════════════════════════════════════╗
 # ║                                                                      ║
-# ║    🚀 鳳凰之心 - V55 作戰指揮中心 (最終交付版)                     ║
+# ║    🐦‍🔥 鳳凰之心 - V55 作戰指揮中心 (最終交付版)                  🐦‍🔥 ║
 # ║                                                                      ║
 # ╠══════════════════════════════════════════════════════════════════╣
 # ║                                                                      ║
 # ║ - V55 更新日誌:                                                      ║
-# ║   - **最終交付**: 根據要求撰寫 marker.MD 技術文件。                ║
-# ║   - **版本更新**: 將預設分支更新至 0.7.0。                           ║
+# ║   - **最終修正**: 修正 pip 指令鏈的環境變數傳遞問題。              ║
+# ║   - **外觀更新**: 根據要求更新標題與圖示。                         ║
 # ║   - V54: 修正日誌等級置中對齊。                                    ║
 # ║                                                                      ║
 # ╚══════════════════════════════════════════════════════════════════╝
 
-#@title 💎 鳳凰之心 V55 作戰指揮中心 (純文字模式) { vertical-output: true, display-mode: "form" }
+#@title 🐦‍🔥 鳳凰之心 V55 作戰指揮中心 { vertical-output: true, display-mode: "form" }
 #@markdown ---
 #@markdown ### **Part 1: 專案與環境設定**
 #@markdown > **設定 Git 倉庫、分支或標籤，以及專案資料夾。**
@@ -132,7 +132,7 @@ class DisplayManager:
             try:
                 output_buffer = []
 
-                output_buffer.append("🚀 鳳凰之心 V55 作戰指揮中心")
+                output_buffer.append("🐦‍🔥 鳳凰之心 V55 作戰指揮中心 🐦‍🔥")
                 output_buffer.append("="*60)
 
                 logs_to_display = self._log_manager.get_display_logs()
@@ -234,6 +234,7 @@ class ServerManager:
             if result.returncode != 0: self._log_manager.log("CRITICAL", f"建立虛擬環境失敗:\n{result.stderr}"); return None
 
             venv_python = venv_path / "bin" / "python"
+
             self._log_manager.log("INFO", "引導程序：確保 pip 已安裝...")
             bootstrap_env = os.environ.copy()
             bootstrap_env["VIRTUAL_ENV"] = str(venv_path)
@@ -245,7 +246,7 @@ class ServerManager:
             self._log_manager.log("INFO", "正在安裝核心依賴...")
             core_requirements_path = project_path / "requirements/requirements-core.txt"
             pip_install_command = [str(venv_python), "-m", "pip", "install", "-r", str(core_requirements_path)]
-            result = subprocess.run(pip_install_command, check=False, capture_output=True, text=True, encoding='utf-8')
+            result = subprocess.run(pip_install_command, check=False, capture_output=True, text=True, encoding='utf-8', env=bootstrap_env)
             if result.returncode != 0: self._log_manager.log("CRITICAL", f"安裝依賴失敗:\n{result.stderr}"); return None
 
             self._log_manager.log("SUCCESS", "✅ 環境準備成功。")
