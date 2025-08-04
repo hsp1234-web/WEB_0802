@@ -6,7 +6,7 @@
 # ╠══════════════════════════════════════════════════════════════════╣
 # ║                                                                      ║
 # ║ - V55 更新日誌:                                                      ║
-# ║   - **最終修正**: 修正 pip 指令鏈的環境變數傳遞問題。              ║
+# ║   - **最終修正**: 移除錯誤的 pip 引導程序，信任 uv venv。          ║
 # ║   - **外觀更新**: 根據要求更新標題與圖示。                         ║
 # ║   - V54: 修正日誌等級置中對齊。                                    ║
 # ║                                                                      ║
@@ -235,18 +235,10 @@ class ServerManager:
 
             venv_python = venv_path / "bin" / "python"
 
-            self._log_manager.log("INFO", "引導程序：確保 pip 已安裝...")
-            bootstrap_env = os.environ.copy()
-            bootstrap_env["VIRTUAL_ENV"] = str(venv_path)
-            bootstrap_env["PATH"] = f"{venv_path / 'bin'}:{bootstrap_env.get('PATH', '')}"
-            bootstrap_command = ["uv", "pip", "install", "pip", "wheel"]
-            result = subprocess.run(bootstrap_command, check=False, capture_output=True, text=True, encoding='utf-8', env=bootstrap_env)
-            if result.returncode != 0: self._log_manager.log("CRITICAL", f"引導安裝 pip 失敗:\n{result.stderr}"); return None
-
             self._log_manager.log("INFO", "正在安裝核心依賴...")
             core_requirements_path = project_path / "requirements/requirements-core.txt"
             pip_install_command = [str(venv_python), "-m", "pip", "install", "-r", str(core_requirements_path)]
-            result = subprocess.run(pip_install_command, check=False, capture_output=True, text=True, encoding='utf-8', env=bootstrap_env)
+            result = subprocess.run(pip_install_command, check=False, capture_output=True, text=True, encoding='utf-8')
             if result.returncode != 0: self._log_manager.log("CRITICAL", f"安裝依賴失敗:\n{result.stderr}"); return None
 
             self._log_manager.log("SUCCESS", "✅ 環境準備成功。")
