@@ -22,6 +22,7 @@ import time
 import json
 from datetime import datetime
 import threading
+import pytz
 
 # --- 組態設定 ---
 
@@ -58,7 +59,13 @@ def setup_logging():
 
 def log_message(message, level="INFO"):
     """將帶有時間戳的訊息寫入日誌檔案並打印到控制台。"""
-    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    # 設定時區為台北
+    taipei_tz = pytz.timezone("Asia/Taipei")
+    # 獲取帶有時區的當前時間
+    now_in_taipei = datetime.now(taipei_tz)
+
+    timestamp = now_in_taipei.strftime('%Y-%m-%d %H:%M:%S %Z')
+
     # 針對遠端日誌，我們保持原樣，不加時間戳，以便閱讀
     if level == "REMOTE":
         log_entry = message
@@ -134,31 +141,30 @@ def setup_environment():
 
         # --- 4. 安裝依賴 ---
         venv_python = (venv_path / "bin" / "python").resolve()
-        log_message("⏳ 正在使用 'uv pip sync' 安裝核心依賴...")
+        log_message("⏳ [策略變更] 正在改用 'pip install' 來安裝核心依賴，以提高穩定性...")
         core_requirements_path = project_path / "requirements/requirements-core.txt"
         if not core_requirements_path.exists():
             log_message(f"❌ 找不到依賴檔案: {core_requirements_path}", level="ERROR")
             return None
 
-        # 建立一個啟用了虛擬環境的子進程環境
-        install_env = os.environ.copy()
-        install_env["VIRTUAL_ENV"] = str(venv_path)
-        install_env["PATH"] = f"{venv_path / 'bin'}:{install_env.get('PATH', '')}"
-
-        # 在啟用了 venv 的情況下，不再需要 --python 參數
-        uv_install_command = ["uv", "pip", "sync", str(core_requirements_path)]
+        # 使用 venv 內的 python 來執行 pip，這是最可靠的方式
+        pip_install_command = [
+            str(venv_python),
+            "-m", "pip",
+            "install",
+            "-r", str(core_requirements_path)
+        ]
 
         result = subprocess.run(
-            uv_install_command,
+            pip_install_command,
             check=False,
             capture_output=True,
             text=True,
-            encoding='utf-8',
-            env=install_env # 使用為安裝客製化的環境變數
+            encoding='utf-8'
         )
 
         if result.returncode != 0:
-            log_message(f"❌ 安裝依賴失敗。返回碼: {result.returncode}", level="ERROR")
+            log_message(f"❌ 使用 pip 安裝依賴失敗。返回碼: {result.returncode}", level="ERROR")
             log_message(f"--- STDERR ---\n{result.stderr}\n------------", level="ERROR")
             return None
         log_message("✅ 核心依賴安裝完成。")
