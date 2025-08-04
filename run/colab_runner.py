@@ -5,14 +5,14 @@
 # ║                                                                      ║
 # ╠══════════════════════════════════════════════════════════════════╣
 # ║                                                                      ║
-# ║ - V55 更新日誌:                                                      ║
-# ║   - **最終修正**: 移除錯誤的 pip 引導程序，信任 uv venv。          ║
-# ║   - **外觀更新**: 根據要求更新標題與圖示。                         ║
-# ║   - V54: 修正日誌等級置中對齊。                                    ║
+# ║ - V60 更新日誌:                                                      ║
+# ║   - **智慧儀表板**: 引入 rich 函式庫，並實作分階段 UI 渲染。         ║
+# ║     儀表板會先以純文字模式即時啟動，待 rich 安裝完畢後自動升級為    ║
+# ║     附帶顏色與進度旋轉圖示的彩色版本，兼顧了啟動速度與視覺體驗。   ║
 # ║                                                                      ║
 # ╚══════════════════════════════════════════════════════════════════╝
 
-#@title 🐦‍🔥 鳳凰之心 V55 作戰指揮中心 { vertical-output: true, display-mode: "form" }
+#@title 🐦‍🔥 鳳凰之心 V60 作戰指揮中心 { vertical-output: true, display-mode: "form" }
 #@markdown ---
 #@markdown ### **Part 1: 專案與環境設定**
 #@markdown > **設定 Git 倉庫、分支或標籤，以及專案資料夾。**
@@ -20,7 +20,7 @@
 #@markdown **後端程式碼倉庫 (REPOSITORY_URL)**
 REPOSITORY_URL = "https://github.com/hsp1234-web/WEB_0802.git" #@param {type:"string"}
 #@markdown **後端版本分支或標籤 (TARGET_BRANCH_OR_TAG)**
-TARGET_BRANCH_OR_TAG = "0.7.0" #@param {type:"string"}
+TARGET_BRANCH_OR_TAG = "0.8.0" #@param {type:"string"}
 #@markdown **專案資料夾名稱 (PROJECT_FOLDER_NAME)**
 PROJECT_FOLDER_NAME = "WEB1" #@param {type:"string"}
 #@markdown **強制刷新後端程式碼 (FORCE_REPO_REFRESH)**
@@ -119,53 +119,162 @@ class LogManager:
             return list(self._log_deque)
 
 class DisplayManager:
-    """顯示管理器：在背景執行緒中負責繪製純文字動態儀表板。"""
+    """
+    顯示管理器 V60 (智慧 UI 版)
+    - 初始以純文字模式啟動，保證即時反饋。
+    - 當 rich 套件安裝完成後，自動無縫升級為彩色儀表板。
+    """
     def __init__(self, log_manager, stats_dict, refresh_rate):
         self._log_manager = log_manager
         self._stats = stats_dict
         self._refresh_rate = refresh_rate
         self._stop_event = threading.Event()
         self._thread = threading.Thread(target=self._run, daemon=True)
+        self.rich_console = None
+        self.psutil_module = None
+
+    def _try_import_rich(self):
+        if self.rich_console:
+            return True
+        try:
+            from rich.console import Console
+            from rich.table import Table
+            from rich.panel import Panel
+            from rich.live import Live
+            from rich.spinner import Spinner
+            from rich import box
+            self.rich_console = Console()
+            return True
+        except ImportError:
+            return False
+
+    def _render_rich_ui(self):
+        # Dynamically import rich components here
+        from rich.table import Table
+        from rich.panel import Panel
+        from rich.spinner import Spinner
+        from rich import box
+
+        # --- Main Layout Table ---
+        layout_table = Table.grid(expand=True)
+        layout_table.add_column()
+
+        # --- Header ---
+        header = Panel("🐦‍🔥 鳳凰之心 V60 作戰指揮中心 🐦‍🔥", style="bold bright_magenta", border_style="magenta")
+        layout_table.add_row(header)
+
+        # --- Log Panel ---
+        log_table = Table(box=None, show_header=False, pad_edge=False)
+        log_table.add_column("Time", style="dim cyan", width=8)
+        log_table.add_column("Level", style="bold", width=10)
+        log_table.add_column("Message")
+
+        level_colors = {"SUCCESS": "green", "INFO": "cyan", "WARN": "yellow", "ERROR": "red", "CRITICAL": "bold red", "BATTLE": "magenta", "DEBUG": "dim"}
+        logs_to_display = self._log_manager.get_display_logs()
+        for log in logs_to_display:
+            ts = log['timestamp'].strftime('%H:%M:%S')
+            level = log['level']
+            color = level_colors.get(level, "white")
+            log_table.add_row(f"[{ts}]", f"[{color}]{level:^8}[/{color}]", log['message'])
+
+        layout_table.add_row(Panel(log_table, title="[dim]日誌[/dim]", border_style="blue"))
+
+        # --- URL Panel ---
+        if self._stats.get('proxy_url'):
+            url_panel = Panel(f"[bold green]✅ 代理連結已生成:[/bold green]\n[link={self._stats['proxy_url']}]{self._stats['proxy_url']}[/link]", border_style="green")
+            layout_table.add_row(url_panel)
+
+        # --- Status Footer ---
+        if not self.psutil_module:
+            try:
+                import psutil
+                self.psutil_module = psutil
+            except ImportError:
+                pass # Still not available
+
+        cpu_usage = f"{self.psutil_module.cpu_percent():5.1f}%" if self.psutil_module else "N/A"
+        ram_usage = f"{self.psutil_module.virtual_memory().percent:5.1f}%" if self.psutil_module else "N/A"
+
+        elapsed_time = time.monotonic() - self._stats["start_time_monotonic"]
+        minutes, seconds = divmod(elapsed_time, 60)
+        time_str = f"{int(minutes):02d}分{int(seconds):02d}秒"
+
+        status = self._stats.get('status', '初始化...')
+        status_line = f"⏱️ {time_str} | 💻 CPU: {cpu_usage} | 🧠 RAM: {ram_usage} | "
+
+        if status == "安裝額外套件...":
+            status_line += Spinner("dots", text=f"[bold yellow]{status}[/bold yellow]")
+        else:
+            status_line += f"🔥 狀態: {status}"
+
+        layout_table.add_row(Panel(status_line, border_style="dim"))
+
+        return layout_table
+
+    def _render_plain_text_ui(self):
+        output_buffer = []
+        output_buffer.append("🐦‍🔥 鳳凰之心 V60 作戰指揮中心 🐦‍🔥 (純文字模式)")
+        output_buffer.append("="*60)
+
+        logs_to_display = self._log_manager.get_display_logs()
+        for log in logs_to_display:
+            ts = log['timestamp'].strftime('%H:%M:%S')
+            output_buffer.append(f"[{ts}] [{log['level']:^8}] {log['message']}")
+
+        output_buffer.append("="*60)
+
+        if self._stats.get('proxy_url'):
+            output_buffer.append(f"✅ 代理連結已生成: {self._stats['proxy_url']}")
+            output_buffer.append("="*60)
+
+        cpu = "N/A"
+        ram = "N/A"
+
+        elapsed_time = time.monotonic() - self._stats["start_time_monotonic"]
+        minutes, seconds = divmod(elapsed_time, 60)
+
+        status_line = (
+            f"⏱️ {int(minutes):02d}分{int(seconds):02d}秒 | "
+            f"💻 CPU: {cpu} | "
+            f"🧠 RAM: {ram} | "
+            f"🔥 狀態: {self._stats.get('status', '初始化...')}"
+        )
+        output_buffer.append(status_line)
+        return "\n".join(output_buffer)
 
     def _run(self):
+        live = None
         while not self._stop_event.is_set():
             try:
-                output_buffer = []
+                if self._try_import_rich():
+                    if not live:
+                        from rich.live import Live
+                        live = Live(console=self.rich_console, auto_refresh=False, screen=True)
+                        live.start()
 
-                output_buffer.append("🐦‍🔥 鳳凰之心 V55 作戰指揮中心 🐦‍🔥")
-                output_buffer.append("="*60)
-
-                logs_to_display = self._log_manager.get_display_logs()
-                for log in logs_to_display:
-                    ts = log['timestamp'].strftime('%H:%M:%S')
-                    output_buffer.append(f"[{ts}] [{log['level']:^8}] {log['message']}")
-
-                output_buffer.append("="*60)
-
-                if self._stats.get('proxy_url'):
-                    output_buffer.append(f"✅ 代理連結已生成: {self._stats['proxy_url']}")
-                    output_buffer.append("="*60)
-
-                cpu = psutil.cpu_percent()
-                ram = psutil.virtual_memory().percent
-                elapsed_time = time.monotonic() - self._stats["start_time_monotonic"]
-                minutes, seconds = divmod(elapsed_time, 60)
-
-                status_line = (
-                    f"⏱️ {int(minutes):02d}分{int(seconds):02d}秒 | "
-                    f"💻 CPU: {cpu:5.1f}% | "
-                    f"🧠 RAM: {ram:5.1f}% | "
-                    f"🔥 狀態: {self._stats.get('status', '初始化...')}"
-                )
-                output_buffer.append(status_line)
-
-                clear_output(wait=True)
-                print("\n".join(output_buffer), flush=True)
+                    ui = self._render_rich_ui()
+                    live.update(ui)
+                    live.refresh()
+                else:
+                    ui = self._render_plain_text_ui()
+                    clear_output(wait=True)
+                    print(ui, flush=True)
 
                 time.sleep(self._refresh_rate)
             except Exception as e:
-                print(f"\nDisplayManager Error: {e}")
+                # If rich UI fails, fallback to plain text
+                if self.rich_console:
+                    self.rich_console.print(f"\n[bold red]DisplayManager Error: {e}[/bold red]")
+                    self.rich_console.print("[yellow]Falling back to plain text mode.[/yellow]")
+                    self.rich_console = None
+                    if live:
+                        live.stop()
+                        live = None
+                else:
+                    print(f"\nDisplayManager Error: {e}")
                 time.sleep(5)
+        if live:
+            live.stop()
 
     def start(self): self._thread.start()
     def stop(self): self._stop_event.set(); self._thread.join(timeout=2)
@@ -180,11 +289,42 @@ class ServerManager:
         self._stop_event = threading.Event()
         self._thread = threading.Thread(target=self._run, daemon=True)
 
+    def _install_extra_dependencies(self, venv_python, project_path):
+        """In the background, install extra dependencies like the Rich UI library."""
+        try:
+            self._stats['status'] = "安裝額外套件..."
+            self._log_manager.log("BATTLE", "=== [背景任務] 開始安裝額外套件 ===")
+            extra_reqs_path = project_path / "requirements/extra.txt"
+            pip_command = [str(venv_python), "-m", "pip", "install", "-q", "--ignore-installed", "-r", str(extra_reqs_path)]
+
+            result = subprocess.run(pip_command, check=False, capture_output=True, text=True, encoding='utf-8')
+
+            if result.returncode == 0:
+                self._log_manager.log("SUCCESS", "✅ 額外套件安裝成功。")
+            else:
+                self._log_manager.log("ERROR", f"❌ 安裝額外套件失敗:\n{result.stderr}")
+            self._log_manager.log("BATTLE", "=== [背景任務] 額外套件安裝結束 ===")
+        except Exception as e:
+            self._log_manager.log("CRITICAL", f"背景安裝額外套件時發生致命錯誤: {e}")
+        finally:
+            # Revert status to the last known stable state if it was still showing installation
+            if self._stats['status'] == "安裝額外套件...":
+                 self._stats['status'] = "✅ 伺服器運行中"
+
+
     def _run(self):
         try:
             env_paths = self._setup_environment()
             if not env_paths or self._stop_event.is_set():
                 self._stats['status'] = "❌ 環境準備失敗"; return
+
+            # Start installing extra dependencies in the background
+            extra_install_thread = threading.Thread(
+                target=self._install_extra_dependencies,
+                args=(env_paths["venv_python"], env_paths["project_path"]),
+                daemon=True
+            )
+            extra_install_thread.start()
 
             self._stats['status'] = "🚀 正在啟動伺服器..."
             self._log_manager.log("BATTLE", "=== [2/2] 正在啟動後端伺服器 ===")
@@ -235,13 +375,24 @@ class ServerManager:
 
             venv_python = venv_path / "bin" / "python"
 
+            # V55.1 修正：重新加入防禦性的 pip 引導程序，以應對 uv venv 在某些環境下可能不會安裝 pip 的偶發性問題。
+            # 這是根據 marker.MD 的歷史經驗和使用者回報的錯誤日誌所做的決定。
+            self._log_manager.log("INFO", "引導程序：確保 pip 已安裝...")
+            bootstrap_command = ["uv", "pip", "install", "--python", str(venv_python), "pip", "wheel"]
+            result = subprocess.run(bootstrap_command, check=False, capture_output=True, text=True, encoding='utf-8')
+            if result.returncode != 0:
+                self._log_manager.log("CRITICAL", f"引導程序安裝 pip 失敗:\n{result.stderr}")
+                return None
+
             self._log_manager.log("INFO", "正在安裝核心依賴...")
             core_requirements_path = project_path / "requirements/requirements-core.txt"
-            pip_install_command = [str(venv_python), "-m", "pip", "install", "-r", str(core_requirements_path)]
+            # V56: 加入 --ignore-installed 旗標，強制在 venv 中重新安裝所有套件，
+            # 避免 pip 因偵測到系統已安裝的全域套件而跳過安裝，導致 ModuleNotFoundError。
+            pip_install_command = [str(venv_python), "-m", "pip", "install", "--ignore-installed", "-r", str(core_requirements_path)]
             result = subprocess.run(pip_install_command, check=False, capture_output=True, text=True, encoding='utf-8')
             if result.returncode != 0: self._log_manager.log("CRITICAL", f"安裝依賴失敗:\n{result.stderr}"); return None
 
-            self._log_manager.log("SUCCESS", "✅ 環境準備成功。")
+            self._log_manager.log("SUCCESS", "✅ 核心環境準備成功。")
             return {"project_path": project_path, "venv_python": venv_python}
         except Exception as e:
             self._log_manager.log("CRITICAL", f"環境準備失敗: {e}"); return None
@@ -312,15 +463,33 @@ def main():
         server_ready = server_manager.server_ready_event.wait(timeout=SERVER_READY_TIMEOUT)
 
         if server_ready:
-            url = colab_output.eval_js(f'google.colab.kernel.proxyPort({API_PORT})')
-            shared_stats['proxy_url'] = url
+            max_retries = 10
+            retry_delay = 3
+            url_obtained = False
+            for attempt in range(max_retries):
+                try:
+                    log_manager.log("INFO", f"正在嘗試取得代理連結... (第 {attempt + 1}/{max_retries} 次)")
+                    url = colab_output.eval_js(f'google.colab.kernel.proxyPort({API_PORT})')
+                    if url and url.strip():
+                        shared_stats['proxy_url'] = url
+                        log_manager.log("SUCCESS", "✅ 成功取得代理連結！")
+                        url_obtained = True
+                        break
+                    else:
+                        log_manager.log("WARN", f"取得的代理連結為空，將於 {retry_delay} 秒後重試...")
+                except Exception as e:
+                    log_manager.log("WARN", f"取得代理連結時發生錯誤: {e}，將於 {retry_delay} 秒後重試...")
+                time.sleep(retry_delay)
+
+            if not url_obtained:
+                shared_stats['status'] = "❌ 取得代理連結失敗"
+                log_manager.log("CRITICAL", f"在 {max_retries} 次嘗試後，仍無法取得有效的代理連結。")
         else:
             shared_stats['status'] = "❌ 伺服器啟動超時"
             log_manager.log("CRITICAL", f"伺服器在 {SERVER_READY_TIMEOUT} 秒內未能就緒。")
 
-        while True:
-            if not server_manager._thread.is_alive() and not shared_stats.get('proxy_url'):
-                break
+        # Keep the main thread alive to allow background threads to run
+        while server_manager._thread.is_alive():
             time.sleep(1)
 
     except KeyboardInterrupt:
@@ -330,8 +499,10 @@ def main():
         if log_manager: log_manager.log("CRITICAL", error_msg)
         else: print(error_msg)
     finally:
-        if display_manager: display_manager.stop()
-        if server_manager: server_manager.stop()
+        if display_manager and display_manager._thread.is_alive():
+            display_manager.stop()
+        if server_manager:
+            server_manager.stop()
 
         end_time = datetime.now(pytz.timezone(TIMEZONE))
         if log_manager:
