@@ -6,6 +6,7 @@
 # ╠══════════════════════════════════════════════════════════════════╣
 # ║                                                                      ║
 # ║ - V55 更新日誌:                                                      ║
+# ║   - **V55.1 修正**: 重新加入防禦性的 pip 引導程序，解決偶發性的環境問題。      ║
 # ║   - **最終修正**: 移除錯誤的 pip 引導程序，信任 uv venv。          ║
 # ║   - **外觀更新**: 根據要求更新標題與圖示。                         ║
 # ║   - V54: 修正日誌等級置中對齊。                                    ║
@@ -234,6 +235,15 @@ class ServerManager:
             if result.returncode != 0: self._log_manager.log("CRITICAL", f"建立虛擬環境失敗:\n{result.stderr}"); return None
 
             venv_python = venv_path / "bin" / "python"
+
+            # V55.1 修正：重新加入防禦性的 pip 引導程序，以應對 uv venv 在某些環境下可能不會安裝 pip 的偶發性問題。
+            # 這是根據 marker.MD 的歷史經驗和使用者回報的錯誤日誌所做的決定。
+            self._log_manager.log("INFO", "引導程序：確保 pip 已安裝...")
+            bootstrap_command = ["uv", "pip", "install", "--python", str(venv_python), "pip", "wheel"]
+            result = subprocess.run(bootstrap_command, check=False, capture_output=True, text=True, encoding='utf-8')
+            if result.returncode != 0:
+                self._log_manager.log("CRITICAL", f"引導程序安裝 pip 失敗:\n{result.stderr}")
+                return None
 
             self._log_manager.log("INFO", "正在安裝核心依賴...")
             core_requirements_path = project_path / "requirements/requirements-core.txt"
