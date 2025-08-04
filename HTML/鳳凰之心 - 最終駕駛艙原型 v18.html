@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>鳳凰之心 - 最終駕駛艙原型 v16.2 (錯誤修正)</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;700&family=Noto+Sans+TC:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        /* 全局變量定義 */
+        :root {
+            --color-bg: #131314;
+            --color-panel-bg: #1e1f20;
+            --color-border: #3c4043;
+            --color-text: #e8eaed;
+            --color-dim: #9aa0a6;
+            --color-header: #8ab4f8;
+            --color-ok: #34a853;
+            --color-warn: #fbbc04;
+            --color-error: #ea4335;
+            --color-info: #4285f4;
+            --color-battle: #8ab4f8;
+            --font-mono: 'Fira Code', 'Courier New', monospace;
+            --font-sans: 'Noto Sans TC', sans-serif;
+            --base-font-size: 15px; /* 基礎字體大小 */
+            --line-height: 1.8; /* 基礎行高 */
+        }
+
+        /* 全局重置與基礎樣式 */
+        html, body {
+            height: 100%;
+            margin: 0;
+            overflow: hidden; /* 防止整體滾動條 */
+            box-sizing: border-box; /* 確保所有元素盒模型一致 */
+        }
+
+        body {
+            background-color: var(--color-bg);
+            color: var(--color-text);
+            font-family: var(--font-mono);
+            font-size: var(--base-font-size);
+            line-height: var(--line-height);
+            display: flex;
+            flex-direction: column; /* 主軸為垂直方向 */
+        }
+
+        /* 顏色工具類 */
+        .ok { color: var(--color-ok); }
+        .warn { color: var(--color-warn); }
+        .error { color: var(--color-error); }
+        .info { color: var(--color-info); }
+        .battle { color: var(--color-battle); }
+        .header { color: var(--color-header); }
+        .dim { color: var(--color-dim); }
+        .highlight { color: #ffffff; font-weight: bold; }
+
+        /* 通用排版與隱藏 */
+        pre { margin: 0; white-space: pre-wrap; word-wrap: break-word; } /* 預格式化文本自動換行 */
+        .hidden { display: none !important; } /* 隱藏元素 */
+
+        /* 啟動畫面樣式 */
+        #boot-screen {
+            padding: 20px;
+            flex-grow: 1; /* 佔據剩餘空間 */
+            overflow-y: auto; /* 允許垂直滾動 */
+        }
+        .progress-bar-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .progress-bar-container .label {
+            min-width: 220px; /* 固定標籤寬度以對齊，確保一致性 */
+        }
+
+        /* 儀表板樣式 */
+        #dashboard {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+
+        /* 頂部面板樣式 */
+        #top-panel {
+            padding: 15px 20px;
+            border-bottom: 1px solid var(--color-border);
+            background-color: var(--color-panel-bg);
+            display: flex;
+            flex-wrap: wrap; /* 允許項目換行 */
+            gap: 20px 30px; /* 行間距和列間距 */
+            align-items: flex-start;
+            flex-shrink: 0; /* 不壓縮此面板 */
+        }
+        .panel-section {
+            flex: 1; /* 彈性佔據空間 */
+            min-width: 280px; /* 最小寬度，確保在小螢幕上不會過窄 */
+        }
+        .panel-title {
+            font-family: var(--font-sans);
+            font-weight: bold;
+            color: var(--color-header);
+            margin-bottom: 10px;
+        }
+
+        /* 【v16.1 更新】即時資源監控樣式 - 現代化進度條 */
+        #resource-monitor {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .resource-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .resource-label {
+            font-family: var(--font-mono);
+            width: 40px; /* 固定標籤寬度 */
+            text-align: right;
+            color: var(--color-dim);
+        }
+        .progress-bar-wrapper {
+            flex-grow: 1; /* 佔據剩餘空間 */
+            height: 10px; /* 進度條高度 */
+            background-color: rgba(255, 255, 255, 0.1); /* 進度條背景軌道 */
+            border-radius: 5px;
+            overflow: hidden; /* 確保填充不溢出圓角 */
+            position: relative; /* 用於百分比文字定位 */
+        }
+        .progress-bar {
+            height: 100%;
+            background-color: var(--color-info); /* 進度條填充顏色 */
+            width: 0%; /* 初始寬度 */
+            transition: width 0.3s ease-out; /* 平滑過渡動畫 */
+            border-radius: 5px; /* 繼承圓角 */
+        }
+        .percentage-text {
+            font-family: var(--font-mono);
+            font-size: 0.9em;
+            width: 50px; /* 固定百分比文字寬度 */
+            text-align: right;
+            color: var(--color-text);
+        }
+
+        .service-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 5px;
+        }
+        .service-icon { min-width: 2.2em; } /* 圖標最小寬度 */
+        .app-button {
+            background-color: var(--color-battle);
+            color: var(--color-bg);
+            border: none;
+            border-radius: 5px;
+            padding: 10px 15px;
+            font-family: var(--font-sans);
+            font-weight: bold;
+            font-size: 1em;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            white-space: nowrap; /* 防止按鈕文字換行 */
+        }
+        .app-button:hover { background-color: #a8c7fa; }
+
+        /* 主資訊流容器樣式 */
+        #main-stream-container {
+            flex-grow: 1; /* 佔據剩餘垂直空間 */
+            overflow-y: auto; /* 允許垂直滾動 */
+            padding: 10px 20px 60px 20px; /* 底部留出狀態欄空間 */
+        }
+        .stream-item {
+            margin-bottom: 15px; /* 日誌條目間距 */
+            word-wrap: break-word; /* 確保內容自動斷行 */
+            overflow-wrap: break-word; /* 更好的斷行控制 */
+        }
+        .stream-meta {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+        .stream-icon { min-width: 2em; }
+        .stream-ts { color: var(--color-dim); }
+        .stream-level { font-weight: bold; min-width: 90px; } /* 固定等級寬度以對齊 */
+
+        /* 用於標準文字日誌的內容區塊，保持縮進 */
+        .stream-text-content {
+            padding-left: calc(2em + 15px); /* 與圖標對齊 */
+            margin-top: 5px; /* 與元數據行產生間距 */
+        }
+
+        /* 用於數據塊（如表格）的內容區塊，無縮進，並控制其上下間距 */
+        .stream-block-content {
+            margin-top: 0.8em; /* 半行空行 */
+            padding-left: 0; /* 確保數據塊靠左對齊 */
+            padding-bottom: 0.8em; /* 半行空行 */
+        }
+        
+        /* 數據流表格樣式 */
+        .data-stream-table {
+            border: 1px solid var(--color-border);
+            padding: 10px;
+            background: rgba(0,0,0,0.2);
+            border-radius: 5px;
+            display: block; /* 確保是塊級元素 */
+            width: 100%; /* 佔據其父容器的全部寬度 */
+            max-width: 100%;
+            box-sizing: border-box;
+            margin: 0; /* 移除任何自動邊距，確保靠左 */
+        }
+        .ds-row { display: flex; /* 使用 flexbox 實現表格行 */
+            flex-wrap: wrap; /* 允許單元格換行 */
+        }
+        .ds-cell {
+            flex: 1; /* 彈性佔據空間 */
+            padding: 2px 10px;
+            border-bottom: 1px solid var(--color-border);
+            min-width: 80px; /* 確保單元格有最小寬度 */
+            word-wrap: break-word; /* 確保單元格內容自動斷行 */
+            overflow-wrap: break-word;
+        }
+        .ds-row:last-child .ds-cell { border-bottom: none; }
+        .ds-header .ds-cell { font-weight: bold; color: var(--color-header); }
+        /* 針對分隔線的特殊樣式 */
+        .ds-separator .ds-cell { padding: 0; height: 1px; background: var(--color-border); flex-basis: 100%; } /* 分隔線佔滿整行 */
+
+        /* 狀態欄樣式 */
+        #status-bar {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background: var(--color-panel-bg);
+            padding: 8px 20px;
+            border-top: 1px solid var(--color-border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 14px;
+            z-index: 10;
+            box-sizing: border-box;
+        }
+        .status-group { display: flex; gap: 25px; }
+
+        /* --- 響應式設計：媒體查詢 --- */
+
+        /* 針對小螢幕設備 (例如手機，寬度小於 768px) */
+        @media (max-width: 767px) {
+            body {
+                font-size: 13px; /* 縮小字體 */
+                line-height: 1.6;
+            }
+            #top-panel {
+                flex-direction: column; /* 頂部面板項目垂直堆疊 */
+                padding: 10px 15px;
+                gap: 15px;
+            }
+            .panel-section {
+                min-width: auto; /* 移除最小寬度限制 */
+                width: 100%; /* 佔滿可用寬度 */
+            }
+            #main-stream-container {
+                padding: 10px 15px 60px 15px; /* 調整內邊距 */
+            }
+            .stream-meta {
+                flex-direction: column; /* 日誌元數據垂直堆疊 */
+                align-items: flex-start;
+                gap: 5px;
+            }
+            .stream-icon { min-width: auto; } /* 圖標寬度自適應 */
+            .stream-level { min-width: auto; } /* 等級寬度自適應 */
+            .stream-text-content {
+                padding-left: 0; /* 手機上文字內容不縮進，直接在元數據下方 */
+            }
+            .stream-block-content {
+                margin-top: 0.5em; /* 調整間距 */
+                padding-bottom: 0.5em;
+            }
+            .data-stream-table .ds-cell {
+                min-width: 100%; /* 手機上單元格佔滿一行 */
+                flex-basis: 100%;
+            }
+            .ds-row {
+                flex-direction: column; /* 表格行內的單元格垂直堆疊 */
+            }
+            .ds-header .ds-cell {
+                border-bottom: none; /* 手機模式下移除表頭下邊線 */
+            }
+            .ds-separator .ds-cell {
+                display: none; /* 手機模式下隱藏分隔線 */
+            }
+            #status-bar {
+                padding: 5px 15px;
+                font-size: 12px;
+                flex-direction: column; /* 狀態欄項目垂直堆疊 */
+                gap: 5px;
+                align-items: flex-start;
+            }
+            .status-group { gap: 10px; }
+        }
+
+        /* 針對平板設備 (寬度在 768px 到 1024px 之間) */
+        @media (min-width: 768px) and (max-width: 1024px) {
+            body {
+                font-size: 14px;
+            }
+            #top-panel {
+                padding: 15px 25px;
+                gap: 25px;
+            }
+            .panel-section {
+                min-width: 250px;
+            }
+            #main-stream-container {
+                padding: 15px 25px 60px 25px;
+            }
+            .stream-text-content {
+                padding-left: calc(2em + 10px); /* 微調縮進 */
+            }
+            .data-stream-table .ds-cell {
+                min-width: 120px; /* 平板上單元格最小寬度 */
+            }
+        }
+
+        /* 針對桌面設備 (寬度大於 1024px) */
+        @media (min-width: 1025px) {
+            body {
+                font-size: 15px;
+            }
+            #top-panel {
+                padding: 20px 30px;
+                gap: 40px;
+            }
+            .panel-section {
+                min-width: 300px;
+            }
+            #main-stream-container {
+                padding: 20px 30px 60px 30px;
+            }
+            .stream-text-content {
+                padding-left: calc(2em + 15px);
+            }
+            .data-stream-table .ds-cell {
+                min-width: 150px; /* 桌面單元格最小寬度 */
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="boot-screen"></div>
+
+    <div id="dashboard" class="hidden">
+        <div id="top-panel">
+            <div class="panel-section">
+                <div class="panel-title">⚙️ 即時資源監控</div>
+                <!-- 【v16.1 更新】改用現代化進度條 -->
+                <div id="resource-monitor">
+                    <div class="resource-item">
+                        <span class="resource-label">CPU:</span>
+                        <div class="progress-bar-wrapper">
+                            <div id="cpu-progress-bar" class="progress-bar"></div>
+                        </div>
+                        <span id="cpu-percentage" class="percentage-text">0.0%</span>
+                    </div>
+                    <div class="resource-item">
+                        <span class="resource-label">RAM:</span>
+                        <div class="progress-bar-wrapper">
+                            <div id="ram-progress-bar" class="progress-bar"></div>
+                        </div>
+                        <span id="ram-percentage" class="percentage-text">0.0%</span>
+                    </div>
+                </div>
+            </div>
+            <div class="panel-section">
+                <div class="panel-title">🌐 核心服務狀態</div>
+                <div id="service-status"></div>
+            </div>
+            <div class="panel-section">
+                <div class="panel-title">🚀 應用程式入口</div>
+                <button class="app-button" onclick="alert('模擬跳轉至 Web 應用程式！')">進入鳳凰之心主介面</button>
+            </div>
+        </div>
+        <div id="main-stream-container"></div>
+        <div id="status-bar"></div>
+    </div>
+
+
+<script>
+// ==================================================================
+// 全域設定與模擬數據
+// ==================================================================
+const config = {
+    bootDelay: 150,
+    dashboardUpdate: 300, // 更新頻率為 0.3 秒
+    maxStreamLines: 50,
+    disk: { total: 10.0, used: 6.0 },
+    aiPackage: { name: '大型語言模型 (LLM) v2', size: 5.0 }
+};
+
+let simData = {
+    cpu: 15,
+    ram: 25,
+    services: [
+        { name: '後端 FastAPI 引擎', status: 'ok' },
+        { name: 'WebSocket 通訊頻道', status: 'ok' },
+        { name: '日誌資料庫', status: 'ok' }
+    ],
+};
+
+// ==================================================================
+// 啟動動畫腳本
+// ==================================================================
+const bootSequence = [
+    { text: '>>> 鳳凰之心 v16.2 最終定稿 啟動序列 <<<', type: 'header' }, // 更新版本號
+    { text: '===================================================', type: 'dim' },
+    { text: '✅ 核心初始化完成', type: 'ok' },
+    { text: '⏳ 正在掃描硬體介面...', type: 'battle' },
+    { text: '✅ 硬體掃描完成', type: 'ok', delay: 400 },
+    { text: '--- 正在安裝核心依賴 ---', type: 'header' },
+    { func: 'installDependencies' },
+    { text: '--- 正在執行系統預檢 ---', type: 'header' },
+    { func: 'checkDiskSpace' },
+    { text: '⏳ 啟動 FastAPI 引擎...', type: 'battle', delay: 400 },
+    { text: '✅ WebSocket 頻道 (/ws/logs) 已建立', type: 'ok' },
+    { text: '✅ 引擎已上線: http://0.0.0.0:8000', type: 'ok', delay: 600 },
+    { text: '\n<span class="ok">✨ 系統啟動完成，歡迎指揮官。</span>', type: 'raw', isFinal: true },
+];
+
+// ==================================================================
+// 核心渲染邏輯
+// ==================================================================
+const bootScreen = document.getElementById('boot-screen');
+const dashboard = document.getElementById('dashboard');
+const topPanel = {
+    // 【v16.1 更新】改為新的進度條元素
+    cpuProgressBar: document.getElementById('cpu-progress-bar'),
+    cpuPercentageText: document.getElementById('cpu-percentage'),
+    ramProgressBar: document.getElementById('ram-progress-bar'),
+    ramPercentageText: document.getElementById('ram-percentage'),
+    services: document.getElementById('service-status')
+};
+const mainStreamContainer = document.getElementById('main-stream-container');
+const statusBar = document.getElementById('status-bar');
+let dashboardInterval;
+
+async function runBootSequence() {
+    for (const step of bootSequence) {
+        if (step.func) {
+            await window[step.func]();
+        } else {
+            const line = document.createElement('pre');
+            line.innerHTML = `<span class="${step.type || ''}">${step.text}</span>`;
+            bootScreen.appendChild(line);
+        }
+        bootScreen.scrollTop = bootScreen.scrollHeight;
+        if(step.delay) await new Promise(resolve => setTimeout(resolve, step.delay));
+        else await new Promise(resolve => setTimeout(resolve, config.bootDelay));
+    }
+    setTimeout(startDashboard, 800);
+}
+
+async function installDependencies() {
+    const deps = [
+        { name: 'fastapi', size: '1.2MB' },
+        { name: 'uvicorn', size: '0.8MB' },
+        { name: 'websockets', size: '0.5MB' },
+        { name: 'psutil', size: '0.3MB' }
+    ];
+    for (const dep of deps) {
+        const line = document.createElement('div');
+        line.className = 'progress-bar-container';
+        const text = document.createElement('span');
+        text.className = 'label'; // 新增 class 以便對齊
+        text.textContent = `⏳ 安裝中: ${dep.name.padEnd(12, ' ')}`;
+        const progressBar = document.createElement('pre');
+        progressBar.className = 'dim';
+        line.appendChild(text);
+        line.appendChild(progressBar);
+        bootScreen.appendChild(line);
+
+        await new Promise(resolve => {
+            let p = 0;
+            const pInterval = setInterval(() => {
+                p += 10;
+                // 使用現代進度條樣式，移除點點背景
+                const filled = '█'.repeat(p / 10);
+                const empty = ' '.repeat(10 - (p / 10)); // 使用空格而不是░
+                progressBar.textContent = `[${filled}${empty}] ${p}% (${dep.size})`;
+                if (p >= 100) {
+                    clearInterval(pInterval);
+                    text.innerHTML = `✅ <span class="ok">已安裝: ${dep.name.padEnd(12, ' ')}</span>`;
+                    resolve();
+                }
+            }, 50);
+        });
+    }
+}
+
+function createDataTable(title, rows) {
+    const table = document.createElement('div');
+    table.className = 'data-stream-table';
+    let content = `<div class="ds-row ds-header"><div class="ds-cell">${title}</div></div>`;
+    content += `<div class="ds-row ds-separator"><div class="ds-cell"></div></div>`;
+    rows.forEach(rowData => {
+        content += `<div class="ds-row">`;
+        rowData.forEach(cellData => {
+            content += `<div class="ds-cell">${cellData}</div>`;
+        });
+        content += `</div>`;
+    });
+    table.innerHTML = content;
+    return table;
+}
+
+function checkDiskSpace() {
+    const availableSpace = config.disk.total - config.disk.used;
+    const requiredSpace = config.aiPackage.size;
+    const hasEnoughSpace = availableSpace >= requiredSpace;
+
+    const rows = [
+        ['總空間', ':', `${config.disk.total.toFixed(1)} GB`],
+        ['已使用', ':', `${config.disk.used.toFixed(1)} GB`],
+        ['剩餘空間', ':', `<span class="highlight">${availableSpace.toFixed(1)} GB</span>`],
+        ['套件需求', ':', `${requiredSpace.toFixed(1)} GB (${config.aiPackage.name})`],
+        ['狀態', ':', hasEnoughSpace ? `<span class="ok">✅ 空間充足</span>` : `<span class="error">❌ 空間不足</span>`]
+    ];
+
+    const table = createDataTable('🛡️ 大型套件磁碟空間預檢報告', rows);
+    bootScreen.appendChild(table);
+}
+
+function startDashboard() {
+    bootScreen.classList.add('hidden');
+    dashboard.classList.remove('hidden');
+    updateDashboard();
+    if (dashboardInterval) clearInterval(dashboardInterval);
+    dashboardInterval = setInterval(updateDashboard, config.dashboardUpdate);
+}
+
+function updateDashboard() {
+    simData.cpu += (Math.random() - 0.5) * 5;
+    simData.cpu = Math.max(5, Math.min(95, simData.cpu));
+    simData.ram += (Math.random() - 0.5) * 3;
+    simData.ram = Math.max(10, Math.min(90, simData.ram));
+    if (Math.random() < 0.1) {
+        const service = simData.services[Math.floor(Math.random() * simData.services.length)];
+        service.status = ['ok', 'warn', 'error'][Math.floor(Math.random() * 3)];
+    }
+    if (Math.random() < 0.1) {
+        addSecurityScanLog();
+    } else {
+        addNewLog();
+    }
+
+    renderTopPanel();
+    renderStatusBar();
+}
+
+// 【v16.1 更新】renderTopPanel 函數以控制新的 CSS 進度條
+function renderTopPanel() {
+    // 更新 CPU 進度條
+    topPanel.cpuProgressBar.style.width = `${simData.cpu}%`;
+    topPanel.cpuPercentageText.textContent = `${simData.cpu.toFixed(1)}%`;
+
+    // 更新 RAM 進度條
+    topPanel.ramProgressBar.style.width = `${simData.ram}%`;
+    topPanel.ramPercentageText.textContent = `${simData.ram.toFixed(1)}%`;
+
+    const statusIcons = { ok: '✅', warn: '⚠️', error: '❌' };
+    let servicesHtml = '';
+    simData.services.forEach(s => {
+        servicesHtml += `<div class="service-item"><span class="service-icon">${statusIcons[s.status]}</span><span class="${s.status}">${s.name}</span></div>`;
+    });
+    topPanel.services.innerHTML = servicesHtml;
+}
+
+function renderStatusBar() {
+    const cpuText = `CPU: ${simData.cpu.toFixed(1)}%`;
+    const ramText = `RAM: ${simData.ram.toFixed(1)}%`;
+    const isOk = simData.services.every(s => s.status === 'ok');
+    const systemStatus = isOk ? '<span class="ok">🟢 系統狀態正常</span>' : '<span class="error">🔴 系統偵測到異常</span>';
+    const currentTime = new Date().toLocaleTimeString('zh-TW', { hour12: false });
+    
+    statusBar.innerHTML = `
+        <div class="status-group"><span>${cpuText}</span><span>${ramText}</span></div>
+        <div>${systemStatus}</div>
+        <div class="dim">${currentTime}</div>
+    `;
+}
+
+// 【v14.0 核心修改】調整 addStreamItem 函數以支援不同內容區塊，並移除編號
+function addStreamItem(icon, level, levelClass, messageContent) {
+    const timestamp = new Date().toLocaleTimeString('en-GB');
+    const streamItem = document.createElement('div');
+    streamItem.className = 'stream-item';
+    
+    // 元數據（圖標、時間戳、等級）部分始終存在
+    const metaHTML = `
+        <div class="stream-meta">
+            <span class="stream-icon">${icon}</span>
+            <span class="stream-ts">[${timestamp}]</span> 
+            <span class="stream-level ${levelClass}">[${level.toUpperCase()}]</span>
+        </div>`;
+    streamItem.innerHTML = metaHTML; // 先將元數據加入 stream-item
+
+    if (typeof messageContent === 'string') {
+        // 如果是普通文字日誌，則創建一個帶有縮進的內容區塊
+        const textContentDiv = document.createElement('div');
+        textContentDiv.className = 'stream-text-content'; // 使用新的文字內容 class
+        textContentDiv.innerHTML = `<span>${messageContent}</span>`;
+        streamItem.appendChild(textContentDiv);
+    } else {
+        // 如果是 DOM 節點（例如表格），則創建一個無縮進的獨立區塊內容容器
+        const blockContentDiv = document.createElement('div');
+        blockContentDiv.className = 'stream-block-content'; // 使用新的區塊內容 class
+        blockContentDiv.appendChild(messageContent); // 直接將數據塊（表格）添加到這個容器
+        streamItem.appendChild(blockContentDiv);
+    }
+
+    mainStreamContainer.prepend(streamItem);
+    // 限制日誌條目數量
+    while (mainStreamContainer.children.length > config.maxStreamLines) {
+        mainStreamContainer.lastChild.remove();
+    }
+}
+
+function addNewLog() {
+    const logLevels = ['info', 'info', 'info', 'warn', 'battle', 'error'];
+    const logMessages = {
+        info: ['使用者介面輪詢', '檢查核心服務狀態', '資料庫閒置連線清理', '系統資源分配優化', '網路連線狀態監測'],
+        warn: ['CPU 負載接近閾值', '記憶體快取命中率下降', '儲存空間碎片化警告', '外部服務響應延遲'],
+        battle: ['接收到新的 API 請求', '正在處理背景任務', '資料庫寫入操作', 'AI 模型推斷中'],
+        error: ['無法連接到外部 API', '資料庫查詢超時', '檔案系統錯誤', '服務啟動失敗']
+    };
+    const logIcons = { info: '✨', warn: '⚠️', battle: '⚡', error: '🔴' };
+    const level = logLevels[Math.floor(Math.random() * logLevels.length)];
+    // 修正錯誤：將 logLevels[level].length 改為 logMessages[level].length
+    const message = logMessages[level][Math.floor(Math.random() * logMessages[level].length)]; 
+    addStreamItem(logIcons[level], level, level, message);
+}
+
+function addSecurityScanLog() {
+    const rows = [
+        ['防火牆規則', ':', `<span class="ok">✅ 通過</span>`, '35 條規則已載入'],
+        ['對外開放埠號', ':', `<span class="warn">⚠️ 警告</span>`, '發現非標準埠號 8080'],
+        ['核心檔案完整性', ':', `<span class="ok">✅ 正常</span>`, 'SHA256 校驗一致'],
+        ['使用者存取權限', ':', `<span class="ok">✅ 正常</span>`, '未發現異常權限']
+    ];
+    const table = createDataTable('🔑 安全性掃描數據流', rows);
+    addStreamItem('🛡️', 'SECURITY', 'warn', table);
+}
+
+runBootSequence();
+
+</script>
+</body>
+</html>
