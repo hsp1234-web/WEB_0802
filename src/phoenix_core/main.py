@@ -5,12 +5,13 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 import os
+import asyncio
 
 from .kernel.settings import settings
-# 思路框架: 導入我們新建立的註冊中心中的 registered_routers 列表。
 from .kernel.registry import registered_routers
-# 導入我們自己的 modules 套件
 from . import modules
+from .background.tasks import periodic_heartbeat
+from .database import db_manager
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -18,10 +19,6 @@ app = FastAPI(
     description="一個採用模組化單體架構的高效能後端服務。",
 )
 
-# --- 自動模組加載 ---
-# 思路框架: 這段代碼會自動掃描 `phoenix_core.modules` 套件下的所有子模組。
-#           無論未來新增多少模組，只要放在該目錄下，都會被自動導入。
-#           導入模組時，其 __init__.py 中的註冊碼就會執行。
 def discover_and_load_modules():
     print("--- 開始自動探索模組 ---")
     module_path = modules.__path__
@@ -31,11 +28,6 @@ def discover_and_load_modules():
         importlib.import_module(name)
     print("--- 所有模組探索完畢 ---")
 
-# --- 掛載路由 ---
-import asyncio
-from .background.tasks import periodic_heartbeat
-
-# 思路框架: 在應用啟動時，先執行模組探索，然後將所有註冊的路由掛載到主應用上。
 @app.on_event("startup")
 async def startup_event():
     discover_and_load_modules()
@@ -47,12 +39,17 @@ async def startup_event():
     # 啟動背景心跳任務
     asyncio.create_task(periodic_heartbeat())
 
+    # 在啟動時寫入一些測試日誌，以供 debug_ALL.py 驗證
+    print("--- 寫入啟動日誌以供參數驗證 ---")
+    db_manager.write_log("INFO", "這是一條 INFO 日誌")
+    db_manager.write_log("ERROR", "這是一條 ERROR 日誌")
+    db_manager.write_log("BATTLE", "這是一條 BATTLE 日誌")
+    db_manager.write_log("LOG_SHELL", "這是一條 LOG_SHELL 日誌")
+    db_manager.write_log("CMD", "這是一條 CMD 日誌")
+    db_manager.write_log("SUCCESS", "這是一條 SUCCESS 日誌")
+    db_manager.write_log("CRITICAL", "這是一條 CRITICAL 日誌")
 
-# --- 基礎 API 端點 ---
-# 獲取專案根目錄 (假設 main.py 在 src/phoenix_core/ 內)
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-# 掛載根目錄為靜態文件夾，這樣 HTML 裡面的相對路徑 (如 CSS/JS) 才能正確載入
 app.mount("/static", StaticFiles(directory=PROJECT_ROOT), name="static")
 
 @app.get("/", response_class=FileResponse, tags=["系統 (System)"])

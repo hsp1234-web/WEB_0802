@@ -1,3 +1,4 @@
+#@title 📊 鳳凰之心 - 互動式報告儀表板
 # -*- coding: utf-8 -*-
 # ╔══════════════════════════════════════════════════════════════════╗
 # ║                                                                      ║
@@ -101,8 +102,8 @@ def on_generate_clicked(b):
 
             final_html += f"""
             <details open style="border: 1px solid #ddd; padding: 10px; margin-top: 10px; border-radius: 5px; background: #fff;">
-                <summary style="cursor: pointer; font-weight: bold; font-size: 1.1em;">{html.escape(title)}</summary>
-                <pre style="background-color: #f9f9f9; padding: 10px; border-radius: 5px; margin-top: 8px;">{escaped_report_body}</pre>
+                <summary style="cursor: pointer; font-weight: bold; font-size: 1.1em; padding: 5px; background-color: #f0f0f0; border-radius: 3px;">{html.escape(title)}</summary>
+                <pre style="background-color: transparent; padding: 10px; border-radius: 5px; margin-top: 8px; white-space: pre-wrap; word-wrap: break-word;">{escaped_report_body}</pre>
             </details>
             """
 

@@ -4,6 +4,7 @@ import threading
 from pathlib import Path
 from datetime import datetime
 import pytz
+from .kernel.settings import settings
 
 class DatabaseManager:
     """
@@ -98,15 +99,17 @@ class DatabaseManager:
 
     def write_log(self, level: str, message: str, source: str = "backend"):
         """
-        寫入一條日誌到 logs 表。
+        根據設定中的日誌等級，有條件地寫入一條日誌到 logs 表。
         """
-        timestamp = datetime.now(pytz.utc).isoformat()
-        with self.get_connection() as conn:
-            conn.execute(
-                "INSERT INTO logs (timestamp, level, message, source) VALUES (?, ?, ?, ?)",
-                (timestamp, level, message, source)
-            )
-            conn.commit()
+        # 檢查該日誌等級是否被啟用。getattr 的第三個參數是預設值。
+        if getattr(settings.LOG_SETTINGS, level.upper(), True):
+            timestamp = datetime.now(pytz.utc).isoformat()
+            with self.get_connection() as conn:
+                conn.execute(
+                    "INSERT INTO logs (timestamp, level, message, source) VALUES (?, ?, ?, ?)",
+                    (timestamp, level, message, source)
+                )
+                conn.commit()
 
     def write_hardware_stat(self, cpu_usage: float, memory_usage: float, disk_usage: float, gpu_temperature: float):
         """
