@@ -12,7 +12,7 @@
 # ║                                                                      ║
 # ╚══════════════════════════════════════════════════════════════════╝
 
-#@title 🐦‍🔥 鳳凰之心 V60 作戰指揮中心 { vertical-output: true, display-mode: "form" }
+#@title 🐦‍🔥 鳳凰之心 V61 作戰指揮中心 { vertical-output: true, display-mode: "form" }
 #@markdown ---
 #@markdown ### **Part 1: 專案與環境設定**
 #@markdown > **設定 Git 倉庫、分支或標籤，以及專案資料夾。**
@@ -149,42 +149,93 @@ class DisplayManager:
             return False
 
     def _render_rich_ui(self):
-        # Dynamically import rich components here
         from rich.table import Table
         from rich.panel import Panel
         from rich.spinner import Spinner
+        from rich.text import Text
         from rich import box
+        from rich.align import Align
 
-        # --- Main Layout Table ---
-        layout_table = Table.grid(expand=True)
-        layout_table.add_column()
+        # --- Main Layout Grid ---
+        layout = Table.grid(expand=True)
+        layout.add_row(Panel("🐦‍🔥 鳳凰之心 V61 作戰指揮中心 🐦‍🔥", style="bold white", border_style="white", box=box.SQUARE))
 
-        # --- Header ---
-        header = Panel("🐦‍🔥 鳳凰之心 V60 作戰指揮中心 🐦‍🔥", style="bold bright_magenta", border_style="magenta")
-        layout_table.add_row(header)
-
-        # --- Log Panel ---
-        log_table = Table(box=None, show_header=False, pad_edge=False)
-        log_table.add_column("Time", style="dim cyan", width=8)
-        log_table.add_column("Level", style="bold", width=10)
-        log_table.add_column("Message")
+        # --- Log Panel (Block 2) ---
+        log_table = Table(box=None, show_header=False, pad_edge=False, padding=(0, 1))
+        log_table.add_column("Time", style="white", width=9)
+        log_table.add_column("Level", style="white", width=12) # Fixed width for alignment
+        log_table.add_column("Message", style="white", no_wrap=False)
 
         level_colors = {"SUCCESS": "green", "INFO": "cyan", "WARN": "yellow", "ERROR": "red", "CRITICAL": "bold red", "BATTLE": "magenta", "DEBUG": "dim"}
         logs_to_display = self._log_manager.get_display_logs()
         for log in logs_to_display:
-            ts = log['timestamp'].strftime('%H:%M:%S')
-            level = log['level']
-            color = level_colors.get(level, "white")
-            log_table.add_row(f"[{ts}]", f"[{color}]{level:^8}[/{color}]", log['message'])
+            ts = f"[{log['timestamp'].strftime('%H:%M:%S')}]"
+            level_text = log['level']
+            color = level_colors.get(level_text, "white")
 
-        layout_table.add_row(Panel(log_table, title="[dim]日誌[/dim]", border_style="blue"))
+            # Create a Text object for centered alignment
+            level_renderable = Align.center(Text.from_markup(f"[white]][[/white][{color}]{level_text}[/{color}][white]][[/white]"), vertical="middle")
+            log_table.add_row(ts, level_renderable, log['message'])
 
-        # --- URL Panel ---
+        layout.add_row(Panel(log_table, title="即時日誌", title_align="left", border_style="white", box=box.SQUARE))
+
+        # --- Status Bar (Block 3) ---
+        if not self.psutil_module:
+            try:
+                import psutil
+                self.psutil_module = psutil
+            except ImportError:
+                pass
+
+        cpu_usage = f"{self.psutil_module.cpu_percent():.1f}%" if self.psutil_module else "N/A"
+        ram_usage = f"{self.psutil_module.virtual_memory().percent:.1f}%" if self.psutil_module else "N/A"
+
+        elapsed_time = time.monotonic() - self._stats["start_time_monotonic"]
+        minutes, seconds = divmod(elapsed_time, 60)
+        time_str = f"{int(minutes):02d}分{int(seconds):02d}秒"
+
+        status = self._stats.get('status', '初始化...')
+        status_text = Text(f" ⏱️ 執行時間: {time_str} | 💻 CPU: {cpu_usage} | 🧠 RAM: {ram_usage} | 🔥 狀態: ", style="white")
+
+        if status == "安裝額外套件...":
+            status_text.append(Spinner("dots", text="正在安裝額外套件..."))
+        else:
+            status_text.append(status)
+
+        layout.add_row(Panel(status_text, border_style="white", box=box.SQUARE))
+
+        # --- URL Panel (Block 4) ---
         if self._stats.get('proxy_url'):
-            url_panel = Panel(f"[bold green]✅ 代理連結已生成:[/bold green]\n[link={self._stats['proxy_url']}]{self._stats['proxy_url']}[/link]", border_style="green")
-            layout_table.add_row(url_panel)
+            link_text = Align.center("👉 點此開啟互動操作介面 (新分頁) 👈", vertical="middle")
+            link_panel = Panel(Text.from_markup(f"[link={self._stats['proxy_url']}]{link_text}[/link]"), box=box.SQUARE, border_style="green", height=5)
+            final_panel = Panel(link_panel, title="✅ 系統就緒 - 開啟作戰中心 ✅", title_align="center", border_style="white", box=box.SQUARE)
+            layout.add_row(final_panel)
 
-        # --- Status Footer ---
+        return layout
+
+    def _render_plain_text_ui(self):
+        # This is the fallback UI if rich is not available.
+        # It mimics the clean, aligned layout of the rich version.
+        output_buffer = []
+
+        # Block 1: Header
+        output_buffer.append("┌" + "─"*78 + "┐")
+        output_buffer.append(f"│{'🐦‍🔥 鳳凰之心 V61 作戰指揮中心 🐦‍🔥'.center(74)}│")
+        output_buffer.append("└" + "─"*78 + "┘")
+
+        # Block 2: Logs
+        output_buffer.append("┌─ 即時日誌 " + "─"*67 + "┐")
+        logs_to_display = self._log_manager.get_display_logs()
+        for log in logs_to_display:
+            ts = f"[{log['timestamp'].strftime('%H:%M:%S')}]"
+            level = f"[{log['level']}]"
+            # Pad the level to a fixed width for alignment
+            padded_level = f"{level:^12}"
+            message = f"│ {ts:<9} {padded_level} {log['message']}"
+            output_buffer.append(message)
+        output_buffer.append("└" + "─"*78 + "┘")
+
+        # Block 3: Status
         if not self.psutil_module:
             try:
                 import psutil
@@ -192,54 +243,29 @@ class DisplayManager:
             except ImportError:
                 pass # Still not available
 
-        cpu_usage = f"{self.psutil_module.cpu_percent():5.1f}%" if self.psutil_module else "N/A"
-        ram_usage = f"{self.psutil_module.virtual_memory().percent:5.1f}%" if self.psutil_module else "N/A"
+        cpu_usage = f"{self.psutil_module.cpu_percent():.1f}%" if self.psutil_module else "N/A"
+        ram_usage = f"{self.psutil_module.virtual_memory().percent:.1f}%" if self.psutil_module else "N/A"
 
         elapsed_time = time.monotonic() - self._stats["start_time_monotonic"]
         minutes, seconds = divmod(elapsed_time, 60)
         time_str = f"{int(minutes):02d}分{int(seconds):02d}秒"
-
         status = self._stats.get('status', '初始化...')
-        status_line = f"⏱️ {time_str} | 💻 CPU: {cpu_usage} | 🧠 RAM: {ram_usage} | "
+        status_line = f" ⏱️ 執行時間: {time_str} | 💻 CPU: {cpu_usage} | 🧠 RAM: {ram_usage} | 🔥 狀態: {status}"
 
-        if status == "安裝額外套件...":
-            status_line += Spinner("dots", text=f"[bold yellow]{status}[/bold yellow]")
-        else:
-            status_line += f"🔥 狀態: {status}"
+        output_buffer.append("┌" + "─"*78 + "┐")
+        output_buffer.append(f"│{status_line.ljust(78)}│")
+        output_buffer.append("└" + "─"*78 + "┘")
 
-        layout_table.add_row(Panel(status_line, border_style="dim"))
-
-        return layout_table
-
-    def _render_plain_text_ui(self):
-        output_buffer = []
-        output_buffer.append("🐦‍🔥 鳳凰之心 V60 作戰指揮中心 🐦‍🔥 (純文字模式)")
-        output_buffer.append("="*60)
-
-        logs_to_display = self._log_manager.get_display_logs()
-        for log in logs_to_display:
-            ts = log['timestamp'].strftime('%H:%M:%S')
-            output_buffer.append(f"[{ts}] [{log['level']:^8}] {log['message']}")
-
-        output_buffer.append("="*60)
-
+        # Block 4: URL
         if self._stats.get('proxy_url'):
-            output_buffer.append(f"✅ 代理連結已生成: {self._stats['proxy_url']}")
-            output_buffer.append("="*60)
+            output_buffer.append("┌" + " ✅ 系統就緒 - 開啟作戰中心 ✅ ".center(76, "─") + "┐")
+            output_buffer.append("│" + " "*78 + "│")
+            link_text = "👉 點此開啟互動操作介面 (新分頁) 👈"
+            output_buffer.append(f"│{link_text.center(74)}│")
+            output_buffer.append(f"│{self._stats['proxy_url'].center(78)}│")
+            output_buffer.append("│" + " "*78 + "│")
+            output_buffer.append("└" + "─"*78 + "┘")
 
-        cpu = "N/A"
-        ram = "N/A"
-
-        elapsed_time = time.monotonic() - self._stats["start_time_monotonic"]
-        minutes, seconds = divmod(elapsed_time, 60)
-
-        status_line = (
-            f"⏱️ {int(minutes):02d}分{int(seconds):02d}秒 | "
-            f"💻 CPU: {cpu} | "
-            f"🧠 RAM: {ram} | "
-            f"🔥 狀態: {self._stats.get('status', '初始化...')}"
-        )
-        output_buffer.append(status_line)
         return "\n".join(output_buffer)
 
     def _run(self):
@@ -499,16 +525,55 @@ def main():
         if log_manager: log_manager.log("CRITICAL", error_msg)
         else: print(error_msg)
     finally:
+        # Stop the threads first
         if display_manager and display_manager._thread.is_alive():
             display_manager.stop()
         if server_manager:
             server_manager.stop()
 
+        # --- V61: Final Render and Post-execution controls ---
         end_time = datetime.now(pytz.timezone(TIMEZONE))
         if log_manager:
-            archive_reports(log_manager, start_time, end_time, shared_stats.get('status', '未知'))
+            # Do one last render to ensure the final state is on screen
+            clear_output()
+            if display_manager.rich_console:
+                 display_manager.rich_console.print(display_manager._render_rich_ui())
+            else:
+                 print(display_manager._render_plain_text_ui())
 
-        print("\n--- ✅ 所有任務完成，系統已安全關閉 ---")
+            print("\n" + "="*80)
+            print("--- ✅ 所有任務完成，系統已安全關閉 ---")
+
+            # Prepare data for copy buttons
+            import json
+            full_log_history = log_manager.get_full_history()
+
+            # We need a representation of the final screen output.
+            # Re-rendering the plain text version is a stable way to get this.
+            final_screen_text = display_manager._render_plain_text_ui()
+
+            # Escape strings for JavaScript
+            js_escaped_screen_text = json.dumps(final_screen_text)
+            js_escaped_full_logs = json.dumps(
+                "\\n".join([f"[{log['timestamp'].isoformat()}] [{log['level']}] {log['message']}" for log in full_log_history])
+            )
+
+            # Display HTML buttons with embedded JavaScript for copying
+            display(HTML(f"""
+                <script>
+                    function copyToClipboard(text) {{
+                        navigator.clipboard.writeText(text).then(function() {{
+                            console.log('Copying to clipboard was successful!');
+                        }}, function(err) {{
+                            console.error('Could not copy text: ', err);
+                        }});
+                    }}
+                </script>
+                <button onclick='copyToClipboard({js_escaped_screen_text})'>📋 複製上方儲存格輸出</button>
+                <button onclick='copyToClipboard({js_escaped_full_logs})'>📄 複製完整詳細日誌</button>
+            """))
+
+            archive_reports(log_manager, start_time, end_time, shared_stats.get('status', '未知'))
 
 if __name__ == "__main__":
     main()
