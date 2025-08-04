@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import os
 import sqlite3
 import threading
 from pathlib import Path
@@ -23,9 +24,17 @@ class DatabaseManager:
     def __init__(self, db_path: str = "state.db"):
         if hasattr(self, '_initialized') and self._initialized:
             return
-        self.db_path = Path(db_path)
+
+        # 優先從環境變數讀取資料庫路徑，以支援測試環境
+        db_path_override = os.environ.get("PHOENIX_DB_PATH")
+        self.db_path = Path(db_path_override) if db_path_override else Path(db_path)
+
         self.thread_local = threading.local()
         self._initialized = True
+
+        # 確保資料庫所在的目錄存在
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+
         self._initialize_database()
 
     def _initialize_database(self):

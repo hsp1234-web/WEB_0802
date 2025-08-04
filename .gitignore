@@ -67,3 +67,10 @@ bin/
 
 # Pytest 整合測試用的虛擬環境
 .pytest_venv/
+
+# 探測器 (Probe) 虛擬環境
+.venv_probe/
+.venv_legacy_probe/
+
+# 測試執行器 (Test Runner) 虛擬環境
+.venv_test_runner/

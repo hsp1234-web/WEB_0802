@@ -123,8 +123,10 @@ def live_server(request):
     config_path = tmp_test_dir / "config.json"
 
     # --- 啟動伺服器 ---
+    db_path = tmp_test_dir / "state.db"
     test_env = os.environ.copy()
     test_env["PHOENIX_CONFIG_PATH"] = str(config_path)
+    test_env["PHOENIX_DB_PATH"] = str(db_path)
     test_env["PYTHONPATH"] = str(PROJECT_ROOT)
 
     command = [
@@ -149,6 +151,36 @@ def live_server(request):
     if not is_ready:
         server_process.kill()
         pytest.fail(f"伺服器在埠號 {port} 上未能於 10 秒內啟動。")
+
+    # --- 填充測試資料庫 ---
+    db_path = tmp_test_dir / "state.db"
+    # 等待資料庫檔案被建立
+    for _ in range(10):
+        if db_path.exists():
+            break
+        time.sleep(0.2)
+
+    if not db_path.exists():
+        pytest.fail(f"測試資料庫 {db_path} 未能在 2 秒內被伺服器建立。")
+
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    log_data = [
+        (datetime.now(timezone.utc).isoformat(), 'INFO', 'TestSetup', '日誌過濾測試 - 資訊'),
+        (datetime.now(timezone.utc).isoformat(), 'SUCCESS', 'TestSetup', '日誌過濾測試 - 成功'),
+        (datetime.now(timezone.utc).isoformat(), 'ERROR', 'TestSetup', '日誌過濾測試 - 錯誤'),
+        (datetime.now(timezone.utc).isoformat(), 'BATTLE', 'TestSetup', '日誌過濾測試 - 戰鬥'),
+        (datetime.now(timezone.utc).isoformat(), 'CMD', 'TestSetup', '日誌過濾測試 - 命令'),
+        (datetime.now(timezone.utc).isoformat(), 'CRITICAL', 'TestSetup', '日誌過濾測試 - 嚴重'),
+        (datetime.now(timezone.utc).isoformat(), 'LOG_SHELL', 'TestSetup', '日誌過濾測試 - 殼層')
+    ]
+    cursor.executemany(
+        "INSERT INTO logs (timestamp, level, source, message) VALUES (?, ?, ?, ?)",
+        log_data
+    )
+    conn.commit()
+    conn.close()
+
 
     # --- 將伺服器資訊傳遞給測試 ---
     yield {"port": port, "config_path": config_path, "base_url": f"http://127.0.0.1:{port}"}

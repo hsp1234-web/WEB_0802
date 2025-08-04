@@ -81,37 +81,83 @@ def log_message(message):
     timestamp = datetime.now().strftime('%H:%M:%S')
     logs_deque.append(f"[{timestamp}] {message}")
 
-def background_worker():
+# --- 看門狗 (Watchdog) 設定 ---
+HEARTBEAT_TIMEOUT_SECONDS = 30  # 心跳超時閾值 (秒)
+HEARTBEAT_CHECK_INTERVAL_SECONDS = 10 # 檢查心跳的頻率 (秒)
+HEARTBEAT_DB_KEY = "last_heartbeat" # 資料庫中的心跳鍵名
+DB_FILENAME = "state.db" # 資料庫檔案名稱
+
+def get_db_connection(db_path):
+    """安全地獲取資料庫連接。需要延遲導入 sqlite3。"""
+    import sqlite3
     try:
-        log_message("準備專案環境...")
+        # isolation_level=None 啟用自動提交模式
+        # timeout 參數防止在資料庫被鎖定時出錯
+        return sqlite3.connect(db_path, isolation_level=None, timeout=5)
+    except sqlite3.Error as e:
+        log_message(f"❌ 無法連接到資料庫 {db_path}: {e}")
+        return None
+
+def get_last_heartbeat(db_conn):
+    """從資料庫讀取最後心跳時間。"""
+    import sqlite3
+    try:
+        cursor = db_conn.cursor()
+        # 使用 ? 作為佔位符來防止 SQL 注入
+        cursor.execute("SELECT value FROM status_updates WHERE key = ?", (HEARTBEAT_DB_KEY,))
+        row = cursor.fetchone()
+        if row:
+            # 返回 ISO 格式的時間字串
+            return row[0]
+    except sqlite3.Error as e:
+        # 如果 status_updates 表格還不存在，這可能會發生錯誤
+        log_message(f"🟡 讀取心跳時發生資料庫錯誤 (可能服務尚未完全啟動): {e}")
+    return None
+
+def background_worker():
+    """
+    此函式作為一個常駐的背景執行緒，執行以下任務：
+    1.  **一次性環境設置**：下載程式碼、建立 uv 虛擬環境、安裝依賴。
+    2.  **看門狗 (Watchdog) 監控**：在一個無限迴圈中，啟動並監控後端服務。
+        - 如果服務進程不存在或心跳超時，則終止該進程並重新啟動。
+    """
+    try:
+        # ======================================================================
+        # 1. 一次性環境設置 (One-Time Environment Setup)
+        # ======================================================================
+        log_message("▶️ [階段 1/2] 準備專案環境...")
         base_path = Path(".").resolve()
         project_path = base_path / PROJECT_FOLDER_NAME
 
         if FORCE_REPO_REFRESH and project_path.exists():
             shutil.rmtree(project_path)
-            log_message(f"✅ 舊資料夾已刪除: {project_path}")
+            log_message(f"🗑️ 舊資料夾已刪除: {project_path}")
 
-        log_message(f"正在從 Github 下載程式碼至 {project_path}...")
-        git_command = ["git", "clone", "--branch", "0.5.1", "--depth", "1", REPOSITORY_URL, str(project_path)]
-        subprocess.run(git_command, check=True, capture_output=True, text=True)
-        log_message("✅ 程式碼下載成功。")
+        if not project_path.exists():
+            log_message(f"⏳ 正在從 Github 下載程式碼至 {project_path}...")
+            git_command = ["git", "clone", "--branch", TARGET_BRANCH_OR_TAG, "--depth", "1", REPOSITORY_URL, str(project_path)]
+            subprocess.run(git_command, check=True, capture_output=True, text=True)
+            log_message("✅ 程式碼下載成功。")
+        else:
+            log_message("✅ 專案資料夾已存在，跳過下載。")
 
         if str(project_path) not in sys.path:
             sys.path.insert(0, str(project_path))
 
         venv_path = project_path / ".venv"
-        log_message(f"正在使用 'uv venv' 建立虛擬環境於 {venv_path}...")
-        # Assuming uv is installed globally in the sandbox
-        subprocess.run(["uv", "venv", str(venv_path)], check=True, capture_output=True, text=True)
-        log_message("✅ 虛擬環境建立成功。")
+        if not venv_path.exists():
+            log_message(f"⏳ 正在使用 'uv venv' 建立虛擬環境於 {venv_path}...")
+            subprocess.run(["uv", "venv", str(venv_path)], check=True, capture_output=True, text=True)
+            log_message("✅ 虛擬環境建立成功。")
+        else:
+            log_message("✅ 虛擬環境已存在，跳過建立。")
 
         venv_python = (venv_path / "bin" / "python").resolve()
-
         process_env = os.environ.copy()
         process_env["VIRTUAL_ENV"] = str(venv_path)
         process_env["PATH"] = f"{venv_path / 'bin'}:{process_env.get('PATH', '')}"
 
-        log_message("正在生成後端設定檔...")
+        log_message("⏳ 正在生成後端設定檔...")
         config_data = {"log_settings": {
             "BATTLE": SHOW_LOG_LEVEL_BATTLE, "SUCCESS": SHOW_LOG_LEVEL_SUCCESS,
             "INFO": SHOW_LOG_LEVEL_INFO, "CMD": SHOW_LOG_LEVEL_CMD,
@@ -121,25 +167,81 @@ def background_worker():
         config_file_path = project_path / "temp_config_for_runner.json"
         with open(config_file_path, "w", encoding="utf-8") as f:
             json.dump(config_data, f, indent=4)
-        log_message(f"✅ 後端設定檔已生成於 {config_file_path}")
+        log_message(f"✅ 後端設定檔已生成。")
         process_env["PHOENIX_CONFIG_PATH"] = str(config_file_path.resolve())
 
-        log_message("正在使用 uv 安裝核心依賴...")
+        log_message("⏳ 正在使用 uv 安裝/同步核心依賴...")
         core_requirements_path = project_path / "requirements/requirements-core.txt"
-        # Use the --python flag to be explicit, even though auto-discovery should work.
-        uv_install_command = ["uv", "pip", "install", "--python", str(venv_python), "-r", str(core_requirements_path)]
-
+        uv_install_command = ["uv", "pip", "sync", "--python", str(venv_python), str(core_requirements_path)]
         subprocess.run(uv_install_command, check=True, env=process_env, capture_output=True, text=True)
         log_message("✅ 核心依賴安裝完成。")
 
-        log_message(f"🔥 正在啟動後端核心服務於埠 {API_PORT}...")
-        log_file = project_path / "api_server.log"
-        uvicorn_command = [str(venv_python), "-m", "uvicorn", "src.phoenix_core.main:app", "--host", "0.0.0.0", "--port", str(API_PORT)]
-        subprocess.Popen(uvicorn_command, stdout=open(log_file, "w"), stderr=subprocess.STDOUT, cwd=str(project_path), env=process_env)
-        log_message("✅ 後端核心服務已在背景啟動。")
+        db_path = project_path / DB_FILENAME
+
+        log_message("✅ 環境準備完成。")
+
+        # ======================================================================
+        # 2. 看門狗監控迴圈 (Watchdog Monitoring Loop)
+        # ======================================================================
+        log_message(f"▶️ [階段 2/2] 進入看門狗監控模式...")
+
+        server_process = None
+
+        while True:
+            log_message(f"🔥 正在啟動後端核心服務 (埠 {API_PORT})...")
+            log_file = project_path / "api_server.log"
+            uvicorn_command = [str(venv_python), "-m", "uvicorn", "src.phoenix_core.main:app", "--host", "0.0.0.0", "--port", str(API_PORT)]
+
+            # 使用 Popen 啟動非阻塞子進程
+            server_process = subprocess.Popen(
+                uvicorn_command,
+                stdout=open(log_file, "w"),
+                stderr=subprocess.STDOUT,
+                cwd=str(project_path),
+                env=process_env
+            )
+            log_message(f"✅ 後端服務已啟動，進程 PID: {server_process.pid}。")
+            log_message("⏳ 觀察期...等待服務回報初始心跳。")
+            time.sleep(HEARTBEAT_CHECK_INTERVAL_SECONDS) # 給服務一點啟動時間
+
+            # 內部監控迴圈
+            while True:
+                # 檢查進程是否還在運行
+                if server_process.poll() is not None:
+                    log_message(f"🔴 偵測到後端服務意外終止 (返回碼: {server_process.returncode})。")
+                    break # 跳出內部迴圈以重啟
+
+                # 檢查心跳
+                db_conn = get_db_connection(db_path)
+                if db_conn:
+                    heartbeat_str = get_last_heartbeat(db_conn)
+                    db_conn.close()
+
+                    if heartbeat_str:
+                        last_heartbeat_time = datetime.fromisoformat(heartbeat_str)
+                        time_since_heartbeat = (datetime.now(last_heartbeat_time.tzinfo) - last_heartbeat_time).total_seconds()
+
+                        log_message(f"❤️  心跳正常 (最後更新於 {int(time_since_heartbeat)} 秒前)。")
+
+                        if time_since_heartbeat > HEARTBEAT_TIMEOUT_SECONDS:
+                            log_message(f"🔴 心跳超時！(超過 {HEARTBEAT_TIMEOUT_SECONDS} 秒未更新)。服務可能已卡死。")
+                            break # 跳出內部迴圈以重啟
+                    else:
+                        log_message("🟡 未能讀取到心跳數據。")
+                else:
+                    log_message("🔴 無法連接資料庫，無法檢查心跳。")
+
+                time.sleep(HEARTBEAT_CHECK_INTERVAL_SECONDS)
+
+            # 如果跳出了內部迴圈，意味著需要重啟服務
+            log_message(f"♻️ 準備重啟服務...首先終止舊進程 (PID: {server_process.pid})。")
+            server_process.kill() # 確保卡死的進程被終止
+            server_process.wait() # 等待進程完全終止
+            log_message("✅ 舊進程已終止。將在 5 秒後重啟...")
+            time.sleep(5)
 
     except Exception as e:
-        log_message(f"❌ 背景任務發生致命錯誤: {e}")
+        log_message(f"❌ 背景看門狗任務發生致命錯誤: {e}")
 
 def render_dashboard_html():
     refresh_interval_ms = int(REFRESH_RATE_SECONDS * 1000)
