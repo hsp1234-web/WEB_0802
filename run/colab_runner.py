@@ -158,32 +158,53 @@ def background_worker():
         log_message(f"❌ 背景任務發生致命錯誤: {e}")
 
 def render_dashboard_html():
-    """生成儀表板的 HTML 和 JS"""
+    """生成包含動態更新邏輯的儀表板 HTML"""
     refresh_interval_ms = int(REFRESH_RATE_SECONDS * 1000)
 
-    # 注意：所有 CSS 和 JS 中的大括號都需要加倍以進行轉義
-    return f"""
+    # 來自 V24 的 CSS，進行了微調以適應 V35 的架構
+    css = f"""
     <style>
         body {{ background-color: transparent; color: var(--colab-primary-text-color, #e0e0e0); font-family: 'Noto Sans TC', 'Fira Code', monospace; }}
         .container {{ padding: 1em; }}
-        .panel {{ border: 1px solid var(--colab-border-color, #444); margin-bottom: 1em; border-radius: 8px; overflow: hidden;}}
+        .panel {{ border: 1px solid var(--colab-border-color, #444); margin-bottom: 1em; border-radius: 8px; overflow: hidden; }}
         .title {{ font-weight: bold; padding: 0.5em 1em; border-bottom: 1px solid var(--colab-border-color, #444); background-color: var(--colab-section-header-color, #2a2a2a);}}
         .content {{ padding: 1em; }}
-        .grid {{ display: grid; grid-template-columns: 1fr; gap: 1em; md:grid-template-columns: 1fr 2fr; }}
-        .log-panel {{ height: {LOG_DISPLAY_LINES * 20}px; overflow-y: auto; background-color: var(--colab-secondary-surface-color, #2d2d2d); font-size: 0.9em; white-space: pre-wrap; word-break: break-all;}}
+        .grid {{ display: grid; grid-template-columns: 1fr 2fr; gap: 1em; }}
+        .log-panel {{ height: {LOG_DISPLAY_LINES * 20}px; overflow-y: auto; background-color: var(--colab-secondary-surface-color, #2d2d2d); font-size: 0.9em; white-space: pre-wrap; word-break: break-all; border-radius: 4px; }}
+        .footer {{ text-align: center; padding-top: 1em; border-top: 1px solid #444; font-size: 0.8em; color: #888;}}
+        table {{ width: 100%; border-collapse: collapse; }}
+        td {{ padding: 4px 8px; }}
         .log-entry {{ margin-bottom: 5px; }}
         .log-level-BATTLE {{ color: #82aaff; }}
         .log-level-SUCCESS {{ color: #c3e88d; }}
         .log-level-ERROR, .log-level-CRITICAL {{ color: #ff5370; }}
         .log-level-INFO {{ color: #89ddff; }}
         .log-level-WARN, .log-level-LOG_SHELL, .log-level-CMD {{ color: #ffcb6b; }}
+        #entry-point-panel {{ display: none; grid-column: 1 / -1; text-align: center; padding: 1em; background-color: #2d2d2d; border: 1px solid #50fa7b; border-radius: 8px; }}
+        #entry-point-button {{ display: inline-block; padding: 10px 20px; font-size: 1.2em; font-weight: bold; color: #1a1a1a; background-color: #50fa7b; border: none; border-radius: 5px; text-decoration: none; cursor: pointer; }}
+        #copy-status-button {{ margin-top: 10px; padding: 8px 15px; font-size: 1em; background-color: #3498db; color: white; border: none; border-radius: 5px; cursor: pointer; }}
     </style>
+    """
+
+    # 來自 V24 的 HTML 結構
+    html_body = """
     <div class="container">
         <div class="grid">
             <div>
                 <div class="panel">
-                    <div class="title">📊 系統狀態</div>
-                    <div class="content" id="status-container">等待後端回報...</div>
+                    <div class="title">📊 微服務狀態</div>
+                    <div class="content"><table id="app-status-table"><tbody><tr><td>等待後端回報...</td></tr></tbody></table></div>
+                </div>
+                <div class="panel">
+                    <div class="title">⚙️ 系統資源</div>
+                    <div class="content">
+                        <table>
+                            <tbody>
+                                <tr><td>CPU</td><td id="cpu-usage">--%</td></tr>
+                                <tr><td>RAM</td><td id="ram-usage">--%</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
             <div class="panel">
@@ -191,27 +212,98 @@ def render_dashboard_html():
                 <div class="content log-panel" id="log-container">日誌初始化中...</div>
             </div>
         </div>
+        <div id="entry-point-panel">
+             <a id="entry-point-button" href="#" target="_blank">🚀 進入主控台</a>
+             <p style="font-size:0.9em; margin-top: 8px;">主儀表板已就緒，點擊上方按鈕進入操作介面。</p>
+        </div>
+        <div class="footer" id="footer-status">指揮中心前端任務: 初始化中...</div>
+        <div style="text-align: center; margin-top: 1em;">
+            <button id="copy-status-button">📋 複製純文字狀態</button>
+        </div>
     </div>
+    """
+
+    # 融合 V24 和 V35 的 JavaScript
+    javascript = f"""
     <script>
         const apiUrl = 'http://localhost:{API_PORT}/api/v1/status/dashboard';
         const logContainer = document.getElementById('log-container');
-        const statusContainer = document.getElementById('status-container');
+        const appStatusTable = document.getElementById('app-status-table').querySelector('tbody');
+        const cpuUsageTd = document.getElementById('cpu-usage');
+        const ramUsageTd = document.getElementById('ram-usage');
+        const footerStatus = document.getElementById('footer-status');
+        const entryPointPanel = document.getElementById('entry-point-panel');
+        const entryPointButton = document.getElementById('entry-point-button');
+        const copyStatusButton = document.getElementById('copy-status-button');
+        let currentStatusData = {{}};
+
+        const statusMap = {{
+            "running": "🟢 運行中", "pending": "🟡 等待中",
+            "installing": "🛠️ 安裝中", "starting": "🚀 啟動中",
+            "failed": "🔴 失敗", "stopped": "⚪️ 已停止", "unknown": "❓ 未知"
+        }};
+
+        function formatStatusForCopy(data) {{
+            if (!data || Object.keys(data).length === 0) return "狀態資訊不完整，無法生成報告。";
+            let text = `鳳凰之心狀態報告 (即時)\\n`;
+            text += `========================\\n`;
+            text += `核心階段: ${{data.current_stage || 'N/A'}}\\n`;
+            text += `CPU: ${{data.cpu_usage != null ? data.cpu_usage.toFixed(1) : 'N/A'}}%, RAM: ${{data.ram_usage != null ? data.ram_usage.toFixed(1) : 'N/A'}}%\\n\\n`;
+            text += `微服務狀態:\\n`;
+            if (data.apps_status && Object.keys(data.apps_status).length > 0) {{
+                 for (const [name, status] of Object.entries(data.apps_status)) {{
+                    text += `- ${{name}}: ${{statusMap[status] || status}}\\n`;
+                }}
+            }} else {{
+                text += `- 尚無服務狀態回報\\n`;
+            }}
+            text += `\\n最新日誌:\\n`;
+            if (data.logs && data.logs.length > 0) {{
+                const reversedLogs = [...data.logs].reverse();
+                reversedLogs.forEach(log => {{
+                    text += `[${{new Date(log.timestamp).toLocaleTimeString()}}] [${{log.level}}] ${{log.message}}\\n`;
+                }});
+            }} else {{
+                text += `尚無日誌紀錄\\n`;
+            }}
+            return text;
+        }}
+
+        function copyToClipboard(text) {{
+            const textarea = document.createElement('textarea');
+            textarea.value = text;
+            document.body.appendChild(textarea);
+            textarea.select();
+            try {{
+                document.execCommand('copy');
+                copyStatusButton.textContent = '✅ 已複製！';
+            }} catch (err) {{
+                copyStatusButton.textContent = '❌ 複製失敗';
+            }}
+            document.body.removeChild(textarea);
+            setTimeout(() => {{ copyStatusButton.textContent = '📋 複製純文字狀態'; }}, 2000);
+        }}
+
+        copyStatusButton.onclick = () => copyToClipboard(formatStatusForCopy(currentStatusData));
 
         function updateDashboard() {{
             fetch(apiUrl)
                 .then(response => {{
                     if (!response.ok) {{
-                        return; // 後端未就緒，靜默失敗
+                        footerStatus.textContent = `前端狀態: 後端服務尚未就緒... (HTTP ${{response.status}})`;
+                        return;
                     }}
                     return response.json();
                 }})
                 .then(data => {{
                     if (!data) return;
+                    currentStatusData = data;
 
                     // 更新日誌
                     let logEntries = '';
                     if (data.logs && data.logs.length > 0) {{
-                        data.logs.forEach(log => {{
+                        const reversedLogs = [...data.logs].reverse();
+                        reversedLogs.forEach(log => {{
                             const time = new Date(log.timestamp).toLocaleTimeString('en-GB');
                             const level = log.level.toUpperCase();
                             const message = log.message.replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -219,27 +311,44 @@ def render_dashboard_html():
                         }});
                     }}
                     logContainer.innerHTML = logEntries;
-                    logContainer.scrollTop = logContainer.scrollHeight;
+                    if(logContainer.innerHTML) logContainer.scrollTop = logContainer.scrollHeight;
 
-                    // 更新狀態
-                    let statusHtml = `<div><strong>核心階段:</strong> ${{data.current_stage}}</div>`;
-                    if (data.apps_status) {{
+                    // 更新微服務狀態
+                    let appRows = '';
+                    if (data.apps_status && Object.keys(data.apps_status).length > 0) {{
                         for (const [appName, status] of Object.entries(data.apps_status)) {{
-                            statusHtml += `<div><strong>${{appName}}:</strong> ${{status}}</div>`;
+                            const statusText = statusMap[status] || statusMap['unknown'];
+                            appRows += `<tr><td>${{appName}}</td><td>${{statusText}}</td></tr>`;
                         }}
+                    }} else {{
+                        appRows = '<tr><td>等待後端回報...</td></tr>';
                     }}
-                    statusContainer.innerHTML = statusHtml;
+                    appStatusTable.innerHTML = appRows;
+
+                    // 更新系統資源
+                    cpuUsageTd.textContent = data.cpu_usage != null ? `${{data.cpu_usage.toFixed(1)}}%` : '--%';
+                    ramUsageTd.textContent = data.ram_usage != null ? `${{data.ram_usage.toFixed(1)}}%` : '--%';
+
+                    // 更新頁腳和主控台入口
+                    footerStatus.textContent = `指揮中心後端任務: ${{data.current_stage || '所有服務運行中'}}`;
+                    if (data.action_url) {{
+                        entryPointPanel.style.display = 'block';
+                        entryPointButton.href = data.action_url;
+                    }} else {{
+                        entryPointPanel.style.display = 'none';
+                    }}
                 }})
                 .catch(error => {{
-                    // 忽略網路錯誤，因為服務可能正在啟動
+                    footerStatus.textContent = `前端狀態: 網路錯誤或後端無回應`;
+                    currentStatusData = {{ error: error.message }};
                 }});
         }}
 
-        // 啟動定時器
         setInterval(updateDashboard, {refresh_interval_ms});
-        updateDashboard(); // 立即執行一次
+        updateDashboard();
     </script>
     """
+    return css + html_body + javascript
 
 def main():
     """主執行函數"""
