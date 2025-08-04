@@ -1,19 +1,18 @@
 # -*- coding: utf-8 -*-
 # ╔══════════════════════════════════════════════════════════════════╗
 # ║                                                                      ║
-# ║    🚀 鳳凰之心 - V48 作戰指揮中心 (終極版)                         ║
+# ║    🚀 鳳凰之心 - V49 作戰指揮中心 (純文字終極版)                   ║
 # ║                                                                      ║
 # ╠══════════════════════════════════════════════════════════════════╣
 # ║                                                                      ║
-# ║ - V48 更新日誌:                                                      ║
-# ║   - **終極架構**: 引入 Log/Display/Server 管理器，實現完全模組化。 ║
-# ║   - **動態儀表板**: 整合日誌過濾、硬體監控與優雅日誌滾動。         ║
-# ║   - **智慧等待**: 實作基於日誌監聽的伺服器就緒等待機制。           ║
-# ║   - **報告歸檔**: 新增強大的、可配置的日誌與效能報告歸檔功能。     ║
+# ║ - V49 更新日誌:                                                      ║
+# ║   - **UI 重構**: 移除所有 HTML，回歸純文字與 ANSI 控制碼，解決閃爍。 ║
+# ║   - **pip 引導程序**: 修正因 `uv venv` 未包含 pip 導致的安裝失敗。   ║
+# ║   - **架構保留**: 維持 Log/Display/Server 管理器的模組化設計。     ║
 # ║                                                                      ║
 # ╚══════════════════════════════════════════════════════════════════╝
 
-#@title 💎 鳳凰之心 V48 作戰指揮中心 { vertical-output: true, display-mode: "form" }
+#@title 💎 鳳凰之心 V49 作戰指揮中心 (純文字模式) { vertical-output: true, display-mode: "form" }
 #@markdown ---
 #@markdown ### **Part 1: 專案與環境設定**
 #@markdown > **設定 Git 倉庫、分支或標籤，以及專案資料夾。**
@@ -87,11 +86,10 @@ import shutil
 import subprocess
 from pathlib import Path
 import time
-import json
 from datetime import datetime
 import threading
 from collections import deque
-from IPython.display import display, HTML, clear_output
+from IPython.display import clear_output
 from google.colab import output as colab_output
 
 # ==============================================================================
@@ -108,11 +106,7 @@ class LogManager:
 
     def log(self, level: str, message: str):
         with self._lock:
-            log_entry = {
-                "timestamp": datetime.now(self.timezone),
-                "level": level.upper(),
-                "message": str(message)
-            }
+            log_entry = {"timestamp": datetime.now(self.timezone), "level": level.upper(), "message": str(message)}
             self._log_deque.append(log_entry)
 
     def get_display_logs(self) -> list:
@@ -125,29 +119,27 @@ class LogManager:
             return list(self._log_deque)
 
 class DisplayManager:
-    """顯示管理器：在背景執行緒中負責繪製動態儀表板。"""
+    """顯示管理器：在背景執行緒中負責繪製純文字動態儀表板。"""
     def __init__(self, log_manager, stats_dict, refresh_rate):
         self._log_manager = log_manager
         self._stats = stats_dict
         self._refresh_rate = refresh_rate
         self._stop_event = threading.Event()
         self._thread = threading.Thread(target=self._run, daemon=True)
-        self.level_colors = {
-            "BATTLE": "#fdd663", "SUCCESS": "#81c995", "INFO": "#89b4f8",
-            "WARN": "#fdd663", "ERROR": "#f28b82", "CRITICAL": "#f28b82", "DEBUG": "#bdc1c6"
-        }
 
     def _run(self):
         while not self._stop_event.is_set():
             try:
                 clear_output(wait=True)
+                print("🚀 鳳凰之心 V49 作戰指揮中心")
+                print("="*60)
+
                 logs_to_display = self._log_manager.get_display_logs()
-                log_html = ""
                 for log in logs_to_display:
                     ts = log['timestamp'].strftime('%H:%M:%S')
-                    color = self.level_colors.get(log['level'], '#e8eaed')
-                    message_escaped = json.dumps(log['message'])[1:-1].replace('\\n', '<br>')
-                    log_html += f"<div style='color:{color}; font-family: monospace; font-size: 0.9em; margin: 1px 0;'>[{ts}] [{log['level']:<8}] {message_escaped}</div>"
+                    print(f"[{ts}] [{log['level']:<8}] {log['message']}")
+
+                print("="*60)
 
                 cpu = psutil.cpu_percent()
                 ram = psutil.virtual_memory().percent
@@ -160,27 +152,10 @@ class DisplayManager:
                     f"🧠 RAM: {ram:5.1f}% | "
                     f"🔥 狀態: {self._stats.get('status', '初始化...')}"
                 )
-
-                dashboard_html = f"""
-                <div style="background-color: #202124; color: #e8eaed; padding: 10px; border-radius: 5px; border: 1px solid #5f6368;">
-                    <h2 style='color: #89b4f8; margin-top: 0;'>🚀 鳳凰之心 V48 作戰指揮中心</h2>
-                    <hr style='border-color: #5f6368;'>
-                    <div id="log-panel" style="height: {LOG_DISPLAY_LINES * 18}px; overflow-y: scroll; border: 1px solid #3c4043; padding: 5px; background-color: #1a1a1a; scroll-behavior: smooth;">
-                        {log_html}
-                    </div>
-                    <hr style='border-color: #5f6368;'>
-                    <div style='font-family: monospace; color: #bdc1c6;'>{status_line}</div>
-                    <div id="proxy-link-container" style="margin-top: 10px;"></div>
-                </div>
-                <script>
-                    var logPanel = document.getElementById('log-panel');
-                    if (logPanel) {{ logPanel.scrollTop = logPanel.scrollHeight; }}
-                </script>
-                """
-                display(HTML(dashboard_html))
+                print(status_line, end='\r', flush=True)
                 time.sleep(self._refresh_rate)
             except Exception as e:
-                print(f"DisplayManager Error: {e}")
+                print(f"\nDisplayManager Error: {e}")
                 time.sleep(5)
 
     def start(self): self._thread.start()
@@ -200,29 +175,19 @@ class ServerManager:
         try:
             env_paths = self._setup_environment()
             if not env_paths or self._stop_event.is_set():
-                self._stats['status'] = "❌ 環境準備失敗"
-                return
+                self._stats['status'] = "❌ 環境準備失敗"; return
 
             self._stats['status'] = "🚀 正在啟動伺服器..."
             self._log_manager.log("BATTLE", "=== [2/2] 正在啟動後端伺服器 ===")
 
-            project_path = env_paths["project_path"]
-            venv_python = env_paths["venv_python"]
-
+            project_path, venv_python = env_paths["project_path"], env_paths["venv_python"]
             process_env = os.environ.copy()
-            process_env["VIRTUAL_ENV"] = str(venv_python.parent.parent)
-            process_env["PATH"] = f"{venv_python.parent}:{process_env.get('PATH', '')}"
-            process_env["PYTHONUNBUFFERED"] = "1"
+            process_env.update({"VIRTUAL_ENV": str(venv_python.parent.parent), "PATH": f"{venv_python.parent}:{os.environ.get('PATH', '')}", "PYTHONUNBUFFERED": "1"})
 
-            uvicorn_command = [
-                str(venv_python), "-m", "uvicorn", "src.phoenix_core.main:app",
-                "--host", "0.0.0.0", "--port", str(API_PORT), "--workers", "1"
-            ]
-
+            uvicorn_command = [str(venv_python), "-m", "uvicorn", "src.phoenix_core.main:app", "--host", "0.0.0.0", "--port", str(API_PORT), "--workers", "1"]
             self.server_process = subprocess.Popen(
                 uvicorn_command, cwd=str(project_path), env=process_env,
-                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                text=True, encoding='utf-8', preexec_fn=os.setsid
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8', preexec_fn=os.setsid
             )
             self._log_manager.log("INFO", f"Uvicorn 子進程已啟動 (PID: {self.server_process.pid})。")
 
@@ -230,35 +195,28 @@ class ServerManager:
                 if self._stop_event.is_set(): break
                 self._log_manager.log("DEBUG", line.strip())
                 if "Uvicorn running on" in line:
-                    self._stats['status'] = "✅ 伺服器運行中"
-                    self._log_manager.log("SUCCESS", "伺服器已就緒！")
-                    self.server_ready_event.set()
+                    self._stats['status'] = "✅ 伺服器運行中"; self._log_manager.log("SUCCESS", "伺服器已就緒！"); self.server_ready_event.set()
 
             self.server_process.wait()
             if not self.server_ready_event.is_set():
-                self._stats['status'] = "❌ 伺服器啟動失敗"
-                self._log_manager.log("CRITICAL", "伺服器進程在就緒前已終止。")
+                self._stats['status'] = "❌ 伺服器啟動失敗"; self._log_manager.log("CRITICAL", "伺服器進程在就緒前已終止。")
 
         except Exception as e:
-            self._stats['status'] = "❌ 發生致命錯誤"
-            self._log_manager.log("CRITICAL", f"ServerManager 執行緒出錯: {e}")
+            self._stats['status'] = "❌ 發生致命錯誤"; self._log_manager.log("CRITICAL", f"ServerManager 執行緒出錯: {e}")
         finally:
              self._stats['status'] = "⏹️ 已停止"
 
     def _setup_environment(self):
         try:
-            self._stats['status'] = "設定環境..."
-            self._log_manager.log("BATTLE", "=== [1/2] 準備專案環境 ===")
+            self._stats['status'] = "設定環境..."; self._log_manager.log("BATTLE", "=== [1/2] 準備專案環境 ===")
             base_path = Path(".").resolve()
             project_path = base_path / PROJECT_FOLDER_NAME
 
-            if FORCE_REPO_REFRESH and project_path.exists():
-                shutil.rmtree(project_path)
-                self._log_manager.log("INFO", f"舊資料夾已刪除: {project_path}")
+            if FORCE_REPO_REFRESH and project_path.exists(): shutil.rmtree(project_path); self._log_manager.log("INFO", f"舊資料夾已刪除: {project_path}")
 
             self._log_manager.log("INFO", f"正在從 Git 下載 (分支: {TARGET_BRANCH_OR_TAG})...")
             git_command = ["git", "clone", "--branch", TARGET_BRANCH_OR_TAG, "--depth", "1", REPOSITORY_URL, str(project_path)]
-            result = subprocess.run(git_command, check=False, capture_output=True, text=True, encoding='utf-8')
+            result = subprocess.run(git_command, check=False, capture_output=True, text=True, encoding='utf-8');
             if result.returncode != 0: self._log_manager.log("CRITICAL", f"Git clone 失敗:\n{result.stderr}"); return None
 
             self._log_manager.log("INFO", "正在建立虛擬環境...")
@@ -266,8 +224,13 @@ class ServerManager:
             result = subprocess.run(["uv", "venv", str(venv_path)], check=False, capture_output=True, text=True, encoding='utf-8')
             if result.returncode != 0: self._log_manager.log("CRITICAL", f"建立虛擬環境失敗:\n{result.stderr}"); return None
 
-            self._log_manager.log("INFO", "正在安裝依賴...")
             venv_python = venv_path / "bin" / "python"
+            self._log_manager.log("INFO", "引導程序：確保 pip 已安裝...")
+            bootstrap_command = ["uv", "pip", "install", "--python", str(venv_python), "pip", "wheel"]
+            result = subprocess.run(bootstrap_command, check=False, capture_output=True, text=True, encoding='utf-8')
+            if result.returncode != 0: self._log_manager.log("CRITICAL", f"引導安裝 pip 失敗:\n{result.stderr}"); return None
+
+            self._log_manager.log("INFO", "正在安裝核心依賴...")
             core_requirements_path = project_path / "requirements/requirements-core.txt"
             pip_install_command = [str(venv_python), "-m", "pip", "install", "-r", str(core_requirements_path)]
             result = subprocess.run(pip_install_command, check=False, capture_output=True, text=True, encoding='utf-8')
@@ -276,8 +239,7 @@ class ServerManager:
             self._log_manager.log("SUCCESS", "✅ 環境準備成功。")
             return {"project_path": project_path, "venv_python": venv_python}
         except Exception as e:
-            self._log_manager.log("CRITICAL", f"環境準備失敗: {e}")
-            return None
+            self._log_manager.log("CRITICAL", f"環境準備失敗: {e}"); return None
 
     def start(self): self._thread.start()
     def stop(self):
@@ -297,8 +259,7 @@ class ServerManager:
 # ==============================================================================
 
 def archive_reports(log_manager, start_time, end_time, status):
-    """在任務結束時生成並歸檔報告。"""
-    print("\n--- 任務結束，開始執行自動歸檔 ---")
+    print("\n\n" + "="*60 + "\n--- 任務結束，開始執行自動歸檔 ---\n" + "="*60)
     try:
         root_folder = Path(LOG_ARCHIVE_ROOT_FOLDER)
         root_folder.mkdir(exist_ok=True)
@@ -308,28 +269,18 @@ def archive_reports(log_manager, start_time, end_time, status):
         report_dir = root_folder / ts_folder_name
         report_dir.mkdir(exist_ok=True)
 
-        # 1. 詳細日誌
         log_history = log_manager.get_full_history()
         detailed_log_content = "\n".join([f"[{log['timestamp'].isoformat()}] [{log['level']}] {log['message']}" for log in log_history])
         (report_dir / "詳細日誌.txt").write_text(detailed_log_content, encoding='utf-8')
 
-        # 2. 效能報告
         duration = end_time - start_time
-        perf_report_content = f"""
---- 效能報告 ---
-任務狀態: {status}
-開始時間: {start_time.isoformat()}
-結束時間: {end_time.isoformat()}
-總耗時: {str(duration)}
-"""
+        perf_report_content = f"--- 效能報告 ---\n任務狀態: {status}\n開始時間: {start_time.isoformat()}\n結束時間: {end_time.isoformat()}\n總耗時: {str(duration)}\n"
         (report_dir / "效能報告.txt").write_text(perf_report_content.strip(), encoding='utf-8')
 
-        # 3. 綜合報告
         comprehensive_report = f"{perf_report_content}\n--- 詳細日誌 ---\n{detailed_log_content}"
         (report_dir / "綜合報告.txt").write_text(comprehensive_report, encoding='utf-8')
 
         print(f"✅ 報告已成功歸檔至: {report_dir}")
-
     except Exception as e:
         print(f"❌ 歸檔報告時發生錯誤: {e}")
 
@@ -355,30 +306,14 @@ def main():
         server_ready = server_manager.server_ready_event.wait(timeout=SERVER_READY_TIMEOUT)
 
         if server_ready:
-            # 使用 JavaScript 在前端動態插入按鈕，避免 clear_output 移除它
-            button_html = f"""
-            <a href='javascript:void(0);' id='proxy-button-link' style='text-decoration: none;'>
-                <div style='background-color: #89b4f8; color: #202124; padding: 10px 20px; border-radius: 5px; font-weight: bold; display: inline-block;'>
-                    🚀 點此開啟鳳凰之心應用程式
-                </div>
-            </a>
-            """
-            display(HTML(f"<script>document.getElementById('proxy-link-container').innerHTML = `{button_html}`;</script>"))
-
-            # 使用 Colab 的 JS API 來觸發點擊，而不是 serve_kernel_port_as_window
-            colab_output.eval_js(f"""
-                (async () => {{
-                    const url = await google.colab.kernel.invokeFunction('get_proxy_url', [{API_PORT}], {{}});
-                    const a = document.getElementById('proxy-button-link');
-                    if (a) {{ a.href = url.data['application/json'].url; a.target = '_blank'; }}
-                }})();
-            """, ignore_result=True)
-
+            # 在純文字模式下，我們直接打印連結
+            print("\n" + "="*60)
+            colab_output.serve_kernel_port_as_window(API_PORT, anchor_text=f'🚀 點此開啟鳳凰之心應用程式 (連接埠 {API_PORT})')
+            print("="*60)
         else:
             shared_stats['status'] = "❌ 伺服器啟動超時"
             log_manager.log("CRITICAL", f"伺服器在 {SERVER_READY_TIMEOUT} 秒內未能就緒。")
 
-        # 保持主執行緒存活
         while server_manager._thread.is_alive():
             time.sleep(1)
 
@@ -397,11 +332,6 @@ def main():
             archive_reports(log_manager, start_time, end_time, shared_stats.get('status', '未知'))
 
         print("\n--- ✅ 所有任務完成，系統已安全關閉 ---")
-
-# A helper function for the JS API call
-def get_proxy_url(port):
-  return colab_output.eval_js(f"google.colab.kernel.proxyPort({port})")
-colab_output.register_callback('get_proxy_url', get_proxy_url)
 
 if __name__ == "__main__":
     main()
