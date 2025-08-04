@@ -64,3 +64,6 @@ Thumbs.db
 
 # 本地安裝的二進位檔案
 bin/
+
+# Pytest 整合測試用的虛擬環境
+.pytest_venv/

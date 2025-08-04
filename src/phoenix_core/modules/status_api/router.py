@@ -21,31 +21,20 @@ class DashboardStatusResponse(BaseModel):
     action_url: str = Field(..., example="http://localhost:8088/docs")
 
 
-# --- API 路由器 ---
+# --- 導入項目核心模組 ---
+import psutil
+import os
+import json
+from ...database import db_manager
+from ...db_queries import query_logs_by_level
+from ...watchdog import check_heartbeat_status
+from ...kernel.settings import settings
 
+# --- API 路由器 ---
 router = APIRouter(
     prefix="/api/v1/status",
     tags=["Status"],
 )
-
-# 模擬的後端資料
-mock_db = {
-    "status": {
-        "current_stage": "服務運行中",
-        "cpu_usage": 15.5,
-        "ram_usage": 60.1,
-        "apps_status": '{"dataprovider": "running", "system_monitor": "running"}'
-    },
-    "logs": [
-        {"timestamp": "2025-08-02T10:30:00Z", "level": "INFO", "message": "API 服務已啟動"},
-        {"timestamp": "2025-08-02T10:30:05Z", "level": "SUCCESS", "message": "資料提供者模組正常運行"},
-        {"timestamp": "2025-08-02T10:30:10Z", "level": "ERROR", "message": "無法連接到外部數據源"},
-        {"timestamp": "2025-08-02T10:30:15Z", "level": "BATTLE", "message": "策略 'Alpha-01' 已執行"},
-        {"timestamp": "2025-08-02T10:30:20Z", "level": "CMD", "message": "執行指令: backtest --run"}
-    ],
-    "action_url": "http://localhost:8088/docs"
-}
-
 
 @router.get("/performance", response_model=PerformanceStatusResponse)
 async def get_performance_status():
@@ -53,47 +42,62 @@ async def get_performance_status():
     提供高頻率的系統效能指標 (CPU, RAM)。
     """
     return {
-        "cpu_usage": mock_db["status"]["cpu_usage"],
-        "ram_usage": mock_db["status"]["ram_usage"],
+        "cpu_usage": psutil.cpu_percent(),
+        "ram_usage": psutil.virtual_memory().percent,
     }
 
 @router.get("/dashboard", response_model=DashboardStatusResponse)
 async def get_dashboard_status():
     """
-    提供儀表板所需的主要狀態資訊 (服務狀態, 日誌等)。
+    提供儀表板所需的主要狀態資訊 (服務狀態, 日誌等)，從真實資料庫讀取。
     """
-    import os
-    import json
+    conn = db_manager.get_connection()
 
-    # --- 日誌過濾邏輯 ---
+    # --- 日誌過濾邏輯 (每次請求時重新讀取設定) ---
     config_path = os.getenv("PHOENIX_CONFIG_PATH")
     enabled_log_levels = {}
     if config_path and os.path.exists(config_path):
         try:
             with open(config_path, "r", encoding="utf-8") as f:
                 config_data = json.load(f)
-                # 使用 .get() 提供預設值，以確保健壯性
                 enabled_log_levels = config_data.get("log_settings", {}).get("levels", {})
         except (json.JSONDecodeError, FileNotFoundError):
-            # 如果設定檔有問題或找不到，則預設為空，即顯示所有日誌
-            enabled_log_levels = {}
+            enabled_log_levels = {} # 發生錯誤時，顯示所有日誌
 
-    all_logs = mock_db["logs"]
+    # 1. 獲取日誌
+    all_logs = []
+    # 如果 enabled_log_levels 為空 (未設定或設定檔有誤)，則獲取所有等級的日誌
+    levels_to_fetch = [level for level, is_enabled in enabled_log_levels.items() if is_enabled] if enabled_log_levels else ["INFO", "SUCCESS", "ERROR", "BATTLE", "CMD", "CRITICAL", "LOG_SHELL"]
 
-    # 如果 `enabled_log_levels` 為空 (例如，設定檔中沒有相關區塊)，則預設顯示所有日誌
-    if not enabled_log_levels:
-        filtered_logs = all_logs
-    else:
-        # 只選擇在設定中明確設定為 True 的等級
-        filtered_logs = [
-            log for log in all_logs
-            if enabled_log_levels.get(log["level"], False)
-        ]
-    # --- 過濾邏輯結束 ---
+    for level in levels_to_fetch:
+        logs_for_level = query_logs_by_level(conn, level, limit=50)
+        all_logs.extend(logs_for_level)
+
+    # 根據時間戳排序所有收集到的日誌
+    all_logs.sort(key=lambda x: x[1], reverse=True)
+    display_logs = all_logs[:50] # 取最新的 N 筆
+
+    formatted_logs = [
+        LogEntry(timestamp=row[1], level=row[2], message=row[4])
+        for row in display_logs
+    ]
+
+    # 2. 獲取當前階段與心跳狀態
+    heartbeat = check_heartbeat_status(conn, threshold_seconds=15)
+    current_stage = "服務運行中"
+    if heartbeat != 'OK':
+        current_stage = f"服務異常 ({heartbeat})"
+
+
+    # 3. 獲取 App 狀態 (此處暫時保留模擬，因其邏輯尚未完全建立)
+    apps_status = {"dataprovider": "running", "system_monitor": "running"}
+
+    # 4. 獲取行動 URL (暫時保留模擬)
+    action_url = "http://localhost:8088/docs"
 
     return {
-        "current_stage": mock_db["status"]["current_stage"],
-        "apps_status": json.loads(mock_db["status"]["apps_status"]),
-        "logs": filtered_logs, # 返回過濾後的日誌
-        "action_url": mock_db["action_url"]
+        "current_stage": current_stage,
+        "apps_status": apps_status,
+        "logs": formatted_logs,
+        "action_url": action_url
     }
