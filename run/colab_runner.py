@@ -1,18 +1,18 @@
 # -*- coding: utf-8 -*-
 # ╔══════════════════════════════════════════════════════════════════╗
 # ║                                                                      ║
-# ║    🚀 鳳凰之心 - V50 作戰指揮中心 (最終穩定版)                     ║
+# ║    🚀 鳳凰之心 - V51 作戰指揮中心 (最終穩定版)                     ║
 # ║                                                                      ║
 # ╠══════════════════════════════════════════════════════════════════╣
 # ║                                                                      ║
-# ║ - V50 更新日誌:                                                      ║
-# ║   - **顯示邏輯重構**: 統一由 DisplayManager 控制所有輸出，解決閃爍。 ║
-# ║   - **pip 引導修正**: 修正 `uv pip install pip` 指令，解決 --system 衝突。 ║
-# ║   - V49: 重構為純文字儀表板。                                      ║
+# ║ - V51 更新日誌:                                                      ║
+# ║   - **穩定性修正**: 修正 NameError 與主迴圈邏輯，確保UI持續更新。  ║
+# ║   - V50: 修正 pip 引導錯誤並更新報告格式為 Markdown。              ║
+# ║   - V49: 重構為純文字儀表板，解決閃爍問題。                        ║
 # ║                                                                      ║
 # ╚══════════════════════════════════════════════════════════════════╝
 
-#@title 💎 鳳凰之心 V50 作戰指揮中心 (純文字模式) { vertical-output: true, display-mode: "form" }
+#@title 💎 鳳凰之心 V51 作戰指揮中心 (純文字模式) { vertical-output: true, display-mode: "form" }
 #@markdown ---
 #@markdown ### **Part 1: 專案與環境設定**
 #@markdown > **設定 Git 倉庫、分支或標籤，以及專案資料夾。**
@@ -131,7 +131,7 @@ class DisplayManager:
         while not self._stop_event.is_set():
             try:
                 clear_output(wait=True)
-                print("🚀 鳳凰之心 V50 作戰指揮中心")
+                print("🚀 鳳凰之心 V51 作戰指揮中心")
                 print("="*60)
 
                 logs_to_display = self._log_manager.get_display_logs()
@@ -228,6 +228,7 @@ class ServerManager:
             result = subprocess.run(["uv", "venv", str(venv_path)], check=False, capture_output=True, text=True, encoding='utf-8')
             if result.returncode != 0: self._log_manager.log("CRITICAL", f"建立虛擬環境失敗:\n{result.stderr}"); return None
 
+            venv_python = venv_path / "bin" / "python"
             self._log_manager.log("INFO", "引導程序：確保 pip 已安裝...")
             bootstrap_env = os.environ.copy()
             bootstrap_env["VIRTUAL_ENV"] = str(venv_path)
@@ -313,14 +314,15 @@ def main():
         server_ready = server_manager.server_ready_event.wait(timeout=SERVER_READY_TIMEOUT)
 
         if server_ready:
-            # 將獲取 URL 的任務交給主線程，但結果儲存到共享狀態，由 DisplayManager 顯示
             url = colab_output.eval_js(f'google.colab.kernel.proxyPort({API_PORT})')
             shared_stats['proxy_url'] = url
         else:
             shared_stats['status'] = "❌ 伺服器啟動超時"
             log_manager.log("CRITICAL", f"伺服器在 {SERVER_READY_TIMEOUT} 秒內未能就緒。")
 
-        while server_manager._thread.is_alive():
+        # 保持主執行緒存活，即使 server_manager 執行緒可能因錯誤而結束
+        # 這樣 DisplayManager 就能持續更新最終的錯誤狀態
+        while True:
             time.sleep(1)
 
     except KeyboardInterrupt:
