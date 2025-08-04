@@ -9,12 +9,43 @@ import subprocess
 import sys
 import time
 from datetime import datetime
+import threading
+import pytz
+from pathlib import Path
 
 from src.phoenix_core.utils.logger import logger
 
 # --- 常數定義 ---
 PIP_INSTALL_TIMEOUT_PER_PACKAGE = 45  # 每個套件的安裝超時時間(秒)
 PYTEST_EXECUTION_TIMEOUT = 180        # 整體測試執行的超時時間(秒)
+LOG_ARCHIVE_DIR = Path("paper")       # 日誌歸檔目錄
+
+def _archive_log():
+    """
+    將當前執行的日誌歸檔到指定的資料夾。
+    """
+    try:
+        logger.log("INFO", f"正在將日誌歸檔到 '{LOG_ARCHIVE_DIR}' 資料夾...")
+        LOG_ARCHIVE_DIR.mkdir(exist_ok=True)
+
+        # 設定時區為台北
+        taipei_tz = pytz.timezone("Asia/Taipei")
+        # 獲取帶有時區的當前時間
+        now_in_taipei = datetime.now(taipei_tz)
+        # 格式化為 ISO 8601，並替換 ':' 以利於檔名
+        filename = now_in_taipei.isoformat().replace(':', '-') + ".log"
+
+        log_path = LOG_ARCHIVE_DIR / filename
+
+        # 獲取 logger 實例中的所有日誌內容
+        log_content = "\n".join(logger.get_log_history())
+
+        log_path.write_text(log_content, encoding='utf-8')
+        logger.log("SUCCESS", f"✅ 日誌已成功歸檔至: {log_path}")
+
+    except Exception as e:
+        # 在歸檔過程中發生錯誤時，打印到控制台，避免無限循環
+        print(f"[CRITICAL] 日誌歸檔失敗: {e}")
 
 
 def _update_status(shared_state: dict, task: str, error: str = None):
@@ -152,7 +183,8 @@ def run_main_tasks(shared_state: dict, fast_run: bool = False):
         logger.log("CRITICAL", error_message)
         _update_status(shared_state, "致命錯誤", str(e))
     finally:
-        # 可以在此處設定一個旗標，表示工作執行緒已結束
+        # 執行緒結束時，無論成功或失敗，都歸檔日誌
+        _archive_log()
         shared_state['worker_finished'] = True
 
 def _launch_and_check_server(shared_state: dict, fast_run: bool = False) -> bool:
