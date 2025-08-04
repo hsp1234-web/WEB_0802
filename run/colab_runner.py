@@ -6,13 +6,11 @@
 # ╠══════════════════════════════════════════════════════════════════╣
 # ║                                                                      ║
 # ║ - V56 更新日誌:                                                      ║
-# ║   - **根本性修復**: 在 pip install 中加入 --ignore-installed 旗標，    ║
-# ║     解決因 Colab 全域套件導致 venv 中依賴未安裝的根本問題。          ║
-# ║ - V55 更新日誌:                                                      ║
-# ║   - **V55.1 修正**: 重新加入防禦性的 pip 引導程序，解決偶發性的環境問題。      ║
-# ║   - **最終修正**: 移除錯誤的 pip 引導程序，信任 uv venv。          ║
-# ║   - **外觀更新**: 根據要求更新標題與圖示。                         ║
-# ║   - V54: 修正日誌等級置中對齊。                                    ║
+# ║   - **根本性修復**: 重構啟動時序，確保在所有依賴安裝完成後，       ║
+# ║     才啟動儀表板 UI，解決因 `psutil` 模組載入競爭導致的環境衝突。  ║
+# ║ - V55 更新日誌 (歷史):                                               ║
+# ║   - V55.2: 新增代理連結獲取重試機制。                              ║
+# ║   - V55.1: 重新加入 pip 引導程序。                                 ║
 # ║                                                                      ║
 # ╚══════════════════════════════════════════════════════════════════╝
 
@@ -176,11 +174,12 @@ class DisplayManager:
 
 class ServerManager:
     """伺服器管理器：負責啟動、停止和監控 Uvicorn 子進程。"""
-    def __init__(self, log_manager, stats_dict):
+    def __init__(self, log_manager, stats_dict, environment_ready_event):
         self._log_manager = log_manager
         self._stats = stats_dict
         self.server_process = None
         self.server_ready_event = threading.Event()
+        self.environment_ready_event = environment_ready_event
         self._stop_event = threading.Event()
         self._thread = threading.Thread(target=self._run, daemon=True)
 
@@ -188,7 +187,9 @@ class ServerManager:
         try:
             env_paths = self._setup_environment()
             if not env_paths or self._stop_event.is_set():
-                self._stats['status'] = "❌ 環境準備失敗"; return
+                self._stats['status'] = "❌ 環境準備失敗"
+                self.environment_ready_event.set() # Also signal on failure to unblock main thread
+                return
 
             self._stats['status'] = "🚀 正在啟動伺服器..."
             self._log_manager.log("BATTLE", "=== [2/2] 正在啟動後端伺服器 ===")
@@ -257,6 +258,7 @@ class ServerManager:
             if result.returncode != 0: self._log_manager.log("CRITICAL", f"安裝依賴失敗:\n{result.stderr}"); return None
 
             self._log_manager.log("SUCCESS", "✅ 環境準備成功。")
+            self.environment_ready_event.set() # Signal that env setup is complete
             return {"project_path": project_path, "venv_python": venv_python}
         except Exception as e:
             self._log_manager.log("CRITICAL", f"環境準備失敗: {e}"); return None
@@ -318,44 +320,63 @@ def main():
     try:
         log_levels = {name: globals()[name] for name in globals() if name.startswith("SHOW_LOG_LEVEL_")}
         log_manager = LogManager(max_lines=LOG_DISPLAY_LINES, timezone_str=TIMEZONE, log_levels_to_show=log_levels)
-        display_manager = DisplayManager(log_manager=log_manager, stats_dict=shared_stats, refresh_rate=UI_REFRESH_SECONDS)
-        server_manager = ServerManager(log_manager=log_manager, stats_dict=shared_stats)
 
-        display_manager.start()
+        # V56: Decouple UI from installation
+        environment_ready_event = threading.Event()
+        server_manager = ServerManager(
+            log_manager=log_manager,
+            stats_dict=shared_stats,
+            environment_ready_event=environment_ready_event
+        )
+        display_manager = DisplayManager(
+            log_manager=log_manager,
+            stats_dict=shared_stats,
+            refresh_rate=UI_REFRESH_SECONDS
+        )
+
+        # Start server manager first to set up the environment
         server_manager.start()
 
-        server_ready = server_manager.server_ready_event.wait(timeout=SERVER_READY_TIMEOUT)
+        # Wait for the environment setup to complete (or fail) before starting the UI
+        # This prevents the UI from trying to import psutil before it's installed.
+        # Use a generous timeout for installation.
+        setup_finished = environment_ready_event.wait(timeout=600) # 10 minute timeout
 
-        if server_ready:
-            max_retries = 10
-            retry_delay = 3  # seconds
-            url_obtained = False
-            for attempt in range(max_retries):
-                try:
-                    log_manager.log("INFO", f"正在嘗試取得代理連結... (第 {attempt + 1}/{max_retries} 次)")
-                    url = colab_output.eval_js(f'google.colab.kernel.proxyPort({API_PORT})')
-                    if url and url.strip():
-                        shared_stats['proxy_url'] = url
-                        log_manager.log("SUCCESS", "✅ 成功取得代理連結！")
-                        url_obtained = True
-                        break  # Exit loop on success
-                    else:
-                        log_manager.log("WARN", "取得的代理連結為空，將於 {retry_delay} 秒後重試...")
-                except Exception as e:
-                    log_manager.log("WARN", f"取得代理連結時發生錯誤: {e}，將於 {retry_delay} 秒後重試...")
-
-                time.sleep(retry_delay)
-
-            if not url_obtained:
-                shared_stats['status'] = "❌ 取得代理連結失敗"
-                log_manager.log("CRITICAL", f"在 {max_retries} 次嘗試後，仍無法取得有效的代理連結。")
+        if not setup_finished or shared_stats['status'] == "❌ 環境準備失敗":
+             log_manager.log("CRITICAL", "環境準備階段超時或失敗，儀表板將不會啟動。")
         else:
-            shared_stats['status'] = "❌ 伺服器啟動超時"
-            log_manager.log("CRITICAL", f"伺服器在 {SERVER_READY_TIMEOUT} 秒內未能就緒。")
+            # Now that the environment is ready, it's safe to start the display manager
+            display_manager.start()
 
-        while True:
-            if not server_manager._thread.is_alive() and not shared_stats.get('proxy_url'):
-                break
+            # Proceed to wait for the server to be ready
+            server_ready = server_manager.server_ready_event.wait(timeout=SERVER_READY_TIMEOUT)
+            if server_ready:
+                max_retries = 10
+                retry_delay = 3
+                url_obtained = False
+                for attempt in range(max_retries):
+                    try:
+                        log_manager.log("INFO", f"正在嘗試取得代理連結... (第 {attempt + 1}/{max_retries} 次)")
+                        url = colab_output.eval_js(f'google.colab.kernel.proxyPort({API_PORT})')
+                        if url and url.strip():
+                            shared_stats['proxy_url'] = url
+                            log_manager.log("SUCCESS", "✅ 成功取得代理連結！")
+                            url_obtained = True
+                            break
+                        else:
+                            log_manager.log("WARN", f"取得的代理連結為空，將於 {retry_delay} 秒後重試...")
+                    except Exception as e:
+                        log_manager.log("WARN", f"取得代理連結時發生錯誤: {e}，將於 {retry_delay} 秒後重試...")
+                    time.sleep(retry_delay)
+                if not url_obtained:
+                    shared_stats['status'] = "❌ 取得代理連結失敗"
+                    log_manager.log("CRITICAL", f"在 {max_retries} 次嘗試後，仍無法取得有效的代理連結。")
+            else:
+                shared_stats['status'] = "❌ 伺服器啟動超時"
+                log_manager.log("CRITICAL", f"伺服器在 {SERVER_READY_TIMEOUT} 秒內未能就緒。")
+
+        # Keep the main thread alive to allow background threads to run
+        while server_manager._thread.is_alive():
             time.sleep(1)
 
     except KeyboardInterrupt:
@@ -365,8 +386,10 @@ def main():
         if log_manager: log_manager.log("CRITICAL", error_msg)
         else: print(error_msg)
     finally:
-        if display_manager: display_manager.stop()
-        if server_manager: server_manager.stop()
+        if display_manager and display_manager._thread.is_alive():
+            display_manager.stop()
+        if server_manager:
+            server_manager.stop()
 
         end_time = datetime.now(pytz.timezone(TIMEZONE))
         if log_manager:
