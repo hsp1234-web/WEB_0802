@@ -67,12 +67,6 @@ SERVER_READY_TIMEOUT = 45 #@param {type:"integer"}
 # SECTION 0: 環境準備與核心依賴導入
 # ==============================================================================
 try:
-    import psutil
-except ImportError:
-    print("正在安裝 psutil...")
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "psutil"])
-    import psutil
-try:
     import pytz
 except ImportError:
     print("正在安裝 pytz...")
@@ -169,15 +163,24 @@ class DisplayManager:
                     output_buffer.append(f"✅ 代理連結已生成: {self._stats['proxy_url']}")
                     output_buffer.append("="*60)
 
-                cpu = psutil.cpu_percent()
-                ram = psutil.virtual_memory().percent
+                try:
+                    # V63: 智慧載入 psutil
+                    import psutil
+                    cpu_percent = psutil.cpu_percent()
+                    ram_percent = psutil.virtual_memory().percent
+                    cpu_text = f"{cpu_percent:5.1f}%"
+                    ram_text = f"{ram_percent:5.1f}%"
+                except ImportError:
+                    cpu_text = "  N/A "
+                    ram_text = "  N/A "
+
                 elapsed_time = time.monotonic() - self._stats["start_time_monotonic"]
                 minutes, seconds = divmod(elapsed_time, 60)
 
                 status_line = (
                     f"⏱️ {int(minutes):02d}分{int(seconds):02d}秒 | "
-                    f"💻 CPU: {cpu:5.1f}% | "
-                    f"🧠 RAM: {ram:5.1f}% | "
+                    f"💻 CPU: {cpu_text} | "
+                    f"🧠 RAM: {ram_text} | "
                     f"🔥 狀態: {self._stats.get('status', '初始化...')}"
                 )
                 output_buffer.append(status_line)
@@ -269,13 +272,26 @@ class ServerManager:
 
             self._log_manager.log("INFO", "正在安裝核心依賴...")
             core_requirements_path = project_path / "requirements/requirements-core.txt"
-            # V56: 加入 --ignore-installed 旗標，強制在 venv 中重新安裝所有套件，
-            # 避免 pip 因偵測到系統已安裝的全域套件而跳過安裝，導致 ModuleNotFoundError。
-            pip_install_command = [str(venv_python), "-m", "pip", "install", "--ignore-installed", "-r", str(core_requirements_path)]
-            result = subprocess.run(pip_install_command, check=False, capture_output=True, text=True, encoding='utf-8')
-            if result.returncode != 0: self._log_manager.log("CRITICAL", f"安裝依賴失敗:\n{result.stderr}"); return None
+            if not core_requirements_path.is_file():
+                self._log_manager.log("CRITICAL", f"找不到依賴檔案: {core_requirements_path}")
+                return None
 
-            self._log_manager.log("SUCCESS", "✅ 核心環境準備成功。")
+            with open(core_requirements_path, 'r', encoding='utf-8') as f:
+                dependencies = [line.strip() for line in f if line.strip() and not line.startswith('#')]
+
+            for dep in dependencies:
+                self._stats['status'] = f"⚙️ 正在安裝: {dep}..."
+                self._log_manager.log("INFO", f"正在安裝套件: {dep}")
+                # V56: 加入 --ignore-installed 旗標，強制在 venv 中重新安裝所有套件
+                pip_install_command = [str(venv_python), "-m", "pip", "install", "--ignore-installed", dep]
+                result = subprocess.run(pip_install_command, check=False, capture_output=True, text=True, encoding='utf-8')
+
+                if result.returncode != 0:
+                    self._log_manager.log("CRITICAL", f"安裝套件 {dep} 失敗:\n{result.stderr}")
+                    return None
+                self._log_manager.log("SUCCESS", f"✅ {dep} 安裝成功。")
+
+            self._log_manager.log("SUCCESS", "✅ 所有核心依賴已成功安裝。")
             return {"project_path": project_path, "venv_python": venv_python}
         except Exception as e:
             self._log_manager.log("CRITICAL", f"環境準備失敗: {e}"); return None
