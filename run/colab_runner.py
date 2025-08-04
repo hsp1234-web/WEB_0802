@@ -76,6 +76,7 @@ from IPython.display import display, HTML, clear_output
 import threading
 from collections import deque
 import html
+from datetime import datetime
 
 # --- 共享狀態與日誌 ---
 # 使用 deque 作為固定長度的日誌隊列
