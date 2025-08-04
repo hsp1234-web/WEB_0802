@@ -1,18 +1,18 @@
 # -*- coding: utf-8 -*-
 # ╔══════════════════════════════════════════════════════════════════╗
 # ║                                                                      ║
-# ║    🚀 鳳凰之心 - V53 作戰指揮中心 (最終穩定版)                     ║
+# ║    🚀 鳳凰之心 - V54 作戰指揮中心 (最終完美版)                     ║
 # ║                                                                      ║
 # ╠══════════════════════════════════════════════════════════════════╣
 # ║                                                                      ║
-# ║ - V53 更新日誌:                                                      ║
-# ║   - **顯示引擎重構**: 採用「單一繪製」模式，徹底解決閃爍與緩衝問題。 ║
-# ║   - **分支更新**: 更新預設分支至 0.6.8。                           ║
-# ║   - V52: 修正 Colab 輸出緩衝問題。                                 ║
+# ║ - V54 更新日誌:                                                      ║
+# ║   - **外觀優化**: 將日誌等級標籤置中對齊，提升可讀性。             ║
+# ║   - **分支更新**: 更新預設分支至 0.7.0。                           ║
+# ║   - V53: 採用「單一繪製」模式，徹底解決閃爍與緩衝問題。            ║
 # ║                                                                      ║
 # ╚══════════════════════════════════════════════════════════════════╝
 
-#@title 💎 鳳凰之心 V53 作戰指揮中心 (純文字模式) { vertical-output: true, display-mode: "form" }
+#@title 💎 鳳凰之心 V54 作戰指揮中心 (純文字模式) { vertical-output: true, display-mode: "form" }
 #@markdown ---
 #@markdown ### **Part 1: 專案與環境設定**
 #@markdown > **設定 Git 倉庫、分支或標籤，以及專案資料夾。**
@@ -20,7 +20,7 @@
 #@markdown **後端程式碼倉庫 (REPOSITORY_URL)**
 REPOSITORY_URL = "https://github.com/hsp1234-web/WEB_0802.git" #@param {type:"string"}
 #@markdown **後端版本分支或標籤 (TARGET_BRANCH_OR_TAG)**
-TARGET_BRANCH_OR_TAG = "0.6.8" #@param {type:"string"}
+TARGET_BRANCH_OR_TAG = "0.7.0" #@param {type:"string"}
 #@markdown **專案資料夾名稱 (PROJECT_FOLDER_NAME)**
 PROJECT_FOLDER_NAME = "WEB1" #@param {type:"string"}
 #@markdown **強制刷新後端程式碼 (FORCE_REPO_REFRESH)**
@@ -132,13 +132,14 @@ class DisplayManager:
             try:
                 output_buffer = []
 
-                output_buffer.append("🚀 鳳凰之心 V53 作戰指揮中心")
+                output_buffer.append("🚀 鳳凰之心 V54 作戰指揮中心")
                 output_buffer.append("="*60)
 
                 logs_to_display = self._log_manager.get_display_logs()
                 for log in logs_to_display:
                     ts = log['timestamp'].strftime('%H:%M:%S')
-                    output_buffer.append(f"[{ts}] [{log['level']:<8}] {log['message']}")
+                    # 使用 :^8 來置中對齊日誌等級
+                    output_buffer.append(f"[{ts}] [{log['level']:^8}] {log['message']}")
 
                 output_buffer.append("="*60)
 
@@ -327,9 +328,7 @@ def main():
 
         while True:
             if not server_manager._thread.is_alive() and not shared_stats.get('proxy_url'):
-                # Server thread died before it was ready, so we can exit.
                 break
-            # If server is up, or still trying to come up, keep main thread alive.
             time.sleep(1)
 
     except KeyboardInterrupt:
