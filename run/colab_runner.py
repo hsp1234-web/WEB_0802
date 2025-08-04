@@ -92,7 +92,7 @@ def background_worker():
     try:
         # --- 步驟 1: 準備專案環境 ---
         log_message("準備專案環境...")
-        base_path = Path("/content")
+        base_path = Path(".") # 使用相對路徑，確保在任何環境下都有寫入權限
         project_path = base_path / PROJECT_FOLDER_NAME
 
         if FORCE_REPO_REFRESH and project_path.exists():
@@ -128,16 +128,18 @@ def background_worker():
             "LOG_SHELL": SHOW_LOG_LEVEL_LOG_SHELL, "ERROR": SHOW_LOG_LEVEL_ERROR,
             "CRITICAL": SHOW_LOG_LEVEL_CRITICAL, "PERF": SHOW_LOG_LEVEL_PERF
         }
+        # 修正: Pydantic 設定模型期望日誌等級直接在 log_settings 下，而不是再嵌套一層 "levels"
         config_data = {
-            "log_settings": {"levels": enabled_log_levels}
+            "log_settings": enabled_log_levels
         }
-        config_file = project_path / "temp_config_for_runner.json"
-        with open(config_file, "w", encoding="utf-8") as f:
+        # 修正: config_file 路徑應相對於新的當前工作目錄 (CWD)
+        config_file_path = Path("temp_config_for_runner.json")
+        with open(config_file_path, "w", encoding="utf-8") as f:
             json.dump(config_data, f, indent=4)
         log_message("✅ 後端設定檔已生成。")
 
         # 將設定檔路徑寫入環境變數
-        os.environ["PHOENIX_CONFIG_PATH"] = str(config_file)
+        os.environ["PHOENIX_CONFIG_PATH"] = str(config_file_path.resolve())
 
         # --- 步驟 3: 安裝依賴 ---
         log_message("正在安裝後端依賴...")
@@ -146,12 +148,20 @@ def background_worker():
         log_message("✅ 後端依賴安裝完成。")
 
         # --- 步驟 4: 啟動後端服務 ---
-        log_message(f"🔥 正在啟動後端服務於埠 {API_PORT}...")
+        log_message(f"🔥 正在直接啟動後端 Uvicorn 服務於埠 {API_PORT}...")
         log_file = open("api_server.log", "w")
-        subprocess.Popen([
+
+        uvicorn_command = [
             sys.executable, "-m", "uvicorn", "src.phoenix_core.main:app",
             "--host", "0.0.0.0", "--port", str(API_PORT)
-        ], stdout=log_file, stderr=subprocess.STDOUT, cwd=project_path)
+        ]
+
+        subprocess.Popen(
+            uvicorn_command,
+            stdout=log_file,
+            stderr=subprocess.STDOUT,
+            cwd=Path.cwd() # 使用當前的 CWD
+        )
         log_message("✅ 後端服務已在背景啟動。")
 
     except Exception as e:
@@ -165,11 +175,16 @@ def render_dashboard_html():
     css = f"""
     <style>
         body {{ background-color: transparent; color: var(--colab-primary-text-color, #e0e0e0); font-family: 'Noto Sans TC', 'Fira Code', monospace; }}
-        .container {{ padding: 1em; }}
+        .container {{ padding: 1em; width: 100%; box-sizing: border-box; }}
         .panel {{ border: 1px solid var(--colab-border-color, #444); margin-bottom: 1em; border-radius: 8px; overflow: hidden; }}
         .title {{ font-weight: bold; padding: 0.5em 1em; border-bottom: 1px solid var(--colab-border-color, #444); background-color: var(--colab-section-header-color, #2a2a2a);}}
         .content {{ padding: 1em; }}
-        .grid {{ display: grid; grid-template-columns: 1fr 2fr; gap: 1em; }}
+        .grid {{ display: grid; grid-template-columns: 1fr; gap: 1em; width: 100%; }}
+        @media (min-width: 768px) {{
+            .grid {{
+                grid-template-columns: 1fr 2fr;
+            }}
+        }}
         .log-panel {{ height: {LOG_DISPLAY_LINES * 20}px; overflow-y: auto; background-color: var(--colab-secondary-surface-color, #2d2d2d); font-size: 0.9em; white-space: pre-wrap; word-break: break-all; border-radius: 4px; }}
         .footer {{ text-align: center; padding-top: 1em; border-top: 1px solid #444; font-size: 0.8em; color: #888;}}
         table {{ width: 100%; border-collapse: collapse; }}
