@@ -2,25 +2,23 @@
 # -*- coding: utf-8 -*-
 # ╔══════════════════════════════════════════════════════════════════╗
 # ║                                                                      ║
-# ║              📊 鳳凰之心 - 互動式報告儀表板 V33 (UI)                  ║
+# ║              📊 鳳凰之心 - 互動式報告儀表板 V35 (HTML)               ║
 # ║                                                                      ║
 # ╠══════════════════════════════════════════════════════════════════╣
 # ║                                                                      ║
-# ║ - 說明: 在 Colab 或 Jupyter 環境中渲染一個互動式儀表板，讓使用者     ║
-# ║         可以選擇、預覽、複製和存檔由後端生成的報告。               ║
-# ║ - 依賴: `ipywidgets`, `src.phoenix_core.report_generator`          ║
-# ║ - 版本: 1.1.0 (HTML 可折疊報告與進階複製)                          ║
+# ║ - 說明: 在 Colab 中渲染一個純 HTML/JS 的互動儀表板，風格與主監控   ║
+# ║         面板統一。透過 google.colab.kernel 與 Python 後端通訊。      ║
+# ║ - 版本: 2.0.0 (純 HTML 介面與 Kernel Callbacks)                    ║
 # ║                                                                      ║
 # ╚══════════════════════════════════════════════════════════════════╝
 
 # --- 導入必要的函式庫 ---
-import ipywidgets as widgets
-from IPython.display import display, Javascript, HTML
+from IPython.display import display, HTML, Javascript
+from google.colab import output
 from pathlib import Path
-import time
 import sys
 import os
-import html
+import json
 
 # --- 路徑修正 ---
 project_root = os.getcwd()
@@ -31,195 +29,270 @@ if project_root not in sys.path:
 try:
     from src.phoenix_core.report_generator import read_selected_reports, archive_selected_reports
 except ImportError as e:
-    print(f"❌ 錯誤: 無法導入核心模組 ({e})。請確保在專案根目錄下執行。")
-    # Fallback for basic testing without full project structure
-    # from report_generator import read_selected_reports, archive_selected_reports
+    # 提供一個 fallback，以防在非標準環境中執行
+    print(f"⚠️ 警告: 無法導入 report_generator ({e})。將使用模擬函式。")
+    def read_selected_reports(directory, selection):
+        mock_reports = {
+            'performance_report.md': '### 📈 效能分析報告\n- 模擬數據: 核心初始化耗時: 2.34s',
+            'summary_report.md': '### 📄 總結報告\n- 模擬數據: 本次任務成功執行 128 個操作。',
+            'detailed_log_report.md': '### 📋 詳細日誌報告\n- [20:25:38] [SUCCESS] ✅ 市場分析報告已生成。'
+        }
+        return "\n\n---\n\n".join([mock_reports.get(s, f"找不到報告: {s}") for s in selection])
+
+    def archive_selected_reports(reports_dir, archive_root, selection):
+        archive_path = Path(archive_root) / "archive" / "mock_archive_123"
+        archive_path.mkdir(parents=True, exist_ok=True)
+        return str(archive_path)
+
 
 # --- 全域變數與設定 ---
 REPORTS_DIR = Path("./reports")
 ARCHIVE_ROOT_DIR = Path("./")
 
-# --- UI 元件定義 ---
-header = widgets.HTML("<h1>📊 鳳凰之心 - 互動式報告儀表板 📊</h1>")
-
-# 勾選框
-chk_all = widgets.Checkbox(value=True, description='全部報告', indent=False)
-chk_perf = widgets.Checkbox(value=True, description='📈 效能分析報告 (performance_report.md)', indent=False)
-chk_summary = widgets.Checkbox(value=True, description='📄 總結報告 (summary_report.md)', indent=False)
-chk_detail = widgets.Checkbox(value=True, description='📋 詳細日誌報告 (detailed_log_report.md)', indent=False)
-checkboxes = [chk_perf, chk_summary, chk_detail]
-
-# 按鈕
-btn_generate = widgets.Button(description='產生報告', button_style='primary', icon='cogs')
-btn_copy = widgets.Button(description='📋 複製選中報告 (Markdown)', button_style='info', icon='copy', layout={'visibility': 'hidden'})
-btn_archive = widgets.Button(description='💾 存檔選中報告', button_style='success', icon='archive', layout={'visibility': 'hidden'})
-btn_copy_full = widgets.Button(description='複製完整輸出為純文字', button_style='primary')
-
-# 輸出區域
-output_area = widgets.Output(layout={'border': '1px solid #ccc', 'padding': '10px', 'margin_top': '10px'})
-with output_area:
-    print("(點擊「產生報告」按鈕後，此處將顯示報告內容)")
-
-# --- 互動邏輯 ---
-def get_selection():
-    selection = []
-    if chk_perf.value: selection.append('performance_report.md')
-    if chk_summary.value: selection.append('summary_report.md')
-    if chk_detail.value: selection.append('detailed_log_report.md')
-    return selection
-
-def on_chk_all_changed(change):
-    for chk in checkboxes:
-        chk.value = change.new
-chk_all.observe(on_chk_all_changed, names='value')
-
-def on_generate_clicked(b):
-    selection = get_selection()
-    output_area.clear_output(wait=True)
-
-    if not selection:
-        with output_area: print("⚠️ 請至少選擇一份報告。")
-        btn_copy.layout.visibility = 'hidden'
-        btn_archive.layout.visibility = 'hidden'
-        panel_operations.layout.visibility = 'hidden'
-        return
-
+# --- Python 後端回呼函式 ---
+def get_report_data(selection):
+    """供 JavaScript 呼叫以獲取報告內容。"""
     try:
-        report_content = read_selected_reports(REPORTS_DIR, selection)
-        if not report_content:
-            with output_area: print(f"⚠️ 在 '{REPORTS_DIR}' 目錄下找不到任何選定的報告檔案。")
-            return
-
-        reports = report_content.split("\n\n---\n\n")
-        final_html = ""
-        for report in reports:
-            # 確保即使報告為空也能處理
-            if not report.strip(): continue
-
-            lines = report.strip().split('\n')
-            title = lines[0].replace('#', '').strip() if lines else "無標題報告"
-            escaped_report_body = html.escape(report)
-
-            final_html += f"""
-            <details open style="border: 1px solid #ddd; padding: 10px; margin-top: 10px; border-radius: 5px; background: #fff;">
-                <summary style="cursor: pointer; font-weight: bold; font-size: 1.1em; padding: 5px; background-color: #f0f0f0; border-radius: 3px;">{html.escape(title)}</summary>
-                <pre style="background-color: transparent; padding: 10px; border-radius: 5px; margin-top: 8px; white-space: pre-wrap; word-wrap: break-word;">{escaped_report_body}</pre>
-            </details>
-            """
-
-        with output_area:
-            display(HTML(final_html))
-
-        btn_copy.layout.visibility = 'visible'
-        btn_archive.layout.visibility = 'visible'
-        panel_operations.layout.visibility = 'visible'
-
+        content = read_selected_reports(REPORTS_DIR, selection)
+        return json.dumps({'status': 'success', 'content': content})
     except Exception as e:
-        with output_area: print(f"❌ 讀取報告時發生錯誤: {e}")
+        return json.dumps({'status': 'error', 'message': str(e)})
 
-btn_generate.on_click(on_generate_clicked)
-
-def on_archive_clicked(b):
-    selection = get_selection()
-    original_text = b.description
+def archive_reports(selection):
+    """供 JavaScript 呼叫以存檔報告。"""
     try:
         archive_path = archive_selected_reports(REPORTS_DIR, ARCHIVE_ROOT_DIR, selection)
-        b.description = f'✅ 已存檔至 {archive_path}'
-        b.button_style = 'success'
+        return json.dumps({'status': 'success', 'path': str(archive_path)})
     except Exception as e:
-        b.description = '❌ 存檔失敗'
-        b.button_style = 'danger'
-        with output_area: print(f"\n存檔錯誤: {e}")
-    time.sleep(2); b.description = original_text; b.button_style = 'success'
-btn_archive.on_click(on_archive_clicked)
+        return json.dumps({'status': 'error', 'message': str(e)})
 
-def on_copy_clicked(b):
-    selection = get_selection()
-    report_content_for_js = read_selected_reports(REPORTS_DIR, selection)
-    escaped_content = report_content_for_js.replace('`', '\\`').replace('\\n', '\\\\n')
-    js_code = f"navigator.clipboard.writeText(`{escaped_content}`);"
-    display(Javascript(js_code))
-    original_text = b.description
-    b.description = '✅ 已複製到剪貼簿!'; b.button_style = 'success'
-    time.sleep(1); b.description = original_text; b.button_style = 'info'
-btn_copy.on_click(on_copy_clicked)
-
-def on_copy_full_clicked(b):
-    # output_area.outputs[0]['data']['text/html'] 獲取 HTML 內容
-    # 但更簡單的方法是直接讓 JS 從 DOM 獲取
-    js_code = f"""
-    const outputElement = document.querySelector('#output-area-div > .jp-OutputArea-output > .jp-OutputArea-child > .jp-RenderedHTMLCommon');
-    if (outputElement) {{
-        const textToCopy = outputElement.innerText;
-        navigator.clipboard.writeText(textToCopy).then(() => {{
-            const button = document.getElementById('{b.model_id}');
-            if(button) {{
-                const originalText = button.innerText;
-                button.innerText = '✅ 複製成功';
-                setTimeout(() => {{ button.innerText = originalText; }}, 2000);
-            }}
-        }});
-    }}
-    """
-    # 為了讓 JS 能找到按鈕，我們需要為按鈕的 DOM 元素設定一個 ID
-    b.add_class("copy-full-button") # 添加一個 class 以便選取
-    js_code_with_selector = f"""
-    const btn = document.querySelector('.copy-full-button');
-    const outputElement = btn.closest('.jp-OutputArea-item').querySelector('.jp-RenderedHTMLCommon');
-    const textToCopy = outputElement ? outputElement.innerText : "未找到預覽內容";
-    navigator.clipboard.writeText(textToCopy).then(() => {{
-        btn.innerText = '✅ 複製成功';
-        setTimeout(() => {{ btn.innerText = '複製完整輸出為純文字'; }}, 2000);
-    }});
-    """
-    # 更穩健的作法是直接給 output_area 一個 ID
-    js_code_final = f"""
-    const outputPreview = document.getElementById("report-preview-div");
-    if (outputPreview) {{
-        const textToCopy = outputPreview.innerText;
-        navigator.clipboard.writeText(textToCopy).then(() => {{
-            const button = document.getElementById('{b.model_id}');
-            if (button) {{
-                 button.innerText = '✅ 複製成功!';
-                 setTimeout(() => {{ button.innerText = '複製完整輸出為純文字'; }}, 2000);
-            }}
-        }});
-    }}
-    """
-    display(Javascript(js_code_final))
-btn_copy_full.on_click(on_copy_full_clicked)
+# 註冊回呼函式，使其可從 JS 訪問
+output.register_callback('notebook.get_report_data', get_report_data)
+output.register_callback('notebook.archive_reports', archive_reports)
 
 
-# --- UI 佈局 ---
-checkbox_layout = widgets.VBox([
-    chk_all,
-    widgets.HBox([
-        widgets.Label(value=""),
-        widgets.VBox(checkboxes)],
-        layout=widgets.Layout(padding='0 0 0 20px')
-    )
-])
-button_layout = widgets.HBox([btn_generate, btn_copy, btn_archive])
-report_preview = widgets.VBox([widgets.HTML("<h3>報告內容預覽</h3>"), output_area],
-                              layout=widgets.Layout(width='100%'))
-report_preview.add_class("report-preview-div") # 為了讓 JS 選取
+# --- 前端 HTML/CSS/JS ---
+DASHBOARD_UI_HTML = """
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>鳳凰之心 - 互動式報告儀表板</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&family=Noto+Sans+TC:wght@400;500;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', 'Noto Sans TC', sans-serif;
+            background-color: transparent; /* 適應 Colab 主題 */
+            color: var(--colab-primary-text-color, #333);
+        }
+        .font-code { font-family: 'Fira Code', monospace; }
+        .dashboard-panel {
+            background-color: var(--colab-secondary-surface-color, #f7f7f7);
+            border: 1px solid var(--colab-border-color, #e0e0e0);
+            border-radius: 0.75rem;
+            margin-bottom: 1.5rem;
+        }
+        .panel-title {
+            padding: 0.75rem 1.25rem;
+            border-bottom: 1px solid var(--colab-border-color, #e0e0e0);
+            color: var(--colab-secondary-text-color, #555);
+            font-weight: 500;
+        }
+        .custom-checkbox {
+            appearance: none;
+            background-color: var(--colab-secondary-surface-color, #eee);
+            border: 1px solid var(--colab-border-color, #ccc);
+            border-radius: 0.25rem; width: 1.25rem; height: 1.25rem;
+            cursor: pointer; position: relative; transition: all 0.2s;
+        }
+        .custom-checkbox:checked {
+            background-color: #3b82f6; /* blue-500 */
+            border-color: #3b82f6;
+        }
+        .custom-checkbox:checked::after {
+            content: '✓'; color: white; position: absolute;
+            left: 50%; top: 50%; transform: translate(-50%, -50%);
+            font-size: 0.875rem;
+        }
+        #report-preview {
+            background-color: var(--colab-secondary-surface-color, #fdfdfd);
+            border: 1px solid var(--colab-border-color, #e0e0e0);
+            border-radius: 0.5rem;
+            color: var(--colab-primary-text-color, #333);
+        }
+    </style>
+</head>
+<body class="p-4 sm:p-6 md:p-8">
+    <div class="max-w-4xl mx-auto">
+        <header class="text-center mb-8">
+            <h1 class="text-2xl sm:text-3xl font-bold" style="color: #1E88E5;">
+                📊 鳳凰之心 - 互動式報告儀表板 📊
+            </h1>
+        </header>
 
-panel_operations = widgets.VBox([
-    widgets.HTML("<h4>📋 面板內容操作</h4>"),
-    btn_copy_full
-], layout={'border': '1px solid #ddd', 'padding': '10px', 'margin_top': '10px', 'visibility': 'hidden'})
+        <section class="dashboard-panel">
+            <div class="panel-title">請選擇您需要產生的報告類型</div>
+            <div class="p-6 space-y-4">
+                <label class="flex items-center space-x-3 cursor-pointer">
+                    <input type="checkbox" id="select-all" class="custom-checkbox" checked>
+                    <span>全部報告</span>
+                </label>
+                <div id="report-options" class="pl-8 space-y-3">
+                    <label class="flex items-center space-x-3 cursor-pointer">
+                        <input type="checkbox" name="report-option" value="performance_report.md" class="custom-checkbox" checked>
+                        <span>📈 效能分析報告 (performance_report.md)</span>
+                    </label>
+                    <label class="flex items-center space-x-3 cursor-pointer">
+                        <input type="checkbox" name="report-option" value="summary_report.md" class="custom-checkbox" checked>
+                        <span>📄 總結報告 (summary_report.md)</span>
+                    </label>
+                    <label class="flex items-center space-x-3 cursor-pointer">
+                        <input type="checkbox" name="report-option" value="detailed_log_report.md" class="custom-checkbox" checked>
+                        <span>📋 詳細日誌報告 (detailed_log_report.md)</span>
+                    </label>
+                </div>
+                <div class="pt-4 flex justify-center">
+                    <button id="generate-button" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105">
+                        產生報告
+                    </button>
+                </div>
+            </div>
+        </section>
 
+        <div id="output-section" class="hidden">
+            <section class="dashboard-panel">
+                <div class="panel-title">報告內容預覽</div>
+                <div id="report-preview" class="p-6 font-code text-sm leading-relaxed h-80 overflow-y-auto whitespace-pre-wrap"></div>
+            </section>
+
+            <section class="dashboard-panel">
+                <div class="panel-title">📋 面板內容操作</div>
+                <div class="p-4 flex flex-wrap justify-center gap-4">
+                    <button id="copy-button" class="bg-violet-600 hover:bg-violet-700 text-white font-bold py-2 px-4 rounded-lg">複製預覽內容</button>
+                    <button id="archive-button" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg">存檔選中報告</button>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <div id="toast-container" class="fixed bottom-4 right-4 space-y-2"></div>
+
+<script>
+    const selectAllCheckbox = document.getElementById('select-all');
+    const reportOptions = document.querySelectorAll('input[name="report-option"]');
+    const generateButton = document.getElementById('generate-button');
+    const outputSection = document.getElementById('output-section');
+    const reportPreview = document.getElementById('report-preview');
+    const copyButton = document.getElementById('copy-button');
+    const archiveButton = document.getElementById('archive-button');
+
+    // --- Toast 訊息功能 ---
+    function showToast(message, type = 'info') {
+        const toast = document.createElement('div');
+        const colors = {
+            success: 'bg-green-600', error: 'bg-red-600', info: 'bg-blue-600'
+        };
+        toast.className = `p-4 rounded-lg text-white font-bold shadow-lg transition-all duration-300 transform translate-x-full ${colors[type]}`;
+        toast.textContent = message;
+        document.getElementById('toast-container').appendChild(toast);
+
+        requestAnimationFrame(() => {
+            toast.style.transform = 'translateX(0)';
+        });
+
+        setTimeout(() => {
+            toast.style.transform = 'translateX(120%)';
+            toast.addEventListener('transitionend', () => toast.remove());
+        }, 3000);
+    }
+
+    // --- 事件監聽 ---
+    selectAllCheckbox.addEventListener('change', (e) => {
+        reportOptions.forEach(chk => chk.checked = e.target.checked);
+    });
+
+    reportOptions.forEach(chk => {
+        chk.addEventListener('change', () => {
+            selectAllCheckbox.checked = [...reportOptions].every(c => c.checked);
+        });
+    });
+
+    generateButton.addEventListener('click', async () => {
+        const selection = [...reportOptions].filter(c => c.checked).map(c => c.value);
+        if (selection.length === 0) {
+            showToast('請至少選擇一份報告', 'info');
+            return;
+        }
+
+        generateButton.disabled = true;
+        generateButton.textContent = '正在產生...';
+
+        try {
+            const resultStr = await google.colab.kernel.invokeFunction('notebook.get_report_data', [selection], {});
+            const result = JSON.parse(resultStr);
+
+            if (result.status === 'success') {
+                reportPreview.textContent = result.content;
+                outputSection.classList.remove('hidden');
+                showToast('報告已成功產生', 'success');
+            } else {
+                reportPreview.textContent = '產生報告時發生錯誤：\\n' + result.message;
+                showToast('產生報告失敗', 'error');
+            }
+        } catch (e) {
+            reportPreview.textContent = '與 Python 後端通訊失敗：\\n' + e;
+            showToast('通訊失敗', 'error');
+        } finally {
+            generateButton.disabled = false;
+            generateButton.textContent = '產生報告';
+        }
+    });
+
+    copyButton.addEventListener('click', () => {
+        navigator.clipboard.writeText(reportPreview.textContent).then(() => {
+            showToast('已複製到剪貼簿', 'success');
+        }, () => {
+            showToast('複製失敗', 'error');
+        });
+    });
+
+    archiveButton.addEventListener('click', async () => {
+        const selection = [...reportOptions].filter(c => c.checked).map(c => c.value);
+        if (selection.length === 0) {
+            showToast('請選擇要存檔的報告', 'info');
+            return;
+        }
+
+        archiveButton.disabled = true;
+        archiveButton.textContent = '正在存檔...';
+
+        try {
+            const resultStr = await google.colab.kernel.invokeFunction('notebook.archive_reports', [selection], {});
+            const result = JSON.parse(resultStr);
+            if(result.status === 'success') {
+                showToast(`成功存檔至 ${result.path}`, 'success');
+            } else {
+                showToast(`存檔失敗: ${result.message}`, 'error');
+            }
+        } catch (e) {
+            showToast('與 Python 後端通訊失敗', 'error');
+        } finally {
+            archiveButton.disabled = false;
+            archiveButton.textContent = '存檔選中報告';
+        }
+    });
+</script>
+</body>
+</html>
+"""
 
 def display_dashboard():
-    ui = widgets.VBox([
-        header,
-        widgets.HTML("請選擇您需要產生的報告類型："),
-        checkbox_layout,
-        button_layout,
-        report_preview,
-        panel_operations
-    ])
-    display(ui)
+    """渲染儀表板 UI。"""
+    display(HTML(DASHBOARD_UI_HTML))
 
 # --- 主程式入口 ---
 if __name__ == "__main__":
@@ -227,4 +300,11 @@ if __name__ == "__main__":
         REPORTS_DIR.mkdir()
         print(f"‼️ 警告：報告目錄 '{REPORTS_DIR}' 不存在，已自動建立。")
         print("   請確保後端已生成報告檔案至此目錄。")
-    display_dashboard()
+
+    # 檢查是否在 Colab 環境中
+    try:
+        import google.colab
+        display_dashboard()
+    except ImportError:
+        print("❌ 錯誤：此腳本設計為在 Google Colab 中執行。")
+        print("   它需要 `google.colab` 函式庫來進行前後端通訊。")
