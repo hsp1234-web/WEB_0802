@@ -6,9 +6,9 @@
 # ╠══════════════════════════════════════════════════════════════════╣
 # ║                                                                      ║
 # ║ - V50 更新日誌:                                                      ║
+# ║   - **顯示邏輯重構**: 統一由 DisplayManager 控制所有輸出，解決閃爍。 ║
 # ║   - **pip 引導修正**: 修正 `uv pip install pip` 指令，解決 --system 衝突。 ║
-# ║   - **報告格式更新**: 歸檔報告的副檔名更新為 .md 並加入 Markdown 格式。  ║
-# ║   - V49: 重構為純文字儀表板，解決閃爍問題。                        ║
+# ║   - V49: 重構為純文字儀表板。                                      ║
 # ║                                                                      ║
 # ╚══════════════════════════════════════════════════════════════════╝
 
@@ -141,6 +141,10 @@ class DisplayManager:
 
                 print("="*60)
 
+                if self._stats.get('proxy_url'):
+                    print(f"✅ 代理連結已生成: {self._stats['proxy_url']}")
+                    print("="*60)
+
                 cpu = psutil.cpu_percent()
                 ram = psutil.virtual_memory().percent
                 elapsed_time = time.monotonic() - self._stats["start_time_monotonic"]
@@ -224,10 +228,7 @@ class ServerManager:
             result = subprocess.run(["uv", "venv", str(venv_path)], check=False, capture_output=True, text=True, encoding='utf-8')
             if result.returncode != 0: self._log_manager.log("CRITICAL", f"建立虛擬環境失敗:\n{result.stderr}"); return None
 
-            venv_python = venv_path / "bin" / "python"
             self._log_manager.log("INFO", "引導程序：確保 pip 已安裝...")
-
-            # 建立一個啟用了虛擬環境的子進程環境來執行 uv
             bootstrap_env = os.environ.copy()
             bootstrap_env["VIRTUAL_ENV"] = str(venv_path)
             bootstrap_env["PATH"] = f"{venv_path / 'bin'}:{bootstrap_env.get('PATH', '')}"
@@ -276,26 +277,14 @@ def archive_reports(log_manager, start_time, end_time, status):
 
         log_history = log_manager.get_full_history()
 
-        # --- 詳細日誌.md ---
-        detailed_log_content = f"# 詳細日誌\n\n```\n"
-        detailed_log_content += "\n".join([f"[{log['timestamp'].isoformat()}] [{log['level']}] {log['message']}" for log in log_history])
-        detailed_log_content += "\n```"
+        detailed_log_content = f"# 詳細日誌\n\n```\n" + "\n".join([f"[{log['timestamp'].isoformat()}] [{log['level']}] {log['message']}" for log in log_history]) + "\n```"
         (report_dir / "詳細日誌.md").write_text(detailed_log_content, encoding='utf-8')
 
-        # --- 效能報告.md ---
         duration = end_time - start_time
-        perf_report_content = f"""
-# 效能報告
-
-- **任務狀態**: {status}
-- **開始時間**: `{start_time.isoformat()}`
-- **結束時間**: `{end_time.isoformat()}`
-- **總耗時**: `{str(duration)}`
-"""
+        perf_report_content = f"# 效能報告\n\n- **任務狀態**: {status}\n- **開始時間**: `{start_time.isoformat()}`\n- **結束時間**: `{end_time.isoformat()}`\n- **總耗時**: `{str(duration)}`\n"
         (report_dir / "效能報告.md").write_text(perf_report_content.strip(), encoding='utf-8')
 
-        # --- 綜合報告.md ---
-        comprehensive_report = f"# 綜合報告\n\n{perf_report_content}\n\n{detailed_log_content}"
+        comprehensive_report = f"# 綜合報告\n\n{perf_report_content}\n{detailed_log_content}"
         (report_dir / "綜合報告.md").write_text(comprehensive_report, encoding='utf-8')
 
         print(f"✅ 報告已成功歸檔至: {report_dir}")
@@ -308,7 +297,7 @@ def archive_reports(log_manager, start_time, end_time, status):
 
 def main():
     """主執行函式，負責初始化管理器、協調流程並處理生命週期。"""
-    shared_stats = {"start_time_monotonic": time.monotonic(), "status": "初始化..."}
+    shared_stats = {"start_time_monotonic": time.monotonic(), "status": "初始化...", "proxy_url": None}
     log_manager, display_manager, server_manager = None, None, None
     start_time = datetime.now(pytz.timezone(TIMEZONE))
 
@@ -324,10 +313,9 @@ def main():
         server_ready = server_manager.server_ready_event.wait(timeout=SERVER_READY_TIMEOUT)
 
         if server_ready:
-            # 在純文字模式下，我們直接打印連結
-            print("\n" + "="*60)
-            colab_output.serve_kernel_port_as_window(API_PORT, anchor_text=f'🚀 點此開啟鳳凰之心應用程式 (連接埠 {API_PORT})')
-            print("="*60)
+            # 將獲取 URL 的任務交給主線程，但結果儲存到共享狀態，由 DisplayManager 顯示
+            url = colab_output.eval_js(f'google.colab.kernel.proxyPort({API_PORT})')
+            shared_stats['proxy_url'] = url
         else:
             shared_stats['status'] = "❌ 伺服器啟動超時"
             log_manager.log("CRITICAL", f"伺服器在 {SERVER_READY_TIMEOUT} 秒內未能就緒。")
