@@ -21,7 +21,7 @@
 #@markdown **後端程式碼倉庫 (REPOSITORY_URL)**
 REPOSITORY_URL = "https://github.com/hsp1234-web/WEB_0802.git" #@param {type:"string"}
 #@markdown **後端版本分支或標籤 (TARGET_BRANCH_OR_TAG)**
-TARGET_BRANCH_OR_TAG = "0.5.1" #@param {type:"string"}
+TARGET_BRANCH_OR_TAG = "0.6.2" #@param {type:"string"}
 #@markdown **專案資料夾名稱 (PROJECT_FOLDER_NAME)**
 PROJECT_FOLDER_NAME = "WEB1" #@param {type:"string"}
 #@markdown **強制刷新後端程式碼 (FORCE_REPO_REFRESH)**
@@ -424,16 +424,16 @@ def main():
     </script>
     """
     display(HTML(log_display_html))
-    worker_thread = threading.Thread(target=background_worker)
+    # 將背景工作設為守護執行緒 (daemon)，這樣主程式結束時它會自動退出
+    worker_thread = threading.Thread(target=background_worker, daemon=True)
     worker_thread.start()
-    worker_thread.join(timeout=300)
-    clear_output(wait=True)
-    if worker_thread.is_alive():
-        log_message("❌ 背景任務啟動超時。")
 
+    # 不再等待 (join)，立即渲染儀表板
+    # 由儀表板的 JS 和背景看門狗負責後續的狀態更新
+    clear_output(wait=True)
     final_html = render_dashboard_html()
     display(HTML(final_html))
-    log_message("✅ 指揮中心前端渲染完畢。")
+    log_message("✅ 指揮中心前端渲染完畢，背景看門狗已啟動。")
 
 if __name__ == "__main__":
     main()
