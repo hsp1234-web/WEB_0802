@@ -134,44 +134,116 @@ def setup_backend():
 
 # --- 階段三：HTML UI 顯示邏輯 ---
 DASHBOARD_HTML = """
-<style>
-    .phoenix-dashboard {{ font-family: Menlo, 'Courier New', Courier, monospace; border: 1px solid #ccc; padding: 10px; background-color: #f5f5f5; }}
-    .phoenix-table {{ width: 100%; border-collapse: collapse; }}
-    .phoenix-table th, .phoenix-table td {{ padding: 8px; text-align: left; border-bottom: 1px solid #ddd; }}
-    .phoenix-table th {{ background-color: #333; color: #fff; }}
-    .phoenix-content-box {{ padding: 10px; background-color: #fff; border: 1px solid #ccc; border-radius: 5px; margin-top: 5px; }}
-    #log-panel {{ height: 300px; overflow-y: auto; display: flex; flex-direction: column-reverse; background-color: #1e1e1e; color: #d4d4d4; padding: 10px; border-radius: 5px;}}
-    .log-line {{ margin: 0; padding: 2px 0; }}
-    #copy-button {{ background-color: #007bff; color: white; border: none; padding: 8px 12px; cursor: pointer; border-radius: 5px; }}
-    #copy-button:hover {{ background-color: #0056b3; }}
-</style>
-<div id="phoenix-main-container" class="phoenix-dashboard">
-    <h2 style="text-align: center;">🚀 鳳凰之心 - 監控面板 🚀</h2>
-    <table class="phoenix-table">
-        <tr>
-            <th style="width: 60%;">📜 近況彙報</th>
-            <th style="width: 40%;">⚡️ 即時狀態</th>
-        </tr>
-        <tr>
-            <td rowspan="3"><div id="log-panel" class="phoenix-content-box">正在等待日誌...</div></td>
-            <td><div id="status-panel" class="phoenix-content-box">正在獲取狀態...</div></td>
-        </tr>
-        <tr>
-            <th>📊 日誌篩選狀態</th>
-        </tr>
-        <tr>
-            <td><div id="log-status-panel" class="phoenix-content-box">未設定</div></td>
-        </tr>
-        <tr>
-            <th>🔗 行動指令</th>
-            <th>📋 面板內容操作</th>
-        </tr>
-        <tr>
-            <td><div id="action-panel" class="phoenix-content-box">等待任務完成...</div></td>
-            <td><div class="phoenix-content-box"><button id="copy-button" onclick="copyDashboardContent()">複製日誌為純文字</button></div></td>
-        </tr>
-    </table>
-</div>
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>鳳凰之心 - 統一作戰儀表板</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&family=Noto+Sans+TC:wght@400;500;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        body {{
+            font-family: 'Inter', 'Noto Sans TC', sans-serif;
+            background-color: transparent; /* 適應 Colab 主題 */
+            color: var(--colab-primary-text-color, #d1d5db); /* 使用 Colab 變數 */
+        }}
+        .font-code {{
+            font-family: 'Fira Code', monospace;
+        }}
+        .dashboard-panel {{
+            background-color: var(--colab-secondary-surface-color, transparent);
+            border: 1px solid var(--colab-border-color, rgba(71, 85, 105, 0.5));
+            border-radius: 0.75rem;
+            margin-bottom: 1.5rem;
+        }}
+        .panel-title {{
+            padding: 0.75rem 1.25rem;
+            background-color: transparent;
+            border-bottom: 1px solid var(--colab-border-color, rgba(71, 85, 105, 0.5));
+            border-top-left-radius: 0.75rem;
+            border-top-right-radius: 0.75rem;
+            color: var(--colab-secondary-text-color, #9ca3af);
+            font-weight: 700;
+        }}
+        .log-container {{
+            padding: 1rem;
+            font-family: 'Fira Code', monospace;
+            font-size: 0.875rem;
+            line-height: 1.6;
+            height: {log_height}px; /* 由 Python 動態設定 */
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column-reverse;
+            background-color: var(--colab-secondary-surface-color, #1e293b);
+        }}
+        .log-line {{
+            display: grid;
+            grid-template-columns: 9ch max-content 1fr;
+            gap: 1rem;
+            align-items: baseline;
+        }}
+        .log-tag {{
+            text-align: center;
+            font-weight: 700;
+            padding: 0.125rem 0.5rem;
+            border-radius: 0.375rem;
+            font-size: 0.75rem;
+        }}
+    </style>
+</head>
+<body class="p-4 sm:p-6 md:p-8">
+    <div class="max-w-5xl mx-auto">
+        <header class="text-center mb-8">
+            <h1 class="text-2xl sm:text-3xl font-bold text-cyan-400">
+                🚀 鳳凰之心 - 監控面板 🚀
+            </h1>
+        </header>
+
+        <section class="dashboard-panel">
+            <div class="panel-title">📜 近況彙報</div>
+            <div id="log-panel" class="log-container">
+                <div class="text-gray-500">正在等待日誌...</div>
+            </div>
+        </section>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <section class="dashboard-panel">
+                <div class="panel-title">⚡️ 即時狀態</div>
+                <div id="status-panel" class="p-4 font-code text-base sm:text-lg text-center">
+                    正在獲取狀態...
+                </div>
+            </section>
+
+            <section class="dashboard-panel">
+                <div class="panel-title">📊 日誌篩選狀態</div>
+                <div id="log-status-panel" class="p-4 font-code text-sm">
+                    未設定
+                </div>
+            </section>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <section class="dashboard-panel">
+                <div class="panel-title">🔗 行動指令</div>
+                <div id="action-panel" class="p-4">
+                    等待任務完成...
+                </div>
+            </section>
+
+            <section class="dashboard-panel">
+                <div class="panel-title">📋 面板內容操作</div>
+                <div class="p-4 flex justify-center">
+                    <button id="copy-button" onclick="copyDashboardContent()" class="bg-violet-600 hover:bg-violet-700 text-white font-bold py-2 px-4 rounded-lg transition-all duration-200">
+                        複製日誌為純文字
+                    </button>
+                </div>
+            </section>
+        </div>
+    </div>
+
 <script>
 function copyDashboardContent() {
     const container = document.getElementById('log-panel');
@@ -180,10 +252,23 @@ function copyDashboardContent() {
         const button = document.getElementById('copy-button');
         const originalText = button.innerText;
         button.innerText = '✅ 複製成功!';
-        setTimeout(() => { button.innerText = originalText; }, 2000);
-    }).catch(err => { console.error('複製失敗: ', err); });
+        button.classList.remove('bg-violet-600', 'hover:bg-violet-700');
+        button.classList.add('bg-green-600');
+        setTimeout(() => {
+            button.innerText = originalText;
+            button.classList.remove('bg-green-600');
+            button.classList.add('bg-violet-600', 'hover:bg-violet-700');
+        }, 2000);
+    }).catch(err => {
+        console.error('複製失敗: ', err);
+        const button = document.getElementById('copy-button');
+        button.innerText = '❌ 複製失敗';
+        button.classList.add('bg-red-600');
+    });
 }
 </script>
+</body>
+</html>
 """
 
 def get_selected_log_levels():
@@ -205,21 +290,49 @@ def fetch_log_content_and_status(conn):
         logs = query_logs_by_level(conn, level, limit=LOG_DISPLAY_LINES)
         for log in logs:
             dt_obj = datetime.fromisoformat(log[1].replace('Z', '+00:00'))
-            all_logs.append((dt_obj, log[2], log[4]))
+            all_logs.append((dt_obj, log[2], log[4])) # time, level, message
     all_logs.sort(key=lambda x: x[0], reverse=True)
     display_logs = all_logs[:LOG_DISPLAY_LINES]
 
     log_html = ""
-    for log_time, level, message in reversed(display_logs):
-        ts = log_time.strftime("%H:%M:%S")
-        icon_map = {'SUCCESS': '✅', 'ERROR': '❌', 'BATTLE': '⚔️', 'INFO': '▶️', 'CRITICAL': '🚨'}
-        icon = icon_map.get(level, '🔹')
-        escaped_message = html.escape(message)
-        log_html += f'<div class="log-line">[{ts}] [{level}] {icon} {escaped_message}</div>'
+    if not display_logs:
+        log_html = '<div class="text-gray-500">暫無日誌...</div>'
+    else:
+        for log_time, level, message in reversed(display_logs):
+            ts = log_time.strftime("%H:%M:%S")
+            level_upper = level.upper()
 
-    log_status_html = f"<b>當前篩選等級:</b> {', '.join(levels_to_show)}<br>"
-    log_status_html += f"<b>共檢索到日誌:</b> {len(all_logs)} 條"
+            color_map = {
+                'SUCCESS': 'bg-green-500/20 text-green-400',
+                'ERROR': 'bg-red-500/20 text-red-400',
+                'CRITICAL': 'bg-red-700/30 text-red-300 font-bold',
+                'BATTLE': 'bg-blue-500/20 text-blue-400',
+                'WARN': 'bg-yellow-500/20 text-yellow-400',
+                'INFO': 'bg-gray-500/20 text-gray-400',
+                'CMD': 'bg-purple-500/20 text-purple-400',
+                'LOG_SHELL': 'bg-indigo-500/20 text-indigo-400'
+            }
+            tag_class = color_map.get(level_upper, 'bg-gray-600/20 text-gray-500')
 
+            escaped_message = html.escape(message)
+            log_html += f"""
+            <div class="log-line">
+                <span class="text-gray-500">[{ts}]</span>
+                <span class="log-tag {tag_class}">{level_upper}</span>
+                <span class="text-gray-300">{escaped_message}</span>
+            </div>
+            """
+
+    log_status_html = f"""
+    <div class="flex justify-between items-center">
+        <span class="font-semibold text-gray-400">當前篩選等級:</span>
+        <span class="text-cyan-400 font-mono">{', '.join(levels_to_show) if levels_to_show else '無'}</span>
+    </div>
+    <div class="flex justify-between items-center mt-2">
+        <span class="font-semibold text-gray-400">檢索到的日誌數:</span>
+        <span class="text-cyan-400 font-mono">{len(all_logs)}</span>
+    </div>
+    """
     return log_html, log_status_html
 
 def fetch_status_content(conn):
@@ -231,20 +344,53 @@ def fetch_status_content(conn):
     ram_total_gb = ram.total / (1024**3)
     heartbeat_status = check_heartbeat_status(conn, 15)
 
-    if heartbeat_status == 'OK':
-        main_status = "<span style='color: green;'>[🟢 核心運行中]</span>"
-        heartbeat_text = "<span style='color: green;'>[💓 心跳正常]</span>"
-    else:
-        main_status = "<span style='color: red;'>[🔴 核心無回應]</span>"
-        heartbeat_text = f"<span style='color: red;'>[🚨 心跳異常: {heartbeat_status}]</span>"
+    status_color_map = {
+        'OK': 'text-green-400',
+        'STOPPED': 'text-yellow-400',
+        'NO_HEARTBEAT_YET': 'text-gray-500',
+    }
+    status_text_map = {
+        'OK': '[🟢 核心運行中]',
+        'STOPPED': '[🟡 核心已停止]',
+        'NO_HEARTBEAT_YET': '[⚪️ 等待心跳...]',
+    }
 
-    status_line = f"{ts} | CPU: {cpu_percent:5.1f}% | RAM: {ram_used_gb:.1f}/{ram_total_gb:.1f} GB<br>{main_status} {heartbeat_text}"
-    return status_line
+    # Default to error state
+    status_color = 'text-red-400'
+    main_status = f'[🔴 核心無回應]'
+
+    if heartbeat_status in status_text_map:
+        status_color = status_color_map[heartbeat_status]
+        main_status = status_text_map[heartbeat_status]
+    elif heartbeat_status.startswith('LAGGED'):
+        main_status = f'[🟠 心跳延遲 {heartbeat_status.split(":")[1]}s]'
+        status_color = 'text-orange-400'
+
+    return f"""
+    <div class="flex justify-center items-center space-x-4">
+        <span>{ts}</span>
+        <span class="text-gray-600">|</span>
+        <span>CPU: {cpu_percent:5.1f}%</span>
+        <span class="text-gray-600">|</span>
+        <span>RAM: {ram_used_gb:.1f}/{ram_total_gb:.1f} GB</span>
+        <span class="text-gray-600">|</span>
+        <span class="font-bold {status_color}">{main_status}</span>
+    </div>
+    """
 
 def fetch_action_content():
     line1 = "所有任務已執行完畢！點擊下方連結以開啟互動式操作儀表板。"
-    line2 = f"👉 http://localhost:{API_PORT}/"
-    return f"{html.escape(line1)}<br><br>{html.escape(line2)}"
+    # 這是 Colab 環境，需要一個能在 Colab 外部訪問的 URL
+    # google.colab.output.eval_js('google.colab.kernel.proxyPort(port)') 可用來生成
+    # 但為了簡化，我們先用一個 placeholder
+    url = f"http://localhost:{API_PORT}/"
+
+    return f"""
+    <p class="mb-4 text-gray-300">所有任務已執行完畢！點擊下方連結以開啟互動式操作儀表板。</p>
+    <a href="{url}" target="_blank" class="text-cyan-400 hover:text-cyan-300 break-all">
+        👉 {url}
+    </a>
+    """
 
 def main_loop():
     DB_PATH = "state.db"
@@ -252,16 +398,22 @@ def main_loop():
         print(f"❌ 錯誤：找不到資料庫檔案 '{DB_PATH}'。")
         return
 
-    display(HTML(DASHBOARD_HTML))
+    # 動態計算日誌面板高度
+    log_height = LOG_DISPLAY_LINES * 25 # 每行約 25px
+    final_html = DASHBOARD_HTML.format(log_height=log_height)
+
+    display(HTML(final_html))
     conn = None
     try:
+        # 使用 read-only mode 連接
         conn = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True)
         while True:
             log_content, log_status_content = fetch_log_content_and_status(conn)
             status_content = fetch_status_content(conn)
             heartbeat_status = check_heartbeat_status(conn, 15)
-            action_content = fetch_action_content() if heartbeat_status == 'STOPPED' else '等待任務完成...'
+            action_content = fetch_action_content() if heartbeat_status == 'STOPPED' else '<span class="text-gray-500">等待任務完成...</span>'
 
+            # 將所有內容更新打包成一個 JS 命令
             js_code = f"""
             document.getElementById('log-panel').innerHTML = `{log_content.replace('`', '\\`')}`;
             document.getElementById('status-panel').innerHTML = `{status_content.replace('`', '\\`')}`;
@@ -271,6 +423,12 @@ def main_loop():
             display(Javascript(js_code))
             time.sleep(REFRESH_RATE_SECONDS)
 
+    except sqlite3.OperationalError as e:
+        if "database is locked" in str(e):
+             display(Javascript("document.getElementById('status-panel').innerHTML = '<span class=\"text-yellow-400\">🟡 資料庫暫時鎖定，正在重試...</span>';"))
+             time.sleep(REFRESH_RATE_SECONDS) # 等待後重試
+        else:
+             display(Javascript(f"document.getElementById('status-panel').innerHTML = '<span class=\"text-red-400\">❌ 資料庫錯誤: {str(e)}</span>';"))
     except sqlite3.Error as e:
         display(Javascript(f"document.getElementById('status-panel').innerHTML = '❌ 資料庫錯誤: {str(e)}';"))
     except KeyboardInterrupt:
