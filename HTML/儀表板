@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>鳳凰之心 - 統一作戰儀表板</title>
+    <!-- 引入 Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 引入 Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&family=Noto+Sans+TC:wght@400;500;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        /* 自定義樣式 */
+        body {
+            font-family: 'Inter', 'Noto Sans TC', sans-serif;
+            background-color: #0F172A; /* bg-slate-900 */
+        }
+        .font-code {
+            font-family: 'Fira Code', monospace;
+        }
+        .dashboard-panel {
+            background-color: transparent; /* 完全透明 */
+            border: 1px solid rgba(71, 85, 105, 0.5); /* 輕微的邊框 */
+            border-radius: 0.75rem;
+            margin-bottom: 1.5rem;
+        }
+        .panel-title {
+            padding: 0.75rem 1.25rem;
+            background-color: transparent; /* 透明標題背景 */
+            border-bottom: 1px solid rgba(71, 85, 105, 0.5);
+            border-top-left-radius: 0.75rem;
+            border-top-right-radius: 0.75rem;
+            color: #d1d5db;
+            font-weight: 500;
+        }
+        .custom-checkbox {
+            appearance: none;
+            background-color: #334155; /* bg-slate-700 */
+            border: 1px solid #475569; /* border-slate-600 */
+            border-radius: 0.25rem;
+            width: 1.25rem;
+            height: 1.25rem;
+            cursor: pointer;
+            position: relative;
+            transition: all 0.2s;
+        }
+        .custom-checkbox:checked {
+            background-color: #3b82f6;
+            border-color: #3b82f6;
+        }
+        .custom-checkbox:checked::after {
+            content: '✓';
+            color: white;
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 0.875rem;
+        }
+
+        /* 修正對齊：使用更精準的 ch 單位 */
+        .log-line {
+            display: grid;
+            /* 三欄：時間戳固定寬度，日誌等級固定寬度，日誌內容自動填充 */
+            grid-template-columns: 9ch 7rem 1fr;
+            gap: 1rem;
+            align-items: baseline;
+        }
+        .log-tag {
+            text-align: center; /* 標籤置中對齊 */
+            font-weight: 700;
+        }
+    </style>
+</head>
+<body class="bg-black text-gray-200 p-4 sm:p-6 md:p-8">
+
+    <div class="max-w-4xl mx-auto">
+        <!-- ====================================================================== -->
+        <!-- 作戰監控面板 -->
+        <!-- ====================================================================== -->
+        <header class="text-center mb-8">
+            <h1 class="text-2xl sm:text-3xl font-bold text-cyan-400">
+                🚀 鳳凰之心 - 監控面板 🚀
+            </h1>
+        </header>
+
+        <div id="monitor-content-to-copy">
+            <section class="dashboard-panel">
+                <div class="panel-title">📜 近況彙報</div>
+                <!-- 修正對齊後的新日誌列表 -->
+                <div class="p-4 font-code text-sm sm:text-base leading-relaxed h-64 overflow-y-auto">
+                    <div class="log-line">
+                        <span class="text-gray-400">[20:25:38]</span>
+                        <span class="log-tag text-green-500">[SUCCESS]</span>
+                        <span class="text-gray-300">✅ 市場分析報告已生成。</span>
+                    </div>
+                    <div class="log-line">
+                        <span class="text-gray-400">[20:25:36]</span>
+                        <span class="log-tag text-blue-500">[BATTLE]</span>
+                        <span class="text-gray-300">⚔️ 正在進行深度市場趨勢分析... (3/3)</span>
+                    </div>
+                    <div class="log-line">
+                        <span class="text-gray-400">[20:25:31]</span>
+                        <span class="log-tag text-red-500">[ERROR]</span>
+                        <span class="text-gray-300">❌ 無法連接到外部數據源 API (已重試 2/3)。</span>
+                    </div>
+                     <div class="log-line">
+                        <span class="text-gray-400">[20:25:23]</span>
+                        <span class="log-tag text-gray-500">[INFO]</span>
+                        <span class="text-gray-300">▶️ 鳳凰之心後端核心已啟動。</span>
+                    </div>
+                     <div class="log-line">
+                        <span class="text-gray-400">[20:25:15]</span>
+                        <span class="log-tag text-yellow-500">[WARN]</span>
+                        <span class="text-gray-300">⚠️ 數據驗證警告：部分資料點遺失。</span>
+                    </div>
+                </div>
+            </section>
+
+            <section class="dashboard-panel">
+                <div class="panel-title">⚡️ 即時狀態</div>
+                <div class="p-4 font-code text-base sm:text-lg text-center">
+                    <span>20:25:40</span>
+                    <span class="text-gray-600 mx-2">|</span>
+                    <span>CPU: 18.5%</span>
+                    <span class="text-gray-600 mx-2">|</span>
+                    <span>RAM: 4.8/12.7 GB</span>
+                    <span class="text-gray-600 mx-2">|</span>
+                    <span class="text-green-400 font-bold">[🟢 任務完成]</span>
+                </div>
+            </section>
+
+            <section class="dashboard-panel">
+                <div class="panel-title">🔗 行動指令</div>
+                <div class="p-4 text-center">
+                    <p class="mb-4">所有任務已執行完畢！點擊下方連結以開啟互動式操作儀表板。</p>
+                    <a href="#" class="text-cyan-400 hover:text-cyan-300 break-all">
+                        👉 https://your-colab-instance.googleusercontent.com/your-app-port/
+                    </a>
+                </div>
+            </section>
+        </div>
+
+        <section class="dashboard-panel">
+            <div class="panel-title">📋 面板內容操作</div>
+            <div class="p-4 flex justify-center">
+                <button id="copy-monitor-button" class="bg-violet-600 hover:bg-violet-700 text-white font-bold py-2 px-4 rounded-lg transition-all duration-200">
+                    複製完整輸出為純文字
+                </button>
+            </div>
+        </section>
+
+        <!-- 分隔線 -->
+        <hr class="border-gray-700 my-12">
+
+        <!-- ====================================================================== -->
+        <!-- 互動式報告儀表板 -->
+        <!-- ====================================================================== -->
+        <header class="text-center mb-8">
+            <h1 class="text-2xl sm:text-3xl font-bold text-blue-400">
+                📊 鳳凰之心 - 互動式報告儀表板 📊
+            </h1>
+        </header>
+
+        <section class="dashboard-panel">
+            <div class="panel-title">請選擇您需要產生的報告類型</div>
+            <div class="p-6 space-y-4">
+                <label class="flex items-center space-x-3 cursor-pointer">
+                    <input type="checkbox" id="select-all" class="custom-checkbox" checked>
+                    <span>全部報告</span>
+                </label>
+                <div class="pl-8 space-y-3">
+                    <label class="flex items-center space-x-3 cursor-pointer">
+                        <input type="checkbox" name="report-option" value="performance" class="custom-checkbox" checked>
+                        <span>📈 效能分析報告 (performance_report.md)</span>
+                    </label>
+                    <label class="flex items-center space-x-3 cursor-pointer">
+                        <input type="checkbox" name="report-option" value="summary" class="custom-checkbox" checked>
+                        <span>📄 總結報告 (summary_report.md)</span>
+                    </label>
+                    <label class="flex items-center space-x-3 cursor-pointer">
+                        <input type="checkbox" name="report-option" value="detailed" class="custom-checkbox" checked>
+                        <span>📋 詳細日誌報告 (detailed_log_report.md)</span>
+                    </label>
+                </div>
+                <div class="pt-4 flex justify-center">
+                    <button id="generate-button" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105">
+                        產生報告
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <div id="output-section" class="hidden">
+            <section class="dashboard-panel">
+                <div class="panel-title">報告內容預覽</div>
+                <div id="report-preview" class="p-6 font-code text-sm leading-relaxed h-80 overflow-y-auto">
+                    <!-- 內容將由 JS 動態生成 -->
+                </div>
+            </section>
+            
+            <section class="dashboard-panel">
+                <div class="panel-title">📋 面板內容操作</div>
+                <div class="p-4 flex flex-wrap justify-center gap-4">
+                    <button id="copy-selected-button" class="bg-violet-600 hover:bg-violet-700 text-white font-bold py-2 px-4 rounded-lg transition-all duration-200">
+                        複製選中報告
+                    </button>
+                    <button id="archive-button" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg transition-all duration-200">
+                        存檔選中報告
+                    </button>
+                    <button id="copy-all-output-button" class="bg-violet-600 hover:bg-violet-700 text-white font-bold py-2 px-4 rounded-lg transition-all duration-200">
+                        複製完整輸出為純文字
+                    </button>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <script>
+        // --- 彈窗訊息功能，取代 alert() ---
+        function showMessage(message, type = 'info') {
+            const messageBox = document.createElement('div');
+            messageBox.className = `fixed bottom-4 left-1/2 -translate-x-1/2 p-4 rounded-lg text-white font-bold shadow-lg z-50 transition-all duration-300 transform scale-100`;
+
+            switch (type) {
+                case 'success':
+                    messageBox.classList.add('bg-green-600');
+                    break;
+                case 'error':
+                    messageBox.classList.add('bg-red-600');
+                    break;
+                case 'info':
+                default:
+                    messageBox.classList.add('bg-blue-600');
+                    break;
+            }
+
+            messageBox.textContent = message;
+            document.body.appendChild(messageBox);
+            setTimeout(() => {
+                messageBox.classList.add('scale-0');
+                messageBox.addEventListener('transitionend', () => messageBox.remove());
+            }, 3000);
+        }
+
+        // --- 通用功能 ---
+        function copyToClipboard(text, buttonElement, successText, originalText) {
+            const tempTextArea = document.createElement('textarea');
+            tempTextArea.value = text;
+            tempTextArea.style.position = 'absolute';
+            tempTextArea.style.left = '-9999px';
+            document.body.appendChild(tempTextArea);
+            tempTextArea.select();
+            tempTextArea.setSelectionRange(0, 99999);
+            try {
+                document.execCommand('copy');
+                buttonElement.textContent = `✅ ${successText}`;
+                const originalClasses = Array.from(buttonElement.classList);
+                buttonElement.className = '';
+                originalClasses.forEach(c => {
+                    if (!c.startsWith('bg-') && !c.startsWith('hover:bg-')) {
+                        buttonElement.classList.add(c);
+                    }
+                });
+                buttonElement.classList.add('bg-green-600');
+            } catch (err) {
+                console.error('無法複製文字: ', err);
+                buttonElement.textContent = `❌ 複製失敗`;
+            }
+            document.body.removeChild(tempTextArea);
+            setTimeout(() => {
+                buttonElement.textContent = originalText;
+                buttonElement.classList.remove('bg-green-600');
+                if (originalText.includes('監控') || originalText.includes('選中') || originalText.includes('完整輸出')) {
+                    buttonElement.classList.add('bg-violet-600', 'hover:bg-violet-700');
+                } else if (originalText.includes('存檔')) {
+                    buttonElement.classList.add('bg-gray-600', 'hover:bg-gray-700');
+                } else if (originalText.includes('產生')) {
+                    buttonElement.classList.add('bg-blue-600', 'hover:bg-blue-700');
+                }
+            }, 1000);
+        }
+
+        // --- 監控面板腳本 ---
+        const copyMonitorButton = document.getElementById('copy-monitor-button');
+        copyMonitorButton.addEventListener('click', () => {
+            const contentContainer = document.getElementById('monitor-content-to-copy');
+            const textToCopy = contentContainer.innerText;
+            copyToClipboard(textToCopy, copyMonitorButton, '複製成功', '複製完整輸出為純文字');
+        });
+
+        // --- 報告儀表板腳本 ---
+        const selectAllCheckbox = document.getElementById('select-all');
+        const reportOptionCheckboxes = document.querySelectorAll('input[name="report-option"]');
+        const generateButton = document.getElementById('generate-button');
+        const outputSection = document.getElementById('output-section');
+        const reportPreview = document.getElementById('report-preview');
+        const copySelectedButton = document.getElementById('copy-selected-button');
+        const archiveButton = document.getElementById('archive-button');
+        const copyAllOutputButton = document.getElementById('copy-all-output-button');
+
+        const mockReports = {
+            performance: '### 📈 效能分析報告\n- 核心初始化耗時: 2.34s\n- 市場數據獲取耗時: 15.89s\n- 報告生成時間: 0.45s',
+            summary: '### 📄 總結報告\n- 本次任務成功執行 128 個操作。\n- 偵測到 3 個低風險異常。\n- 整體系統健康度評分為 98.5%。',
+            detailed: `<div class="log-line"><span class="text-gray-400">[20:25:38]</span><span class="log-tag text-green-500">[SUCCESS]</span><span class="text-gray-300">✅ 市場分析報告已生成。</span></div><div class="log-line"><span class="text-gray-400">[20:25:36]</span><span class="log-tag text-blue-500">[BATTLE]</span><span class="text-gray-300">⚔️ 正在進行深度市場趨勢分析... (3/3)</span></div><div class="log-line"><span class="text-gray-400">[20:25:31]</span><span class="log-tag text-red-500">[ERROR]</span><span class="text-gray-300">❌ 無法連接到外部數據源 API (已重試 2/3)。</span></div><div class="log-line"><span class="text-gray-400">[20:25:23]</span><span class="log-tag text-gray-500">[INFO]</span><span class="text-gray-300">▶️ 鳳凰之心後端核心已啟動。</span></div>`
+        };
+
+        selectAllCheckbox.addEventListener('change', () => {
+            reportOptionCheckboxes.forEach(checkbox => checkbox.checked = selectAllCheckbox.checked);
+        });
+
+        reportOptionCheckboxes.forEach(checkbox => {
+            checkbox.addEventListener('change', () => {
+                selectAllCheckbox.checked = [...reportOptionCheckboxes].every(c => c.checked);
+            });
+        });
+
+        generateButton.addEventListener('click', () => {
+            let selectedReportsContent = '';
+            reportOptionCheckboxes.forEach(checkbox => {
+                if (checkbox.checked) {
+                    if (checkbox.value === 'detailed') {
+                        selectedReportsContent += mockReports[checkbox.value] + '\n\n';
+                    } else {
+                        const markdownText = mockReports[checkbox.value].replace(/\n/g, '<br>');
+                        selectedReportsContent += markdownText + '\n\n';
+                    }
+                }
+            });
+            
+            if (selectedReportsContent.trim() === '') {
+                reportPreview.innerHTML = '<p class="text-gray-400">請至少選擇一份報告來產生內容。</p>';
+            } else {
+                reportPreview.innerHTML = selectedReportsContent.trim();
+            }
+            outputSection.classList.remove('hidden');
+        });
+
+        copySelectedButton.addEventListener('click', () => {
+            let selectedContent = '';
+            reportOptionCheckboxes.forEach(checkbox => {
+                if (checkbox.checked) {
+                    const content = mockReports[checkbox.value];
+                    selectedContent += content.replace(/<[^>]*>?/gm, '') + '\n\n';
+                }
+            });
+            copyToClipboard(selectedContent.trim(), copySelectedButton, '複製成功', '複製選中報告');
+        });
+
+        copyAllOutputButton.addEventListener('click', () => {
+            const fullOutputText = reportPreview.innerText;
+            copyToClipboard(fullOutputText, copyAllOutputButton, '複製成功', '複製完整輸出為純文字');
+        });
+        
+        archiveButton.addEventListener('click', () => {
+            showMessage('✅ 已發送存檔指令', 'success');
+        });
+    </script>
+</body>
+</html>

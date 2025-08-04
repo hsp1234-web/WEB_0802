@@ -1,0 +1,76 @@
+# Virtual Environment
+.venv/
+venv/
+env/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# Databases
+*.sqlite3
+*.db
+*.sqlite
+*.duckdb
+*.duckdb.wal
+
+# Test artifacts
+.test_venv/
+.e2e_venv/
+.venv_test/
+test_final_archive/
+
+# Logs
+# 忽略 logs 目錄下的所有 .log 檔案
+logs/
+
+# Test artifacts
+.pytest_cache/
+.ruff_cache/
+.venv_cache/
+transcriber_uploads/
+temp/
+WEB1/
+
+# IDE / Editor specific
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS-specific
+.DS_Store
+Thumbs.db
+
+# 忽略本地環境變數檔案
+.env
+
+# 黃金標準啟動器產生的虛擬環境
+.venv_gold/
+
+
+# Colab 後端專用 venv
+.venv_colab_backend/
+
+# 本地偵錯執行器產生的虛擬環境
+.venv_debug/
+
+# 本地安裝的二進位檔案
+bin/
+
+# Pytest 整合測試用的虛擬環境
+.pytest_venv/
+
+# 探測器 (Probe) 虛擬環境
+.venv_probe/
+.venv_legacy_probe/
+
+# 測試執行器 (Test Runner) 虛擬環境
+.venv_test_runner/

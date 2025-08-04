@@ -1,0 +1,14 @@
+# 檔案: pyproject.toml
+
+[project]
+name = "phoenix-core"
+version = "0.1.0"
+description = "The modular monolith core for the Phoenix Heart project."
+readme = "README.md"
+requires-python = ">=3.10"
+
+# 思路框架: 告訴打包工具，我們的原始碼在 'src' 目錄下。
+[tool.setuptools.packages.find]
+where = ["src"]
+
+# Pytest 的設定已遷移至 pytest.ini，以確保 pytest 能正確讀取。
