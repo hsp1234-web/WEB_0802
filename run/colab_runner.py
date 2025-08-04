@@ -1,18 +1,18 @@
 # -*- coding: utf-8 -*-
 # ╔══════════════════════════════════════════════════════════════════╗
 # ║                                                                      ║
-# ║    🚀 鳳凰之心 - V49 作戰指揮中心 (純文字終極版)                   ║
+# ║    🚀 鳳凰之心 - V50 作戰指揮中心 (最終穩定版)                     ║
 # ║                                                                      ║
 # ╠══════════════════════════════════════════════════════════════════╣
 # ║                                                                      ║
-# ║ - V49 更新日誌:                                                      ║
-# ║   - **UI 重構**: 移除所有 HTML，回歸純文字與 ANSI 控制碼，解決閃爍。 ║
-# ║   - **pip 引導程序**: 修正因 `uv venv` 未包含 pip 導致的安裝失敗。   ║
-# ║   - **架構保留**: 維持 Log/Display/Server 管理器的模組化設計。     ║
+# ║ - V50 更新日誌:                                                      ║
+# ║   - **pip 引導修正**: 修正 `uv pip install pip` 指令，解決 --system 衝突。 ║
+# ║   - **報告格式更新**: 歸檔報告的副檔名更新為 .md 並加入 Markdown 格式。  ║
+# ║   - V49: 重構為純文字儀表板，解決閃爍問題。                        ║
 # ║                                                                      ║
 # ╚══════════════════════════════════════════════════════════════════╝
 
-#@title 💎 鳳凰之心 V49 作戰指揮中心 (純文字模式) { vertical-output: true, display-mode: "form" }
+#@title 💎 鳳凰之心 V50 作戰指揮中心 (純文字模式) { vertical-output: true, display-mode: "form" }
 #@markdown ---
 #@markdown ### **Part 1: 專案與環境設定**
 #@markdown > **設定 Git 倉庫、分支或標籤，以及專案資料夾。**
@@ -131,7 +131,7 @@ class DisplayManager:
         while not self._stop_event.is_set():
             try:
                 clear_output(wait=True)
-                print("🚀 鳳凰之心 V49 作戰指揮中心")
+                print("🚀 鳳凰之心 V50 作戰指揮中心")
                 print("="*60)
 
                 logs_to_display = self._log_manager.get_display_logs()
@@ -226,8 +226,13 @@ class ServerManager:
 
             venv_python = venv_path / "bin" / "python"
             self._log_manager.log("INFO", "引導程序：確保 pip 已安裝...")
-            bootstrap_command = ["uv", "pip", "install", "--python", str(venv_python), "pip", "wheel"]
-            result = subprocess.run(bootstrap_command, check=False, capture_output=True, text=True, encoding='utf-8')
+
+            # 建立一個啟用了虛擬環境的子進程環境來執行 uv
+            bootstrap_env = os.environ.copy()
+            bootstrap_env["VIRTUAL_ENV"] = str(venv_path)
+            bootstrap_env["PATH"] = f"{venv_path / 'bin'}:{bootstrap_env.get('PATH', '')}"
+            bootstrap_command = ["uv", "pip", "install", "pip", "wheel"]
+            result = subprocess.run(bootstrap_command, check=False, capture_output=True, text=True, encoding='utf-8', env=bootstrap_env)
             if result.returncode != 0: self._log_manager.log("CRITICAL", f"引導安裝 pip 失敗:\n{result.stderr}"); return None
 
             self._log_manager.log("INFO", "正在安裝核心依賴...")
@@ -270,15 +275,28 @@ def archive_reports(log_manager, start_time, end_time, status):
         report_dir.mkdir(exist_ok=True)
 
         log_history = log_manager.get_full_history()
-        detailed_log_content = "\n".join([f"[{log['timestamp'].isoformat()}] [{log['level']}] {log['message']}" for log in log_history])
-        (report_dir / "詳細日誌.txt").write_text(detailed_log_content, encoding='utf-8')
 
+        # --- 詳細日誌.md ---
+        detailed_log_content = f"# 詳細日誌\n\n```\n"
+        detailed_log_content += "\n".join([f"[{log['timestamp'].isoformat()}] [{log['level']}] {log['message']}" for log in log_history])
+        detailed_log_content += "\n```"
+        (report_dir / "詳細日誌.md").write_text(detailed_log_content, encoding='utf-8')
+
+        # --- 效能報告.md ---
         duration = end_time - start_time
-        perf_report_content = f"--- 效能報告 ---\n任務狀態: {status}\n開始時間: {start_time.isoformat()}\n結束時間: {end_time.isoformat()}\n總耗時: {str(duration)}\n"
-        (report_dir / "效能報告.txt").write_text(perf_report_content.strip(), encoding='utf-8')
+        perf_report_content = f"""
+# 效能報告
 
-        comprehensive_report = f"{perf_report_content}\n--- 詳細日誌 ---\n{detailed_log_content}"
-        (report_dir / "綜合報告.txt").write_text(comprehensive_report, encoding='utf-8')
+- **任務狀態**: {status}
+- **開始時間**: `{start_time.isoformat()}`
+- **結束時間**: `{end_time.isoformat()}`
+- **總耗時**: `{str(duration)}`
+"""
+        (report_dir / "效能報告.md").write_text(perf_report_content.strip(), encoding='utf-8')
+
+        # --- 綜合報告.md ---
+        comprehensive_report = f"# 綜合報告\n\n{perf_report_content}\n\n{detailed_log_content}"
+        (report_dir / "綜合報告.md").write_text(comprehensive_report, encoding='utf-8')
 
         print(f"✅ 報告已成功歸檔至: {report_dir}")
     except Exception as e:
