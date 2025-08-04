@@ -19,7 +19,7 @@
 #@markdown **後端程式碼倉庫 (REPOSITORY_URL)**
 REPOSITORY_URL = "https://github.com/hsp1234-web/WEB_0802.git" #@param {type:"string"}
 #@markdown **後端版本分支或標籤 (TARGET_BRANCH_OR_TAG)**
-TARGET_BRANCH_OR_TAG = "0.8.0" #@param {type:"string"}
+TARGET_BRANCH_OR_TAG = "0.8.1" #@param {type:"string"}
 #@markdown **專案資料夾名稱 (PROJECT_FOLDER_NAME)**
 PROJECT_FOLDER_NAME = "WEB1" #@param {type:"string"}
 #@markdown **強制刷新後端程式碼 (FORCE_REPO_REFRESH)**
@@ -67,12 +67,6 @@ SERVER_READY_TIMEOUT = 45 #@param {type:"integer"}
 # SECTION 0: 環境準備與核心依賴導入
 # ==============================================================================
 try:
-    import psutil
-except ImportError:
-    print("正在安裝 psutil...")
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "psutil"])
-    import psutil
-try:
     import pytz
 except ImportError:
     print("正在安裝 pytz...")
@@ -117,15 +111,12 @@ class LogManager:
         with self._lock:
             return list(self._log_deque)
 
-# V62: ANSI Color implementation
+# V65: Simplified color scheme
 ANSI_COLORS = {
-    "SUCCESS": "\033[92m",  # Green
-    "INFO": "\033[96m",     # Cyan
-    "WARN": "\033[93m",     # Yellow
-    "ERROR": "\033[91m",    # Red
-    "CRITICAL": "\033[1;91m",# Bold Red
-    "BATTLE": "\033[95m",   # Magenta
-    "DEBUG": "\033[90m",    # Bright Black (Gray)
+    "SUCCESS": "\033[32m",  # Green
+    "WARN": "\033[33m",     # Yellow
+    "ERROR": "\033[31m",    # Red
+    "CRITICAL": "\033[31m", # Red
     "RESET": "\033[0m"      # Reset color
 }
 
@@ -144,50 +135,62 @@ class DisplayManager:
         self._stop_event = threading.Event()
         self._thread = threading.Thread(target=self._run, daemon=True)
 
+    def _build_output_buffer(self) -> list[str]:
+        """建立儀表板的輸出內容緩衝區。"""
+        output_buffer = []
+
+        # V0.8.1: 加速安裝版
+        output_buffer.append("🐦‍🔥 鳳凰之心 - V0.8.1 作戰指揮中心 (加速安裝版) 🐦‍🔥")
+        # V65: Add a blank line for spacing after title
+        output_buffer.append("")
+
+        logs_to_display = self._log_manager.get_display_logs()
+        for log in logs_to_display:
+            ts = log['timestamp'].strftime('%H:%M:%S')
+            level = log['level']
+            padded_level = f"[{level:^8}]"
+            colored_level = colorize(padded_level, level)
+            output_buffer.append(f"[{ts}] {colored_level} {log['message']}")
+
+        if self._stats.get('proxy_url'):
+            # Add a blank line for spacing if there are logs
+            if logs_to_display:
+                output_buffer.append("")
+            output_buffer.append(f"✅ 代理連結已生成: {self._stats['proxy_url']}")
+
+        try:
+            import psutil
+            cpu_percent = psutil.cpu_percent()
+            ram_percent = psutil.virtual_memory().percent
+            cpu_text = f"{cpu_percent:5.1f}%"
+            ram_text = f"{ram_percent:5.1f}%"
+        except ImportError:
+            cpu_text = "  N/A "
+            ram_text = "  N/A "
+
+        elapsed_time = time.monotonic() - self._stats.get("start_time_monotonic", time.monotonic())
+        minutes, seconds = divmod(elapsed_time, 60)
+
+        output_buffer.append("")
+        status_line = (
+            f"⏱️ {int(minutes):02d}分{int(seconds):02d}秒 | "
+            f"💻 CPU: {cpu_text} | "
+            f"🧠 RAM: {ram_text} | "
+            f"🔥 狀態: {self._stats.get('status', '初始化...')}"
+        )
+        output_buffer.append(status_line)
+        return output_buffer
+
     def _run(self):
+        """顯示執行緒的主迴圈，負責定時重繪儀表板。"""
         while not self._stop_event.is_set():
             try:
-                output_buffer = []
-
-                output_buffer.append("🐦‍🔥 鳳凰之心 V62 作戰指揮中心 🐦‍🔥")
-                output_buffer.append("="*60)
-
-                logs_to_display = self._log_manager.get_display_logs()
-                for log in logs_to_display:
-                    ts = log['timestamp'].strftime('%H:%M:%S')
-                    level = log['level']
-
-                    # Pad first to ensure alignment, then colorize
-                    padded_level = f"[{level:^8}]"
-                    colored_level = colorize(padded_level, level)
-
-                    output_buffer.append(f"[{ts}] {colored_level} {log['message']}")
-
-                output_buffer.append("="*60)
-
-                if self._stats.get('proxy_url'):
-                    output_buffer.append(f"✅ 代理連結已生成: {self._stats['proxy_url']}")
-                    output_buffer.append("="*60)
-
-                cpu = psutil.cpu_percent()
-                ram = psutil.virtual_memory().percent
-                elapsed_time = time.monotonic() - self._stats["start_time_monotonic"]
-                minutes, seconds = divmod(elapsed_time, 60)
-
-                status_line = (
-                    f"⏱️ {int(minutes):02d}分{int(seconds):02d}秒 | "
-                    f"💻 CPU: {cpu:5.1f}% | "
-                    f"🧠 RAM: {ram:5.1f}% | "
-                    f"🔥 狀態: {self._stats.get('status', '初始化...')}"
-                )
-                output_buffer.append(status_line)
-
+                output_buffer = self._build_output_buffer()
                 clear_output(wait=True)
                 print("\n".join(output_buffer), flush=True)
-
                 time.sleep(self._refresh_rate)
             except Exception as e:
-                print(f"\nDisplayManager Error: {e}")
+                print(f"\nDisplayManager 執行緒發生錯誤: {e}")
                 time.sleep(5)
 
     def start(self): self._thread.start()
@@ -269,13 +272,28 @@ class ServerManager:
 
             self._log_manager.log("INFO", "正在安裝核心依賴...")
             core_requirements_path = project_path / "requirements/requirements-core.txt"
-            # V56: 加入 --ignore-installed 旗標，強制在 venv 中重新安裝所有套件，
-            # 避免 pip 因偵測到系統已安裝的全域套件而跳過安裝，導致 ModuleNotFoundError。
-            pip_install_command = [str(venv_python), "-m", "pip", "install", "--ignore-installed", "-r", str(core_requirements_path)]
-            result = subprocess.run(pip_install_command, check=False, capture_output=True, text=True, encoding='utf-8')
-            if result.returncode != 0: self._log_manager.log("CRITICAL", f"安裝依賴失敗:\n{result.stderr}"); return None
+            if not core_requirements_path.is_file():
+                self._log_manager.log("CRITICAL", f"找不到依賴檔案: {core_requirements_path}")
+                return None
 
-            self._log_manager.log("SUCCESS", "✅ 核心環境準備成功。")
+            with open(core_requirements_path, 'r', encoding='utf-8') as f:
+                # V64: 修正解析邏輯，先用 '#' 分割來移除行內註解
+                lines = [line.split('#')[0].strip() for line in f]
+                dependencies = [dep for dep in lines if dep]
+
+            for dep in dependencies:
+                self._stats['status'] = f"⚙️ 正在安裝: {dep}..."
+                self._log_manager.log("INFO", f"正在安裝套件: {dep}")
+                # V65: Use uv for installation as recommended by research.md for speed.
+                install_command = ["uv", "pip", "install", "--python", str(venv_python), "--ignore-installed", dep]
+                result = subprocess.run(install_command, check=False, capture_output=True, text=True, encoding='utf-8')
+
+                if result.returncode != 0:
+                    self._log_manager.log("CRITICAL", f"安裝套件 {dep} 失敗:\n{result.stderr}")
+                    return None
+                self._log_manager.log("SUCCESS", f"✅ {dep} 安裝成功。")
+
+            self._log_manager.log("SUCCESS", "✅ 所有核心依賴已成功安裝。")
             return {"project_path": project_path, "venv_python": venv_python}
         except Exception as e:
             self._log_manager.log("CRITICAL", f"環境準備失敗: {e}"); return None
@@ -388,26 +406,21 @@ def main():
         if server_manager:
             server_manager.stop()
 
-        # --- V61: Final Render and Post-execution controls ---
+        # --- V65: Final Render and Post-execution controls ---
         end_time = datetime.now(pytz.timezone(TIMEZONE))
-        if log_manager:
+        if log_manager and display_manager:
             # Do one last render to ensure the final state is on screen
             clear_output()
-            if display_manager.rich_console:
-                 display_manager.rich_console.print(display_manager._render_rich_ui())
-            else:
-                 print(display_manager._render_plain_text_ui())
+            final_output_buffer = display_manager._build_output_buffer()
+            final_screen_text = "\n".join(final_output_buffer)
+            print(final_screen_text)
 
-            print("\n" + "="*80)
-            print("--- ✅ 所有任務完成，系統已安全關閉 ---")
+            print("\n--- ✅ 所有任務完成，系統已安全關閉 ---")
 
             # Prepare data for copy buttons
+            from IPython.display import display, HTML
             import json
             full_log_history = log_manager.get_full_history()
-
-            # We need a representation of the final screen output.
-            # Re-rendering the plain text version is a stable way to get this.
-            final_screen_text = display_manager._render_plain_text_ui()
 
             # Escape strings for JavaScript
             js_escaped_screen_text = json.dumps(final_screen_text)
