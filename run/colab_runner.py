@@ -1,18 +1,18 @@
 # -*- coding: utf-8 -*-
 # ╔══════════════════════════════════════════════════════════════════╗
 # ║                                                                      ║
-# ║    🚀 鳳凰之心 - V52 作戰指揮中心 (最終穩定版)                     ║
+# ║    🚀 鳳凰之心 - V53 作戰指揮中心 (最終穩定版)                     ║
 # ║                                                                      ║
 # ╠══════════════════════════════════════════════════════════════════╣
 # ║                                                                      ║
-# ║ - V52 更新日誌:                                                      ║
-# ║   - **緩衝區修正**: 解決 Colab 中因輸出緩衝導致狀態行不即時更新的問題。║
+# ║ - V53 更新日誌:                                                      ║
+# ║   - **顯示引擎重構**: 採用「單一繪製」模式，徹底解決閃爍與緩衝問題。 ║
 # ║   - **分支更新**: 更新預設分支至 0.6.8。                           ║
-# ║   - V51: 修正 NameError 與主迴圈邏輯。                             ║
+# ║   - V52: 修正 Colab 輸出緩衝問題。                                 ║
 # ║                                                                      ║
 # ╚══════════════════════════════════════════════════════════════════╝
 
-#@title 💎 鳳凰之心 V52 作戰指揮中心 (純文字模式) { vertical-output: true, display-mode: "form" }
+#@title 💎 鳳凰之心 V53 作戰指揮中心 (純文字模式) { vertical-output: true, display-mode: "form" }
 #@markdown ---
 #@markdown ### **Part 1: 專案與環境設定**
 #@markdown > **設定 Git 倉庫、分支或標籤，以及專案資料夾。**
@@ -130,20 +130,21 @@ class DisplayManager:
     def _run(self):
         while not self._stop_event.is_set():
             try:
-                clear_output(wait=True)
-                print("🚀 鳳凰之心 V52 作戰指揮中心")
-                print("="*60)
+                output_buffer = []
+
+                output_buffer.append("🚀 鳳凰之心 V53 作戰指揮中心")
+                output_buffer.append("="*60)
 
                 logs_to_display = self._log_manager.get_display_logs()
                 for log in logs_to_display:
                     ts = log['timestamp'].strftime('%H:%M:%S')
-                    print(f"[{ts}] [{log['level']:<8}] {log['message']}")
+                    output_buffer.append(f"[{ts}] [{log['level']:<8}] {log['message']}")
 
-                print("="*60)
+                output_buffer.append("="*60)
 
                 if self._stats.get('proxy_url'):
-                    print(f"✅ 代理連結已生成: {self._stats['proxy_url']}")
-                    print("="*60)
+                    output_buffer.append(f"✅ 代理連結已生成: {self._stats['proxy_url']}")
+                    output_buffer.append("="*60)
 
                 cpu = psutil.cpu_percent()
                 ram = psutil.virtual_memory().percent
@@ -156,10 +157,11 @@ class DisplayManager:
                     f"🧠 RAM: {ram:5.1f}% | "
                     f"🔥 狀態: {self._stats.get('status', '初始化...')}"
                 )
-                # 使用 print(..., end='\r') 來原地更新狀態行
-                # 結尾補一個空的 print() 來確保在 Colab 中能強制刷新緩衝區
-                print(status_line, end='\r', flush=True)
-                print("", end="", flush=True)
+                output_buffer.append(status_line)
+
+                clear_output(wait=True)
+                print("\n".join(output_buffer), flush=True)
+
                 time.sleep(self._refresh_rate)
             except Exception as e:
                 print(f"\nDisplayManager Error: {e}")
@@ -317,17 +319,17 @@ def main():
         server_ready = server_manager.server_ready_event.wait(timeout=SERVER_READY_TIMEOUT)
 
         if server_ready:
-            # 在純文字模式下，我們直接打印連結
-            # The user wants this to be handled by the DisplayManager now.
             url = colab_output.eval_js(f'google.colab.kernel.proxyPort({API_PORT})')
             shared_stats['proxy_url'] = url
         else:
             shared_stats['status'] = "❌ 伺服器啟動超時"
             log_manager.log("CRITICAL", f"伺服器在 {SERVER_READY_TIMEOUT} 秒內未能就緒。")
 
-        # 保持主執行緒存活，即使 server_manager 執行緒可能因錯誤而結束
-        # 這樣 DisplayManager 就能持續更新最終的錯誤狀態
         while True:
+            if not server_manager._thread.is_alive() and not shared_stats.get('proxy_url'):
+                # Server thread died before it was ready, so we can exit.
+                break
+            # If server is up, or still trying to come up, keep main thread alive.
             time.sleep(1)
 
     except KeyboardInterrupt:
