@@ -10,7 +10,7 @@ import asyncio
 from .kernel.settings import settings
 from .kernel.registry import registered_routers
 from . import modules
-from .background.tasks import periodic_heartbeat
+from .background import worker
 from .database import db_manager
 
 app = FastAPI(
@@ -67,8 +67,8 @@ async def startup_event():
     # 首次啟動時，加載所有模組
     discover_and_load_modules(reload=False)
 
-    # 啟動背景心跳任務
-    asyncio.create_task(periodic_heartbeat())
+    # 使用背景工作管理器來啟動所有任務
+    worker.start_background_tasks()
 
     # 寫入啟動日誌
     db_manager.write_log("INFO", "核心服務啟動成功。")
