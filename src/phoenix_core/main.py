@@ -32,14 +32,20 @@ def discover_and_load_modules():
     print("--- 所有模組探索完畢 ---")
 
 # --- 掛載路由 ---
+import asyncio
+from .background.tasks import periodic_heartbeat
+
 # 思路框架: 在應用啟動時，先執行模組探索，然後將所有註冊的路由掛載到主應用上。
 @app.on_event("startup")
-def startup_event():
+async def startup_event():
     discover_and_load_modules()
     print("--- 開始掛載已註冊的路由 ---")
     for router in registered_routers:
         app.include_router(router)
     print("--- 所有路由掛載完畢 ---")
+
+    # 啟動背景心跳任務
+    asyncio.create_task(periodic_heartbeat())
 
 
 # --- 基礎 API 端點 ---
