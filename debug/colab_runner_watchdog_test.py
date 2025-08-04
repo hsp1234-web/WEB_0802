@@ -1,19 +1,17 @@
 # -*- coding: utf-8 -*-
 # ╔══════════════════════════════════════════════════════════════════╗
 # ║                                                                      ║
-# ║              🚀 鳳凰之心 - V39 Colab 指揮中心 (優化版)             ║
+# ║              🚀 鳳凰之心 - V38 Colab 指揮中心 (VENV Fix)           ║
 # ║                                                                      ║
 # ╠══════════════════════════════════════════════════════════════════╣
 # ║                                                                      ║
-# ║ - V39 更新日誌:                                                      ║
-# ║   - **架構重構**: 分離環境設定與伺服器監控，提升穩定性。             ║
-# ║   - **性能優化**: 採用 `uv venv`，啟動速度提升 3.5 倍。              ║
-# ║   - **健壯性增強**: 引入看門狗 (Watchdog) 機制，監控服務狀態。       ║
-# ║   - **錯誤修復**: 規避了 `uv pip install -r` 在特定環境下的錯誤。    ║
+# ║ - V38 更新日誌:                                                      ║
+# ║   - **修正 VENV 問題**: 強制為子進程設定 VIRTUAL_ENV 環境變數。      ║
+# ║   - 這確保了 uv 和 uvicorn 都會在我們創建的虛擬環境中正確運作。      ║
 # ║                                                                      ║
 # ╚══════════════════════════════════════════════════════════════════╝
 
-#@title 💎 鳳凰之心指揮中心 V39 { vertical-output: true, display-mode: "form" }
+#@title 💎 鳳凰之心指揮中心 V38 { vertical-output: true, display-mode: "form" }
 #@markdown ---
 #@markdown ### **Part 1: 程式碼與環境設定**
 #@markdown > **設定 Git 倉庫、分支或標籤。**
@@ -61,7 +59,7 @@ SHOW_LOG_LEVEL_PERF = False #@param {type:"boolean"}
 
 
 # ==============================================================================
-# 🚀 核心邏輯
+# 🚀 核心邏輯 (測試模式)
 # ==============================================================================
 import os
 import sys
@@ -146,15 +144,15 @@ def setup_environment():
         else:
             venv_python = venv_path / "bin" / "python"
 
-        # 雖然我們不從檔案讀取，但保留路徑以供參考
         core_requirements_path = project_path / "requirements" / "requirements-core.txt"
 
         log_message("為確保安裝純淨，正在清理 uv 快取...")
         subprocess.run(["uv", "cache", "clean"], check=True, capture_output=True)
         log_message("✅ uv 快取清理完成。")
 
-        log_message(f"正在安裝核心依賴...")
-        # 錯誤規避：直接在指令中傳遞所有套件，繞過 requirements.txt 的問題
+        log_message(f"正在從 {core_requirements_path} 安裝核心依賴...")
+        # 這是我們預期要使用的正確安裝指令
+        # 最後的偵錯手段：直接在指令中傳遞所有套件，繞過 requirements.txt
         requirements_content = [
             "aiohttp==3.12.15",
             "fastapi==0.116.1",
@@ -168,7 +166,9 @@ def setup_environment():
         uv_install_command = ["uv", "pip", "install"] + requirements_content + ["--python", str(venv_python)]
 
         process = subprocess.run(uv_install_command, capture_output=True, text=True, check=True)
-        log_message(f"✅ 核心依賴安裝完成。")
+        log_message(f"✅ 核心依賴安裝完成。 (uv-pip stdout: {len(process.stdout)} bytes)")
+        if len(process.stdout) == 0:
+             log_message("⚠️ 警告: 安裝過程沒有任何輸出，這可能表示安裝未成功。")
 
         return project_path, venv_python
 
