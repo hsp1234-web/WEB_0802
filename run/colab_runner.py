@@ -1,18 +1,17 @@
 # -*- coding: utf-8 -*-
 # ╔══════════════════════════════════════════════════════════════════╗
 # ║                                                                      ║
-# ║    🐦‍🔥 鳳凰之心 - V55 作戰指揮中心 (最終交付版)                  🐦‍🔥 ║
+# ║    🐦‍🔥 鳳凰之心 - V62 作戰指揮中心 (最終交付版)                  🐦‍🔥 ║
 # ║                                                                      ║
 # ╠══════════════════════════════════════════════════════════════════╣
 # ║                                                                      ║
-# ║ - V60 更新日誌:                                                      ║
-# ║   - **智慧儀表板**: 引入 rich 函式庫，並實作分階段 UI 渲染。         ║
-# ║     儀表板會先以純文字模式即時啟動，待 rich 安裝完畢後自動升級為    ║
-# ║     附帶顏色與進度旋轉圖示的彩色版本，兼顧了啟動速度與視覺體驗。   ║
+# ║ - V62 更新日誌:                                                      ║
+# ║   - **ANSI 上色**: 移除 rich 依賴，改用 ANSI Escape Codes 為日誌      ║
+# ║     等級標籤上色，實現零依賴、高效能的視覺化。                       ║
 # ║                                                                      ║
 # ╚══════════════════════════════════════════════════════════════════╝
 
-#@title 🐦‍🔥 鳳凰之心 V61 作戰指揮中心 { vertical-output: true, display-mode: "form" }
+#@title 🐦‍🔥 鳳凰之心 V62 作戰指揮中心 { vertical-output: true, display-mode: "form" }
 #@markdown ---
 #@markdown ### **Part 1: 專案與環境設定**
 #@markdown > **設定 Git 倉庫、分支或標籤，以及專案資料夾。**
@@ -118,189 +117,78 @@ class LogManager:
         with self._lock:
             return list(self._log_deque)
 
+# V62: ANSI Color implementation
+ANSI_COLORS = {
+    "SUCCESS": "\033[92m",  # Green
+    "INFO": "\033[96m",     # Cyan
+    "WARN": "\033[93m",     # Yellow
+    "ERROR": "\033[91m",    # Red
+    "CRITICAL": "\033[1;91m",# Bold Red
+    "BATTLE": "\033[95m",   # Magenta
+    "DEBUG": "\033[90m",    # Bright Black (Gray)
+    "RESET": "\033[0m"      # Reset color
+}
+
+def colorize(text, level):
+    """Wraps text in ANSI color codes based on the log level."""
+    color_code = ANSI_COLORS.get(level, "")
+    reset_code = ANSI_COLORS["RESET"]
+    return f"{color_code}{text}{reset_code}"
+
 class DisplayManager:
-    """
-    顯示管理器 V60 (智慧 UI 版)
-    - 初始以純文字模式啟動，保證即時反饋。
-    - 當 rich 套件安裝完成後，自動無縫升級為彩色儀表板。
-    """
+    """顯示管理器：在背景執行緒中負責繪製純文字動態儀表板。"""
     def __init__(self, log_manager, stats_dict, refresh_rate):
         self._log_manager = log_manager
         self._stats = stats_dict
         self._refresh_rate = refresh_rate
         self._stop_event = threading.Event()
         self._thread = threading.Thread(target=self._run, daemon=True)
-        self.rich_console = None
-        self.psutil_module = None
-
-    def _try_import_rich(self):
-        if self.rich_console:
-            return True
-        try:
-            from rich.console import Console
-            from rich.table import Table
-            from rich.panel import Panel
-            from rich.live import Live
-            from rich.spinner import Spinner
-            from rich import box
-            self.rich_console = Console()
-            return True
-        except ImportError:
-            return False
-
-    def _render_rich_ui(self):
-        from rich.table import Table
-        from rich.panel import Panel
-        from rich.spinner import Spinner
-        from rich.text import Text
-        from rich import box
-        from rich.align import Align
-
-        # --- Main Layout Grid ---
-        layout = Table.grid(expand=True)
-        layout.add_row(Panel("🐦‍🔥 鳳凰之心 V61 作戰指揮中心 🐦‍🔥", style="bold white", border_style="white", box=box.SQUARE))
-
-        # --- Log Panel (Block 2) ---
-        log_table = Table(box=None, show_header=False, pad_edge=False, padding=(0, 1))
-        log_table.add_column("Time", style="white", width=9)
-        log_table.add_column("Level", style="white", width=12) # Fixed width for alignment
-        log_table.add_column("Message", style="white", no_wrap=False)
-
-        level_colors = {"SUCCESS": "green", "INFO": "cyan", "WARN": "yellow", "ERROR": "red", "CRITICAL": "bold red", "BATTLE": "magenta", "DEBUG": "dim"}
-        logs_to_display = self._log_manager.get_display_logs()
-        for log in logs_to_display:
-            ts = f"[{log['timestamp'].strftime('%H:%M:%S')}]"
-            level_text = log['level']
-            color = level_colors.get(level_text, "white")
-
-            # Create a Text object for centered alignment
-            level_renderable = Align.center(Text.from_markup(f"[white]][[/white][{color}]{level_text}[/{color}][white]][[/white]"), vertical="middle")
-            log_table.add_row(ts, level_renderable, log['message'])
-
-        layout.add_row(Panel(log_table, title="即時日誌", title_align="left", border_style="white", box=box.SQUARE))
-
-        # --- Status Bar (Block 3) ---
-        if not self.psutil_module:
-            try:
-                import psutil
-                self.psutil_module = psutil
-            except ImportError:
-                pass
-
-        cpu_usage = f"{self.psutil_module.cpu_percent():.1f}%" if self.psutil_module else "N/A"
-        ram_usage = f"{self.psutil_module.virtual_memory().percent:.1f}%" if self.psutil_module else "N/A"
-
-        elapsed_time = time.monotonic() - self._stats["start_time_monotonic"]
-        minutes, seconds = divmod(elapsed_time, 60)
-        time_str = f"{int(minutes):02d}分{int(seconds):02d}秒"
-
-        status = self._stats.get('status', '初始化...')
-        status_text = Text(f" ⏱️ 執行時間: {time_str} | 💻 CPU: {cpu_usage} | 🧠 RAM: {ram_usage} | 🔥 狀態: ", style="white")
-
-        if status == "安裝額外套件...":
-            status_text.append(Spinner("dots", text="正在安裝額外套件..."))
-        else:
-            status_text.append(status)
-
-        layout.add_row(Panel(status_text, border_style="white", box=box.SQUARE))
-
-        # --- URL Panel (Block 4) ---
-        if self._stats.get('proxy_url'):
-            link_text = Align.center("👉 點此開啟互動操作介面 (新分頁) 👈", vertical="middle")
-            link_panel = Panel(Text.from_markup(f"[link={self._stats['proxy_url']}]{link_text}[/link]"), box=box.SQUARE, border_style="green", height=5)
-            final_panel = Panel(link_panel, title="✅ 系統就緒 - 開啟作戰中心 ✅", title_align="center", border_style="white", box=box.SQUARE)
-            layout.add_row(final_panel)
-
-        return layout
-
-    def _render_plain_text_ui(self):
-        # This is the fallback UI if rich is not available.
-        # It mimics the clean, aligned layout of the rich version.
-        output_buffer = []
-
-        # Block 1: Header
-        output_buffer.append("┌" + "─"*78 + "┐")
-        output_buffer.append(f"│{'🐦‍🔥 鳳凰之心 V61 作戰指揮中心 🐦‍🔥'.center(74)}│")
-        output_buffer.append("└" + "─"*78 + "┘")
-
-        # Block 2: Logs
-        output_buffer.append("┌─ 即時日誌 " + "─"*67 + "┐")
-        logs_to_display = self._log_manager.get_display_logs()
-        for log in logs_to_display:
-            ts = f"[{log['timestamp'].strftime('%H:%M:%S')}]"
-            level = f"[{log['level']}]"
-            # Pad the level to a fixed width for alignment
-            padded_level = f"{level:^12}"
-            message = f"│ {ts:<9} {padded_level} {log['message']}"
-            output_buffer.append(message)
-        output_buffer.append("└" + "─"*78 + "┘")
-
-        # Block 3: Status
-        if not self.psutil_module:
-            try:
-                import psutil
-                self.psutil_module = psutil
-            except ImportError:
-                pass # Still not available
-
-        cpu_usage = f"{self.psutil_module.cpu_percent():.1f}%" if self.psutil_module else "N/A"
-        ram_usage = f"{self.psutil_module.virtual_memory().percent:.1f}%" if self.psutil_module else "N/A"
-
-        elapsed_time = time.monotonic() - self._stats["start_time_monotonic"]
-        minutes, seconds = divmod(elapsed_time, 60)
-        time_str = f"{int(minutes):02d}分{int(seconds):02d}秒"
-        status = self._stats.get('status', '初始化...')
-        status_line = f" ⏱️ 執行時間: {time_str} | 💻 CPU: {cpu_usage} | 🧠 RAM: {ram_usage} | 🔥 狀態: {status}"
-
-        output_buffer.append("┌" + "─"*78 + "┐")
-        output_buffer.append(f"│{status_line.ljust(78)}│")
-        output_buffer.append("└" + "─"*78 + "┘")
-
-        # Block 4: URL
-        if self._stats.get('proxy_url'):
-            output_buffer.append("┌" + " ✅ 系統就緒 - 開啟作戰中心 ✅ ".center(76, "─") + "┐")
-            output_buffer.append("│" + " "*78 + "│")
-            link_text = "👉 點此開啟互動操作介面 (新分頁) 👈"
-            output_buffer.append(f"│{link_text.center(74)}│")
-            output_buffer.append(f"│{self._stats['proxy_url'].center(78)}│")
-            output_buffer.append("│" + " "*78 + "│")
-            output_buffer.append("└" + "─"*78 + "┘")
-
-        return "\n".join(output_buffer)
 
     def _run(self):
-        live = None
         while not self._stop_event.is_set():
             try:
-                if self._try_import_rich():
-                    if not live:
-                        from rich.live import Live
-                        live = Live(console=self.rich_console, auto_refresh=False, screen=True)
-                        live.start()
+                output_buffer = []
 
-                    ui = self._render_rich_ui()
-                    live.update(ui)
-                    live.refresh()
-                else:
-                    ui = self._render_plain_text_ui()
-                    clear_output(wait=True)
-                    print(ui, flush=True)
+                output_buffer.append("🐦‍🔥 鳳凰之心 V62 作戰指揮中心 🐦‍🔥")
+                output_buffer.append("="*60)
+
+                logs_to_display = self._log_manager.get_display_logs()
+                for log in logs_to_display:
+                    ts = log['timestamp'].strftime('%H:%M:%S')
+                    level = log['level']
+
+                    # Pad first to ensure alignment, then colorize
+                    padded_level = f"[{level:^8}]"
+                    colored_level = colorize(padded_level, level)
+
+                    output_buffer.append(f"[{ts}] {colored_level} {log['message']}")
+
+                output_buffer.append("="*60)
+
+                if self._stats.get('proxy_url'):
+                    output_buffer.append(f"✅ 代理連結已生成: {self._stats['proxy_url']}")
+                    output_buffer.append("="*60)
+
+                cpu = psutil.cpu_percent()
+                ram = psutil.virtual_memory().percent
+                elapsed_time = time.monotonic() - self._stats["start_time_monotonic"]
+                minutes, seconds = divmod(elapsed_time, 60)
+
+                status_line = (
+                    f"⏱️ {int(minutes):02d}分{int(seconds):02d}秒 | "
+                    f"💻 CPU: {cpu:5.1f}% | "
+                    f"🧠 RAM: {ram:5.1f}% | "
+                    f"🔥 狀態: {self._stats.get('status', '初始化...')}"
+                )
+                output_buffer.append(status_line)
+
+                clear_output(wait=True)
+                print("\n".join(output_buffer), flush=True)
 
                 time.sleep(self._refresh_rate)
             except Exception as e:
-                # If rich UI fails, fallback to plain text
-                if self.rich_console:
-                    self.rich_console.print(f"\n[bold red]DisplayManager Error: {e}[/bold red]")
-                    self.rich_console.print("[yellow]Falling back to plain text mode.[/yellow]")
-                    self.rich_console = None
-                    if live:
-                        live.stop()
-                        live = None
-                else:
-                    print(f"\nDisplayManager Error: {e}")
+                print(f"\nDisplayManager Error: {e}")
                 time.sleep(5)
-        if live:
-            live.stop()
 
     def start(self): self._thread.start()
     def stop(self): self._stop_event.set(); self._thread.join(timeout=2)
@@ -315,42 +203,11 @@ class ServerManager:
         self._stop_event = threading.Event()
         self._thread = threading.Thread(target=self._run, daemon=True)
 
-    def _install_extra_dependencies(self, venv_python, project_path):
-        """In the background, install extra dependencies like the Rich UI library."""
-        try:
-            self._stats['status'] = "安裝額外套件..."
-            self._log_manager.log("BATTLE", "=== [背景任務] 開始安裝額外套件 ===")
-            extra_reqs_path = project_path / "requirements/extra.txt"
-            pip_command = [str(venv_python), "-m", "pip", "install", "-q", "--ignore-installed", "-r", str(extra_reqs_path)]
-
-            result = subprocess.run(pip_command, check=False, capture_output=True, text=True, encoding='utf-8')
-
-            if result.returncode == 0:
-                self._log_manager.log("SUCCESS", "✅ 額外套件安裝成功。")
-            else:
-                self._log_manager.log("ERROR", f"❌ 安裝額外套件失敗:\n{result.stderr}")
-            self._log_manager.log("BATTLE", "=== [背景任務] 額外套件安裝結束 ===")
-        except Exception as e:
-            self._log_manager.log("CRITICAL", f"背景安裝額外套件時發生致命錯誤: {e}")
-        finally:
-            # Revert status to the last known stable state if it was still showing installation
-            if self._stats['status'] == "安裝額外套件...":
-                 self._stats['status'] = "✅ 伺服器運行中"
-
-
     def _run(self):
         try:
             env_paths = self._setup_environment()
             if not env_paths or self._stop_event.is_set():
                 self._stats['status'] = "❌ 環境準備失敗"; return
-
-            # Start installing extra dependencies in the background
-            extra_install_thread = threading.Thread(
-                target=self._install_extra_dependencies,
-                args=(env_paths["venv_python"], env_paths["project_path"]),
-                daemon=True
-            )
-            extra_install_thread.start()
 
             self._stats['status'] = "🚀 正在啟動伺服器..."
             self._log_manager.log("BATTLE", "=== [2/2] 正在啟動後端伺服器 ===")
