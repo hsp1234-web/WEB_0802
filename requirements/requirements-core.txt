@@ -4,6 +4,10 @@ fastapi==0.116.1
 psutil==7.0.0
 pydantic-settings==2.10.1
 uvicorn[standard]==0.35.0
+websockets==12.0
+pytz==2025.2
+# uv is used by the runner, so we add it here to ensure it's available
+uv==0.1.33
 # Transitive dependencies will be handled by the installer
 # We list the direct dependencies from the original requirements.in
 # and let pip/uv resolve the rest.
