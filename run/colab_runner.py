@@ -5,9 +5,10 @@
 # ║                                                                      ║
 # ╠══════════════════════════════════════════════════════════════════╣
 # ║                                                                      ║
+# ║ - V56 更新日誌:                                                      ║
+# ║   - **根本性修復**: 在 pip install 中加入 --ignore-installed 旗標，    ║
+# ║     解決因 Colab 全域套件導致 venv 中依賴未安裝的根本問題。          ║
 # ║ - V55 更新日誌:                                                      ║
-# ║   - **V55.3 優化**: 實作分階段依賴安裝，大幅縮短伺服器啟動時間。     ║
-# ║   - **V55.2 增強**: 新增獲取 Colab 代理連結的重試機制，提高穩定性。  ║
 # ║   - **V55.1 修正**: 重新加入防禦性的 pip 引導程序，解決偶發性的環境問題。      ║
 # ║   - **最終修正**: 移除錯誤的 pip 引導程序，信任 uv venv。          ║
 # ║   - **外觀更新**: 根據要求更新標題與圖示。                         ║
@@ -206,17 +207,8 @@ class ServerManager:
             for line in iter(self.server_process.stdout.readline, ''):
                 if self._stop_event.is_set(): break
                 self._log_manager.log("DEBUG", line.strip())
-                if "Uvicorn running on" in line and not self.server_ready_event.is_set():
-                    self._stats['status'] = "✅ 伺服器運行中"
-                    self._log_manager.log("SUCCESS", "伺服器已就緒！")
-                    self.server_ready_event.set()
-                    # Server is up, now start installing secondary dependencies in the background
-                    secondary_install_thread = threading.Thread(
-                        target=self._install_secondary_dependencies,
-                        args=(venv_python, project_path),
-                        daemon=True
-                    )
-                    secondary_install_thread.start()
+                if "Uvicorn running on" in line:
+                    self._stats['status'] = "✅ 伺服器運行中"; self._log_manager.log("SUCCESS", "伺服器已就緒！"); self.server_ready_event.set()
 
             self.server_process.wait()
             if not self.server_ready_event.is_set():
@@ -256,9 +248,11 @@ class ServerManager:
                 self._log_manager.log("CRITICAL", f"引導程序安裝 pip 失敗:\n{result.stderr}")
                 return None
 
-            self._log_manager.log("INFO", "正在安裝核心依賴 (最小集)...")
-            core_requirements_path = project_path / "requirements/core-minimal.txt"
-            pip_install_command = [str(venv_python), "-m", "pip", "install", "-r", str(core_requirements_path)]
+            self._log_manager.log("INFO", "正在安裝核心依賴...")
+            core_requirements_path = project_path / "requirements/requirements-core.txt"
+            # V56: 加入 --ignore-installed 旗標，強制在 venv 中重新安裝所有套件，
+            # 避免 pip 因偵測到系統已安裝的全域套件而跳過安裝，導致 ModuleNotFoundError。
+            pip_install_command = [str(venv_python), "-m", "pip", "install", "--ignore-installed", "-r", str(core_requirements_path)]
             result = subprocess.run(pip_install_command, check=False, capture_output=True, text=True, encoding='utf-8')
             if result.returncode != 0: self._log_manager.log("CRITICAL", f"安裝依賴失敗:\n{result.stderr}"); return None
 
@@ -279,23 +273,6 @@ class ServerManager:
                 try: os.killpg(os.getpgid(self.server_process.pid), subprocess.signal.SIGKILL)
                 except ProcessLookupError: pass
         self._thread.join(timeout=2)
-
-    def _install_secondary_dependencies(self, venv_python, project_path):
-        """In the background, install the remaining non-essential dependencies."""
-        try:
-            self._log_manager.log("BATTLE", "=== [背景任務] 開始安裝次要依賴 ===")
-            secondary_reqs_path = project_path / "requirements/core-secondary.txt"
-            pip_command = [str(venv_python), "-m", "pip", "install", "-q", "-r", str(secondary_reqs_path)]
-
-            result = subprocess.run(pip_command, check=False, capture_output=True, text=True, encoding='utf-8')
-
-            if result.returncode == 0:
-                self._log_manager.log("SUCCESS", "✅ 次要依賴安裝成功。")
-            else:
-                self._log_manager.log("ERROR", f"❌ 安裝次要依賴失敗:\n{result.stderr}")
-            self._log_manager.log("BATTLE", "=== [背景任務] 次要依賴安裝結束 ===")
-        except Exception as e:
-            self._log_manager.log("CRITICAL", f"背景安裝次要依賴時發生致命錯誤: {e}")
 
 # ==============================================================================
 # SECTION 2: 核心功能函式

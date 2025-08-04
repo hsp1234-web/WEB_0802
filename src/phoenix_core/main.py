@@ -62,8 +62,25 @@ def discover_and_load_modules(reload=False):
 
     print("--- 模組加載流程結束 ---")
 
+async def watch_for_secondary_deps(signal_path):
+    """Periodically checks for the signal file and updates app state."""
+    while True:
+        if signal_path.exists():
+            app.state.secondary_deps_ready = True
+            print("--- ✅ 已偵測到次要依賴安裝完成信號 ---")
+            break # Stop watching once found
+        await asyncio.sleep(2) # Check every 2 seconds
+
 @app.on_event("startup")
 async def startup_event():
+    # Initialize state for dependency tracking
+    app.state.secondary_deps_ready = False
+
+    # Define project root and start the signal file watcher as a background task
+    project_root_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+    signal_file = project_root_path / ".secondary_deps_ready"
+    asyncio.create_task(watch_for_secondary_deps(signal_file))
+
     # 首次啟動時，加載所有模組
     discover_and_load_modules(reload=False)
 
