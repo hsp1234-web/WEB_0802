@@ -413,12 +413,18 @@ def main_loop():
             heartbeat_status = check_heartbeat_status(conn, 15)
             action_content = fetch_action_content() if heartbeat_status == 'STOPPED' else '<span class="text-gray-500">等待任務完成...</span>'
 
+            # 為了避免 f-string 中的反斜線錯誤，先準備好 JS 安全的字串
+            log_content_js = log_content.replace('`', '\\`')
+            status_content_js = status_content.replace('`', '\\`')
+            log_status_content_js = log_status_content.replace('`', '\\`')
+            action_content_js = action_content.replace('`', '\\`')
+
             # 將所有內容更新打包成一個 JS 命令
             js_code = f"""
-            document.getElementById('log-panel').innerHTML = `{log_content.replace('`', '\\`')}`;
-            document.getElementById('status-panel').innerHTML = `{status_content.replace('`', '\\`')}`;
-            document.getElementById('log-status-panel').innerHTML = `{log_status_content.replace('`', '\\`')}`;
-            document.getElementById('action-panel').innerHTML = `{action_content.replace('`', '\\`')}`;
+            document.getElementById('log-panel').innerHTML = `{log_content_js}`;
+            document.getElementById('status-panel').innerHTML = `{status_content_js}`;
+            document.getElementById('log-status-panel').innerHTML = `{log_status_content_js}`;
+            document.getElementById('action-panel').innerHTML = `{action_content_js}`;
             """
             display(Javascript(js_code))
             time.sleep(REFRESH_RATE_SECONDS)
