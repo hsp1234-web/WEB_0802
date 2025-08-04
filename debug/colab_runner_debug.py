@@ -140,8 +140,23 @@ def setup_environment():
             log_message(f"❌ 找不到依賴檔案: {core_requirements_path}", level="ERROR")
             return None
 
-        uv_install_command = ["uv", "pip", "sync", "--python", str(venv_python), str(core_requirements_path)]
-        result = subprocess.run(uv_install_command, check=False, capture_output=True, text=True, encoding='utf-8')
+        # 建立一個啟用了虛擬環境的子進程環境
+        install_env = os.environ.copy()
+        install_env["VIRTUAL_ENV"] = str(venv_path)
+        install_env["PATH"] = f"{venv_path / 'bin'}:{install_env.get('PATH', '')}"
+
+        # 在啟用了 venv 的情況下，不再需要 --python 參數
+        uv_install_command = ["uv", "pip", "sync", str(core_requirements_path)]
+
+        result = subprocess.run(
+            uv_install_command,
+            check=False,
+            capture_output=True,
+            text=True,
+            encoding='utf-8',
+            env=install_env # 使用為安裝客製化的環境變數
+        )
+
         if result.returncode != 0:
             log_message(f"❌ 安裝依賴失敗。返回碼: {result.returncode}", level="ERROR")
             log_message(f"--- STDERR ---\n{result.stderr}\n------------", level="ERROR")
