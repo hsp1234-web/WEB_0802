@@ -1,0 +1,225 @@
+/* 基礎字體與主題切換 */
+body {
+    font-family: 'Noto Sans TC', 'Inter', sans-serif;
+    transition: background-color 0.3s ease, color 0.3s ease;
+}
+.dark body {
+    background-color: #131316;
+    color: #E8EAED;
+}
+body {
+    background-color: #F8F9FA;
+    color: #202124;
+}
+
+/* 鳳凰轉錄儀專用樣式 */
+.phoenix-panel {
+    background-color: #FFFFFF;
+    border: 1px solid #DADCE0;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.02), 0 4px 6px rgba(0,0,0,0.04);
+    border-radius: 0.75rem; /* rounded-xl */
+}
+.dark .phoenix-panel {
+    background-color: #202124;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+.phoenix-glass-effect {
+    background: rgba(255, 255, 255, 0.7);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    transition: background 0.3s, border-color 0.3s;
+}
+.dark .phoenix-glass-effect {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+.phoenix-log-entry:hover {
+    background-color: rgba(0, 0, 0, 0.05);
+}
+.dark .phoenix-log-entry:hover {
+    background-color: rgba(255, 255, 255, 0.08);
+}
+.phoenix-progress-bar {
+    width: 100%; height: 8px; background-color: #e5e7eb;
+    border-radius: 4px; overflow: hidden; margin-top: 4px;
+}
+.dark .phoenix-progress-bar {
+    background-color: #374151;
+}
+.phoenix-progress-bar-fill {
+    height: 100%; background-color: #3b82f6;
+    border-radius: 4px; transition: width 0.3s ease-in-out;
+}
+.dark .phoenix-progress-bar-fill {
+    background-color: #60a5fa;
+}
+.phoenix-gemini-gradient-text {
+    background: linear-gradient(90deg, #89CFF0, #A688FA, #F482A4);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    text-fill-color: transparent;
+}
+/* 自定義滾動條樣式 */
+::-webkit-scrollbar { width: 8px; }
+::-webkit-scrollbar-track { background: rgba(0, 0, 0, 0.1); border-radius: 10px; }
+html.dark ::-webkit-scrollbar-track { background: rgba(255, 255, 255, 0.05); }
+::-webkit-scrollbar-thumb { background: linear-gradient(to bottom, #A688FA, #89CFF0); border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: linear-gradient(to bottom, #F482A4, #A688FA); }
+
+/* 善狼專用樣式 */
+.gemini-panel {
+    background-color: #FFFFFF;
+    border: 1px solid #DADCE0;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.02), 0 4px 6px rgba(0,0,0,0.04);
+}
+.dark .gemini-panel {
+    background-color: #202124;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+.gemini-button-primary {
+    background-color: #1A73E8;
+    color: #FFFFFF;
+    transition: all 0.3s ease;
+}
+.gemini-button-primary:hover {
+    background-color: #185ABC;
+}
+.dark .gemini-button-primary {
+    background: linear-gradient(90deg, #1A73E8, #4285F4);
+    box-shadow: 0 4px 15px rgba(66, 133, 244, 0.2);
+}
+.dark .gemini-button-primary:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 20px rgba(66, 133, 244, 0.3);
+}
+.gemini-gradient-text {
+    background: linear-gradient(90deg, #1A73E8, #5856D6, #D93075);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+.dark .gemini-gradient-text {
+    background: linear-gradient(90deg, #89B3F8, #A688FA, #F382B1);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+.change-up { color: #EA4335; }
+.change-down { color: #34A853; }
+.dark .change-up { color: #F28B82; }
+.dark .change-down { color: #81C995; }
+.tab {
+    cursor: pointer;
+    padding: 0.75rem 1rem;
+    border-bottom: 2px solid transparent;
+    color: #5F6368;
+    transition: all 0.2s ease;
+}
+.dark .tab {
+    color: #9AA0A6;
+}
+.tab:hover {
+    background-color: rgba(0,0,0,0.04);
+}
+.dark .tab:hover {
+    background-color: rgba(255,255,255,0.08);
+}
+.tab.active {
+    border-bottom-color: #1A73E8;
+    color: #1A73E8;
+    font-weight: 600;
+}
+.dark .tab.active {
+    border-bottom-color: #89B3F8;
+    color: #89B3F8;
+}
+.chat-bubble-user { background-color: #E8F0FE; align-self: flex-end; }
+.dark .chat-bubble-user { background-color: #2E3A52; }
+.chat-bubble-ai { background-color: #F1F3F4; align-self: flex-start; }
+.dark .chat-bubble-ai { background-color: #3C4043; }
+
+.tooltip-container {
+    position: relative;
+}
+.tooltip-text {
+    visibility: hidden;
+    width: 250px;
+    background-color: #1F2937;
+    color: #F9FAFB;
+    text-align: center;
+    border-radius: 6px;
+    padding: 8px 12px;
+    position: absolute;
+    z-index: 10;
+    bottom: 125%; /* Position above the element */
+    left: 50%;
+    margin-left: -125px; /* Center the tooltip */
+    opacity: 0;
+    transition: opacity 0.3s;
+    font-size: 14px;
+}
+.tooltip-text::after {
+    content: "";
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    margin-left: -5px;
+    border-width: 5px;
+    border-style: solid;
+    border-color: #1F2937 transparent transparent transparent;
+}
+.tooltip-container:hover .tooltip-text {
+    visibility: visible;
+    opacity: 1;
+}
+
+/* 檔案樹狀結構樣式 */
+.file-tree {
+    list-style-type: none;
+    padding-left: 1.5rem;
+}
+.file-tree li {
+    position: relative;
+    padding-left: 1.5rem;
+}
+.file-tree li::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 1rem;
+    width: 1.25rem;
+    height: 1px;
+    border-bottom: 1px solid var(--border-color);
+}
+.file-tree li:last-child::before {
+    border-left: 1px solid transparent;
+}
+.file-tree ul {
+    position: relative;
+    padding-left: 1.5rem;
+}
+.file-tree ul::before {
+    content: '';
+    position: absolute;
+    left: 0.5rem;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    border-left: 1px solid var(--border-color);
+}
+.file-tree-item {
+    display: flex;
+    align-items: center;
+    line-height: 2rem;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+.file-tree-item:hover {
+    background-color: rgba(0, 0, 0, 0.05);
+}
+.dark .file-tree-item:hover {
+    background-color: rgba(255, 255, 255, 0.08);
+}
+.file-tree-icon {
+    margin-right: 0.5rem;
+}

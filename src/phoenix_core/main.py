@@ -79,8 +79,8 @@ app.mount("/static", StaticFiles(directory=PROJECT_ROOT), name="static")
 
 @app.get("/", response_class=FileResponse, tags=["系統 (System)"])
 async def read_root():
-    """提供 wolf.html 儀表板作為主頁面。"""
-    return os.path.join(PROJECT_ROOT, 'wolf.html')
+    """提供新的 `static/index.html` 作為主頁面。"""
+    return os.path.join(PROJECT_ROOT, 'static/index.html')
 
 @app.get("/system/config", tags=["系統 (System)"])
 async def get_system_config():
