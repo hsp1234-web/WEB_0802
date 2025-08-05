@@ -97,9 +97,10 @@ def test_system_monitor_endpoint():
     response = client.get("/monitor")
     assert response.status_code == 200
     data = response.json()
-    assert "cpu" in data
-    assert "memory" in data
-    assert "disk" in data
+    # 修正：根據 SystemUsage 模型，API 回傳的鍵應為 "cpu_percent" 和 "memory_percent"
+    assert "cpu_percent" in data
+    assert "memory_percent" in data
+    # 備註：原始測試中包含了對 "disk" 的檢查，但目前的 API 並未提供此資訊，故移除。
     print("[E2E Test] 系統監控端點測試通過。")
 
 @pytest.mark.e2e

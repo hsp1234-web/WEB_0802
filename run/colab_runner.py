@@ -282,10 +282,11 @@ class ServerManager:
                 self._log_manager.log("CRITICAL", f"引導程序安裝 pip 失敗:\n{result.stderr}")
                 return None
 
-            # V66 (Jules): 修正為安裝所有必要的相依性檔案，而不僅僅是核心檔案
-            # 這樣可以確保 Colab 環境與開發環境一致，解決缺少 'python-multipart' 的問題
+            # 修正相依性安裝：確保 Colab 環境與開發環境完全一致。
+            # 我們的專案使用 pip-compile 將所有確定的相依性版本鎖定在 dev.txt 中。
+            # 因此，我們應該只安裝這個檔案，以建立一個可預測且穩定的環境，
+            # 避免因安裝其他未鎖定版本的需求檔案而導致的潛在衝突。
             requirements_files = [
-                "requirements/requirements-core.txt",
                 "requirements/dev.txt"
             ]
 
