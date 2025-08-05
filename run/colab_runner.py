@@ -19,7 +19,7 @@
 #@markdown **後端程式碼倉庫 (REPOSITORY_URL)**
 REPOSITORY_URL = "https://github.com/hsp1234-web/WEB_0802.git" #@param {type:"string"}
 #@markdown **後端版本分支或標籤 (TARGET_BRANCH_OR_TAG)**
-TARGET_BRANCH_OR_TAG = "0.8.1" #@param {type:"string"}
+TARGET_BRANCH_OR_TAG = "1.0.8" #@param {type:"string"}
 #@markdown **專案資料夾名稱 (PROJECT_FOLDER_NAME)**
 PROJECT_FOLDER_NAME = "WEB1" #@param {type:"string"}
 #@markdown **強制刷新後端程式碼 (FORCE_REPO_REFRESH)**
@@ -66,6 +66,8 @@ SERVER_READY_TIMEOUT = 45 #@param {type:"integer"}
 # ==============================================================================
 # SECTION 0: 環境準備與核心依賴導入
 # ==============================================================================
+import sys
+import subprocess
 try:
     import pytz
 except ImportError:
@@ -74,16 +76,27 @@ except ImportError:
     import pytz
 
 import os
-import sys
 import shutil
-import subprocess
 from pathlib import Path
 import time
 from datetime import datetime
 import threading
 from collections import deque
-from IPython.display import clear_output
-from google.colab import output as colab_output
+# from IPython.display import clear_output
+# from google.colab import output as colab_output
+# --- 在本地測試時，我們用 print 模擬 Colab 的輸出功能 ---
+def clear_output(wait=True):
+    # 在非 Colab 環境中，這個函式可以是一個無操作(no-op)或打印一個分隔符
+    print("\n" * 50) # 打印足夠的換行符來模擬清屏
+    print("--- [本地測試] 模擬清空輸出 ---")
+
+class MockColabOutput:
+    def eval_js(self, code):
+        print(f"--- [本地測試] 模擬執行 JS: {code} ---")
+        # 返回一個模擬的 URL，因為我們無法在本地獲取真實的 Colab 代理 URL
+        return f"http://127.0.0.1:{API_PORT}"
+
+colab_output = MockColabOutput()
 
 # ==============================================================================
 # SECTION 1: 管理器類別定義 (Managers)
@@ -441,31 +454,32 @@ def main():
 
             print("\n--- ✅ 所有任務完成，系統已安全關閉 ---")
 
-            # Prepare data for copy buttons
-            from IPython.display import display, HTML
-            import json
-            full_log_history = log_manager.get_full_history()
+            # --- 在本地測試中，我們禁用 IPython.display.HTML 的部分 ---
+            print("--- [本地測試] 跳過 Colab 專用的 HTML 按鈕生成 ---")
+            # from IPython.display import display, HTML
+            # import json
+            # full_log_history = log_manager.get_full_history()
 
-            # Escape strings for JavaScript
-            js_escaped_screen_text = json.dumps(final_screen_text)
-            js_escaped_full_logs = json.dumps(
-                "\\n".join([f"[{log['timestamp'].isoformat()}] [{log['level']}] {log['message']}" for log in full_log_history])
-            )
+            # # Escape strings for JavaScript
+            # js_escaped_screen_text = json.dumps(final_screen_text)
+            # js_escaped_full_logs = json.dumps(
+            #     "\\n".join([f"[{log['timestamp'].isoformat()}] [{log['level']}] {log['message']}" for log in full_log_history])
+            # )
 
-            # Display HTML buttons with embedded JavaScript for copying
-            display(HTML(f"""
-                <script>
-                    function copyToClipboard(text) {{
-                        navigator.clipboard.writeText(text).then(function() {{
-                            console.log('Copying to clipboard was successful!');
-                        }}, function(err) {{
-                            console.error('Could not copy text: ', err);
-                        }});
-                    }}
-                </script>
-                <button onclick='copyToClipboard({js_escaped_screen_text})'>📋 複製上方儲存格輸出</button>
-                <button onclick='copyToClipboard({js_escaped_full_logs})'>📄 複製完整詳細日誌</button>
-            """))
+            # # Display HTML buttons with embedded JavaScript for copying
+            # display(HTML(f"""
+            #     <script>
+            #         function copyToClipboard(text) {{
+            #             navigator.clipboard.writeText(text).then(function() {{
+            #                 console.log('Copying to clipboard was successful!');
+            #             }}, function(err) {{
+            #                 console.error('Could not copy text: ', err);
+            #             }});
+            #         }}
+            #     </script>
+            #     <button onclick='copyToClipboard({js_escaped_screen_text})'>📋 複製上方儲存格輸出</button>
+            #     <button onclick='copyToClipboard({js_escaped_full_logs})'>📄 複製完整詳細日誌</button>
+            # """))
 
             archive_reports(log_manager, start_time, end_time, shared_stats.get('status', '未知'))
 
