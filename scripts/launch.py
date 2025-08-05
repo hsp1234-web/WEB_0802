@@ -77,10 +77,11 @@ def main():
     """主執行函式。"""
     start_time = time.time()
     # 將 src 目錄加入 sys.path
-    sys.path.insert(0, os.path.abspath('src'))
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    sys.path.insert(0, os.path.join(project_root, 'src'))
 
     # --- 全域設定 ---
-    VENV_DIR = ".venv_gold"
+    VENV_DIR = os.path.join(project_root, ".venv_gold")
     VENV_PYTHON = os.path.join(VENV_DIR, "bin", "python")
     VENV_UV = os.path.join(VENV_DIR, "bin", "uv")
     VENV_PIP = os.path.join(VENV_DIR, "bin", "pip")
@@ -103,17 +104,18 @@ def main():
             print_header("步驟 1: 使用 uv 建立 Python 虛擬環境")
             if os.path.isdir(VENV_DIR):
                 shutil.rmtree(VENV_DIR)
-            # 使用 uv venv，並明確指定 python 解釋器以確保一致性
             run_sync_command(["uv", "venv", "-p", sys.executable, VENV_DIR])
 
-            # 步驟 2 已不再需要，uv venv 會自帶 pip 和 uv
+            print_header("步驟 2: 引導程序 (Bootstrap) - 確保 Pip 和 Wheel 存在")
+            # 使用全域的 uv，並用 --python 指向 venv 的 python 解釋器
+            run_sync_command(["uv", "pip", "install", "--python", VENV_PYTHON, "-U", "pip", "wheel"])
 
             print_header("步驟 3: 將當前專案套件化安裝到 venv 中")
-            run_sync_command([VENV_PIP, "install", "-e", "."], cwd=".")
+            run_sync_command([VENV_PIP, "install", "-e", "."], cwd=project_root)
 
             print_header("步驟 3.5: 安裝專案依賴")
-            # 注意：這裡我們將使用 base.txt 作為統一的依賴來源
-            run_sync_command([VENV_UV, "pip", "install", "--python", VENV_PYTHON, "-r", "requirements/base.txt"], cwd=".")
+            # 再次使用全域的 uv
+            run_sync_command(["uv", "pip", "install", "--python", VENV_PYTHON, "-r", os.path.join(project_root, "requirements/base.txt")], cwd=project_root)
 
             print_header("重新啟動腳本以在 venv 中執行")
             env = os.environ.copy()
