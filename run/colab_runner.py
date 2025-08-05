@@ -228,9 +228,13 @@ class ServerManager:
                 self._log_manager.log("CRITICAL", f"Git clone 失敗:\n{result.stderr}"); return
 
             launcher_script_path = project_path / "scripts" / "launch.py"
+            if not launcher_script_path.is_file():
+                self._log_manager.log("CRITICAL", f"核心啟動器未找到: {launcher_script_path}"); return
 
-            # 直接使用系統 python 呼叫啟動器，它會自己處理 venv
-            launch_command = [sys.executable, str(launcher_script_path)]
+            # V65.2: 修正路徑問題。當 cwd 被設定為 project_path 時，
+            # 我們必須使用相對於 cwd 的路徑來執行腳本。
+            relative_launcher_path = "scripts/launch.py"
+            launch_command = [sys.executable, relative_launcher_path]
 
             self.server_process = subprocess.Popen(
                 launch_command, cwd=str(project_path), # 在專案目錄下執行
