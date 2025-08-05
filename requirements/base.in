@@ -4,3 +4,9 @@ pydantic
 pydantic-settings
 pytz
 psutil
+sqlalchemy
+pyyaml
+aiofiles
+faster-whisper
+ffmpeg-python
+python-multipart

@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 # 導入我們共享的資料庫管理器實例
 from ..database import db_manager
 from ..watchdog import HEARTBEAT_KEY
+from ..modules.transcription.worker import transcription_worker_main_loop
 
 # 獲取一個 logger 實例，這是進行日誌記錄的最佳實踐
 logger = logging.getLogger(__name__)

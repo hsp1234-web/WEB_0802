@@ -66,13 +66,25 @@ class DatabaseManager:
                 timestamp TEXT NOT NULL
             )
             """)
+            cursor.execute("""
+            CREATE TABLE IF NOT EXISTS transcription_tasks (
+                id TEXT PRIMARY KEY,
+                original_filepath TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending',
+                result_text TEXT,
+                error_message TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """)
             conn.commit()
 
     def get_connection(self) -> sqlite3.Connection:
         if not hasattr(self.thread_local, "connection"):
             try:
-                conn = sqlite3.connect(self.db_path, check_same_thread=False)
+                conn = sqlite3.connect(self.db_path, check_same_thread=False, detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES)
                 conn.execute("PRAGMA journal_mode=WAL;")
+                conn.row_factory = sqlite3.Row
                 self.thread_local.connection = conn
             except sqlite3.Error as e:
                 print(f"資料庫連接失敗: {e}")
@@ -122,7 +134,6 @@ class DatabaseManager:
     def get_logs_since(self, timestamp: datetime) -> list[dict]:
         timestamp_str = timestamp.isoformat()
         with self.get_connection() as conn:
-            conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
             cursor.execute(
                 "SELECT timestamp, level, message FROM logs WHERE timestamp > ? ORDER BY timestamp ASC",
@@ -130,5 +141,22 @@ class DatabaseManager:
             )
             rows = cursor.fetchall()
             return [dict(row) for row in rows]
+
+    async def fetch_one(self, query: str, params: tuple = ()):
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(query, params)
+            return cursor.fetchone()
+
+    async def fetch_all(self, query: str, params: tuple = ()):
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(query, params)
+            return cursor.fetchall()
+
+    async def execute_query(self, query: str, params: tuple = ()):
+        with self.get_connection() as conn:
+            conn.execute(query, params)
+            conn.commit()
 
 db_manager = DatabaseManager()

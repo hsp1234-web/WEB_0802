@@ -28,7 +28,9 @@ class Settings(BaseSettings):
     """
     APP_NAME: str = Field("鳳凰之心", description="應用程式的名稱")
     APP_ENV: str = Field("development", description="運行環境 (development/production)")
+    APP_STORAGE: str = Field("./storage", description="應用程式的本地儲存路徑")
     LOG_SETTINGS: LogSettings = Field(default_factory=LogSettings)
+    TRANSCRIPTION_MODEL_SIZE: str = Field("tiny", description="用於音訊轉錄的 Whisper 模型大小")
 
     @model_validator(mode='before')
     @classmethod

@@ -13,3 +13,7 @@ ipython # Colab 腳本在本地執行時需要
 pytest-aiohttp # 用於測試 aiohttp 應用
 pytest-xdist # 用於並行測試，發揮多核心效能
 pytest-timeout # 為每個測試設置超時，防止掛起
+
+# --- 報告工具 ---
+pandas
+tabulate

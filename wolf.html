@@ -1114,25 +1114,96 @@ def handle_data(context, data):
             Array.from(files).forEach(uploadAndProcessFile);
         };
 
-        const uploadAndProcessFile = (file) => {
-            const logEntry = addLog('進度', `開始處理檔案: ${file.name}`);
-            
-            // 模擬處理時間和進度
-            const mockDuration = Math.random() * 4000 + 2000;
-            let progress = 0;
-            const interval = setInterval(() => {
-                progress += 20;
-                updateProgressBar(logEntry, progress);
-                if (progress >= 100) {
-                    clearInterval(interval);
-                    const mockTranscript = `--- ${file.name} ---\n[00:00:01.123] 這是「${file.name}」的模擬轉錄結果。\n[00:00:08.456] 這種非阻塞的設計，讓每一個步驟都能獨立存在。\n\n`;
-                    logEntry.querySelector('div').insertAdjacentHTML('beforeend', `<span class="ml-2 text-green-400">完成</span>`);
-                    transcriptOutput.textContent += mockTranscript;
-                    
-                    standbySection.classList.add('opacity-0', 'pointer-events-none');
-                    resultSection.classList.remove('opacity-0', 'pointer-events-none');
+        const uploadAndProcessFile = async (file) => {
+            const logEntry = addLog('進度', `開始上傳檔案: ${file.name}`);
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                // Step 1: Upload the file and get a task ID
+                const uploadResponse = await fetch('/transcription/upload', {
+                    method: 'POST',
+                    body: formData,
+                });
+
+                if (!uploadResponse.ok) {
+                    throw new Error(`上傳失敗: ${uploadResponse.statusText}`);
                 }
-            }, mockDuration / 5);
+
+                const uploadData = await uploadResponse.json();
+                const taskId = uploadData.task_id;
+                logEntry.dataset.taskId = taskId;
+                updateLogMessage(logEntry, '進度', `上傳成功，任務ID: ${taskId}。正在等待處理...`);
+
+                // Step 2: Start polling for the result
+                pollStatus(taskId, logEntry);
+
+            } catch (error) {
+                console.error('上傳或處理過程中發生錯誤:', error);
+                updateLogMessage(logEntry, '錯誤', `處理失敗: ${error.message}`);
+            }
+        };
+
+        const pollStatus = (taskId, logEntry) => {
+            const intervalId = setInterval(async () => {
+                try {
+                    const statusResponse = await fetch(`/transcription/status/${taskId}`);
+                    if (!statusResponse.ok) {
+                        // Stop polling on server error
+                        clearInterval(intervalId);
+                        updateLogMessage(logEntry, '錯誤', `無法獲取狀態: ${statusResponse.statusText}`);
+                        return;
+                    }
+
+                    const statusData = await statusResponse.json();
+                    
+                    switch (statusData.status) {
+                        case 'pending':
+                            updateLogMessage(logEntry, '進度', '任務排隊中...');
+                            break;
+                        case 'processing':
+                            updateLogMessage(logEntry, '進度', '正在轉錄中，請稍候...');
+                            // Here you could add a more detailed progress bar if the backend provided it
+                            updateProgressBar(logEntry, 50); // Simulate 50% progress
+                            break;
+                        case 'completed':
+                            clearInterval(intervalId);
+                            updateLogMessage(logEntry, '成功', '轉錄完成！');
+                            updateProgressBar(logEntry, 100);
+
+                            // Append result to the main output
+                            const existingText = transcriptOutput.textContent;
+                            const newTranscript = `--- ${logEntry.dataset.fileName || '未知檔案'} ---\n${statusData.result_text}\n\n`;
+                            transcriptOutput.textContent = existingText + newTranscript;
+
+                            // Show the result section
+                            standbySection.classList.add('opacity-0', 'pointer-events-none');
+                            resultSection.classList.remove('opacity-0', 'pointer-events-none');
+                            break;
+                        case 'failed':
+                            clearInterval(intervalId);
+                            updateLogMessage(logEntry, '錯誤', `轉錄失敗: ${statusData.error_message}`);
+                            break;
+                    }
+
+                } catch (error) {
+                    clearInterval(intervalId);
+                    console.error('輪詢狀態時發生錯誤:', error);
+                    updateLogMessage(logEntry, '錯誤', '輪詢時發生網路錯誤。');
+                }
+            }, 2000); // Poll every 2 seconds
+        };
+
+        const updateLogMessage = (logEntry, level, message) => {
+            const timestamp = new Date().toLocaleTimeString('zh-TW', { hour12: false });
+            const levelColor = { '系統': 'text-sky-400', '成功': 'text-green-400', '錯誤': 'text-red-400', '進度': 'text-yellow-400' }[level] || 'text-gray-400';
+            const firstChild = logEntry.querySelector('div');
+            if(firstChild) {
+                 firstChild.innerHTML = `
+                    <span class="text-gray-500 mr-2">[${timestamp}]</span>
+                    <span class="${levelColor}">[${level}]</span>
+                    <span class="ml-2 text-[color:var(--text-color)]">${message}</span>`;
+            }
         };
 
         // --- 事件監聽器綁定 ---
