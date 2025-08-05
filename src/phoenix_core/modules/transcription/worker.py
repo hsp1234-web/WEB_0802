@@ -50,7 +50,7 @@ async def process_single_task():
     if not task_id:
         return # 沒有待處理任務
 
-    logger.log("INFO", f"找到待處理任務: {task_id}", source="TranscriptionWorker")
+    await logger.log("INFO", f"找到待處理任務: {task_id}", source="TranscriptionWorker")
     await _update_task_status(task_id, "processing")
 
     try:
@@ -67,7 +67,7 @@ async def process_single_task():
         hardware_config = get_best_hardware_config()
         model_size = settings.TRANSCRIPTION_MODEL_SIZE
 
-        logger.log("INFO", f"正在為任務 {task_id} 載入 Whisper 模型 '{model_size}' (設備: {hardware_config['device']}, 類型: {hardware_config['compute_type']})", source="TranscriptionWorker")
+        await logger.log("INFO", f"正在為任務 {task_id} 載入 Whisper 模型 '{model_size}' (設備: {hardware_config['device']}, 類型: {hardware_config['compute_type']})", source="TranscriptionWorker")
         model = WhisperModel(
             model_size,
             device=hardware_config["device"],
@@ -81,23 +81,23 @@ async def process_single_task():
             raise FileNotFoundError(f"在資料庫中找不到任務 {task_id} 的檔案路徑。")
         audio_path = result['original_filepath']
 
-        logger.log("INFO", f"開始轉錄檔案: {audio_path}", source="TranscriptionWorker")
+        await logger.log("INFO", f"開始轉錄檔案: {audio_path}", source="TranscriptionWorker")
 
         # 4. 執行轉錄
         segments, _info = model.transcribe(audio_path, beam_size=5)
         full_transcript = "".join(segment.text for segment in segments)
 
-        logger.log("SUCCESS", f"任務 {task_id} 轉錄完成。", source="TranscriptionWorker")
+        await logger.log("SUCCESS", f"任務 {task_id} 轉錄完成。", source="TranscriptionWorker")
 
         # 5. 更新最終結果
         await _update_task_status(task_id, "completed", message=full_transcript.strip())
-        logger.log("INFO", f"任務 {task_id} 狀態更新為: completed", source="TranscriptionWorker")
+        await logger.log("INFO", f"任務 {task_id} 狀態更新為: completed", source="TranscriptionWorker")
 
     except Exception as e:
         error_message = traceback.format_exc()
-        logger.log("ERROR", f"轉錄任務 {task_id} 過程中發生錯誤: {error_message}", source="TranscriptionWorker")
+        await logger.log("ERROR", f"轉錄任務 {task_id} 過程中發生錯誤: {error_message}", source="TranscriptionWorker")
         await _update_task_status(task_id, "failed", message=error_message)
-        logger.log("INFO", f"任務 {task_id} 狀態更新為: failed", source="TranscriptionWorker")
+        await logger.log("INFO", f"任務 {task_id} 狀態更新為: failed", source="TranscriptionWorker")
 
 
 async def transcription_worker_main_loop():
@@ -105,15 +105,16 @@ async def transcription_worker_main_loop():
     轉錄工人的主循環，定期檢查並處理新任務。
     這將被核心背景任務管理器 (`background/worker.py`) 所調用。
     """
-    logger.log("INFO", "轉錄工人背景任務已啟動，開始監聽新任務...", source="TranscriptionWorker")
+    await logger.log("INFO", "轉錄工人背景任務已啟動，開始監聽新任務...", source="TranscriptionWorker")
 
     while True:
+        await logger.log("DEBUG", "進入轉錄工人主循環...", source="TranscriptionWorker")
         try:
             await process_single_task()
             # 任務之間的短暫延遲，避免過度佔用 CPU 進行輪詢
             await asyncio.sleep(settings.get("TRANSCRIPTION_WORKER_POLL_INTERVAL", 5))
         except Exception as e:
             error_message = traceback.format_exc()
-            logger.log("CRITICAL", f"轉錄工人在主循環中發生無法恢復的嚴重錯誤: {e}\n{error_message}", source="TranscriptionWorker")
+            await logger.log("CRITICAL", f"轉錄工人在主循環中發生無法恢復的嚴重錯誤: {e}\n{error_message}", source="TranscriptionWorker")
             # 如果發生嚴重錯誤，等待更長時間再重試
             await asyncio.sleep(60)

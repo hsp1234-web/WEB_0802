@@ -9,27 +9,18 @@ from datetime import datetime, timezone
 # 導入我們共享的資料庫管理器實例
 from ..database import db_manager
 from ..watchdog import HEARTBEAT_KEY
-from ..modules.transcription.worker import transcription_worker_main_loop
-from ..modules.prometheus_pipeline.worker import prometheus_worker_main_loop
 
 # 獲取一個 logger 實例，這是進行日誌記錄的最佳實踐
 logger = logging.getLogger(__name__)
 
 async def periodic_heartbeat(interval_seconds: int = 5):
     """
-    一個週期性執行的背景任務，用於向資料庫寫入心跳信號。
-    這能讓外部監控系統知道我們的服務仍然存活。
+    一個極簡化的心跳任務，用於最終的偵錯。
+    它只打印到 stdout，沒有任何外部依賴。
     """
-    logger.info(f"❤️  心跳背景任務已啟動，每 {interval_seconds} 秒更新一次。")
+    print("--- HEARTBEAT TASK CREATED ---", flush=True)
+    await asyncio.sleep(1)
+    print("--- HEARTBEAT TASK STARTED ---", flush=True)
     while True:
-        try:
-            # 使用 value 欄位存放當前時間戳，方便直接查看
-            current_time_str = datetime.now(timezone.utc).isoformat()
-            db_manager.write_status_update(HEARTBEAT_KEY, current_time_str)
-            logger.debug(f"❤️  心跳已更新: {current_time_str}")
-        except Exception:
-            # 使用 logger.exception 會自動包含堆疊追蹤訊息，非常適合除錯
-            logger.exception("❌ 心跳任務發生嚴重錯誤")
-
-        # 等待指定的間隔時間
+        print(f"--- HEARTBEAT PING ({datetime.now(timezone.utc)}) ---", flush=True)
         await asyncio.sleep(interval_seconds)

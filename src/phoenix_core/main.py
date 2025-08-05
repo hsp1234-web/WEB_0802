@@ -12,6 +12,7 @@ from .kernel.registry import registered_routers
 from . import modules
 from .background import worker
 from .database import db_manager
+from .utils.logger import logger
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -71,7 +72,7 @@ async def startup_event():
     worker.start_background_tasks()
 
     # 寫入啟動日誌
-    db_manager.write_log("INFO", "核心服務啟動成功。")
+    await logger.log("INFO", "核心服務啟動成功。")
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 app.mount("/static", StaticFiles(directory=PROJECT_ROOT), name="static")

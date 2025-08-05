@@ -9,6 +9,7 @@ V2 架構:
 這確保了所有日誌都流經同一個「真相來源」(state.db)。
 """
 import threading
+import asyncio
 from ..database import db_manager
 from typing import List, Tuple, Optional
 
@@ -33,10 +34,10 @@ class Logger:
         """
         pass
 
-    def log(self, level: str, message: str, source: Optional[str] = "default"):
+    async def log(self, level: str, message: str, source: Optional[str] = "default"):
         """
-        記錄一條新的日誌。
-        此方法會將請求直接轉發給 DatabaseManager。
+        以非同步方式記錄一條新的日誌。
+        此方法會將同步的資料庫寫入操作放在背景執行緒中執行，以避免阻塞事件循環。
 
         Args:
             level (str): 日誌等級 (例如 "INFO", "ERROR")。
@@ -44,8 +45,13 @@ class Logger:
             source (str, optional): 日誌來源。預設為 "default"。
         """
         try:
-            # 將日誌寫入任務委派給 db_manager
-            db_manager.write_log(level=level.upper(), message=message, source=source)
+            # 在背景執行緒中執行同步的資料庫寫入操作
+            await asyncio.to_thread(
+                db_manager.write_log,
+                level=level.upper(),
+                message=message,
+                source=source
+            )
         except Exception as e:
             # 在極端情況下，如果連 db_manager 都失敗了，打印到 stderr
             # 這是一個應急措施，正常情況下不應發生

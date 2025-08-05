@@ -77,73 +77,83 @@ def run_command(command, cwd=".", env=None):
 
 def run_core_application(stop_event):
     """
-    【已修改】啟動 FastAPI 伺服器作為核心應用。
+    【已升級】啟動並使用看門狗監控 FastAPI 伺服器。
     """
-    print_header("步驟 6: 啟動核心應用程式 (FastAPI 伺服器)")
+    print_header("步驟 4: 啟動並監控核心應用程式")
 
     server_process = None
-    try:
-        # 正確的啟動方式是使用 uvicorn 運行 src.phoenix_core.main 中的 app 物件
-        api_server_command = [
-            VENV_PYTHON,
-            "-m",
-            "uvicorn",
-            "src.phoenix_core.main:app",
-            "--host", "0.0.0.0",
-            "--port", "8080", # 使用一個常用端口
-        ]
+    watchdog_timer = None
 
+    def handle_timeout():
+        print(f"❌ {get_timestamp()} - 看門狗觸發！超過 10 秒未收到日誌，正在終止伺服器...", file=sys.stderr)
+        if server_process and server_process.poll() is None:
+            server_process.kill() # 使用 kill 確保進程被終止
+
+    def reset_watchdog(timeout=10.0):
+        nonlocal watchdog_timer
+        if watchdog_timer:
+            watchdog_timer.cancel()
+        watchdog_timer = threading.Timer(timeout, handle_timeout)
+        watchdog_timer.start()
+
+    try:
+        api_server_command = [
+            VENV_PYTHON, "-m", "uvicorn", "src.phoenix_core.main:app",
+            "--host", "0.0.0.0", "--port", "8080",
+        ]
         print(f"   🔹 執行命令: {' '.join(api_server_command)}")
-        # 使用 Popen 在背景啟動伺服器
+
+        # 使用 Popen 在背景啟動伺服器，確保設定 PYTHONUNBUFFERED
+        process_env = os.environ.copy()
+        process_env["PYTHONUNBUFFERED"] = "1"
         server_process = subprocess.Popen(
             api_server_command,
             stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            stderr=subprocess.STDOUT, # 將 stderr 合併到 stdout
             text=True,
-            encoding='utf-8'
+            encoding='utf-8',
+            env=process_env
         )
 
-        # 簡化版看門狗：我們不期望伺服器結束，只驗證它能成功運行一段時間
-        # 讓伺服器運行 15 秒，作為一個簡短的測試運行
-        print("   ℹ️ 伺服器正在背景運行，等待 15 秒作為測試運行...")
+        print(f"   ✅ 伺服器進程已啟動 (PID: {server_process.pid})。")
+        reset_watchdog() # 啟動第一個看門狗計時器
 
-        # 在等待時，可以即時打印日誌
-        end_time = time.time() + 15
-        while time.time() < end_time:
-            if server_process.poll() is not None:
-                # 如果進程在此期間意外退出，則表示有錯誤
-                stdout, stderr = server_process.communicate()
-                print(f"❌ 伺服器在測試運行期間意外終止。", file=sys.stderr)
-                print(f"   [STDOUT]: {stdout}", file=sys.stderr)
-                print(f"   [STDERR]: {stderr}", file=sys.stderr)
-                raise Exception("伺服器啟動失敗")
-            time.sleep(1)
+        # 即時讀取日誌並餵狗
+        for line in iter(server_process.stdout.readline, ''):
+            if not line: # 當輸出結束時退出
+                break
 
-        print("✅ 伺服器成功運行了 15 秒。")
+            log_line = line.strip()
+            print(f"     [伺服器日誌] {log_line}")
+            reset_watchdog() # 每次收到日誌就重置看門狗
+
+        # 檢查進程結束後是否有錯誤
+        return_code = server_process.wait()
+        if return_code != 0:
+             print(f"   ⚠️ 伺服器進程已終止，返回碼: {return_code}", file=sys.stderr)
 
     except Exception as e:
         print(f"❌ 核心應用程式執行緒發生未預期的錯誤: {e}", file=sys.stderr)
     finally:
-        # 無論如何，確保終止伺服器進程，以便腳本可以繼續
+        print("   ℹ️ 執行結束，正在進行最終清理...")
+        if watchdog_timer:
+            watchdog_timer.cancel() # 確保計時器被清理
         if server_process and server_process.poll() is None:
-            print("   ℹ️ 測試運行結束，正在終止伺服器...")
+            print("   ℹ️ 正在終止伺服器...")
             server_process.terminate()
             try:
                 server_process.wait(timeout=5)
-                print("   ✅ 伺服器已成功終止。")
             except subprocess.TimeoutExpired:
                 server_process.kill()
-
-        # 通知主執行緒（如果需要）
-        if not stop_event.is_set():
-            stop_event.set()
+        print("   ✅ 清理完畢。")
+        stop_event.set()
 
 def main():
     """
     主執行函式，協調所有步驟。
     """
     start_time = time.time()
-    os.environ["PYTHONUNBUFFERED"] = "1" # 確保子進程的輸出不會被緩衝
+    os.environ["PYTHONUNBUFFERED"] = "1"
 
     try:
         # --- 步驟 1: 建立 venv ---
@@ -161,29 +171,8 @@ def main():
         run_command([VENV_PIP, "install", "-U", "uv"])
         print("✅ uv 安裝成功。")
 
-        # --- 步驟 3: 下載專案原始碼 (僅供驗證) ---
-        print_header("步驟 3: 下載專案原始碼 (僅供驗證)")
-        if os.path.exists(TEMP_CLONE_DIR):
-            shutil.rmtree(TEMP_CLONE_DIR)
-
-        run_command(["git", "clone", "--branch", GIT_BRANCH, GIT_REPO, TEMP_CLONE_DIR])
-        print(f"✅ 專案已成功克隆到 '{TEMP_CLONE_DIR}'。")
-
-        # --- 步驟 3.1: 驗證下載內容 ---
-        print_header("步驟 3.1: 驗證下載內容")
-        run_command(["ls", "-R"], cwd=TEMP_CLONE_DIR)
-        print("✅ 下載內容驗證成功。")
-
-        # --- 步驟 3.2: 刪除臨時目錄以避免工具鏈衝突 ---
-        print_header("步驟 3.2: 刪除臨時目錄")
-        shutil.rmtree(TEMP_CLONE_DIR)
-        print(f"✅ 臨時目錄 '{TEMP_CLONE_DIR}' 已刪除。")
-
-        # --- 接下來的所有操作都在當前專案目錄中進行 ---
-        print_header("通知：後續操作將在當前專案目錄下進行。")
-
-        # --- 步驟 4: 將當前專案套件化安裝到 venv 中 ---
-        print_header("步驟 4: 將當前專案套件化安裝到 venv 中 (pip install -e .)")
+        # --- 步驟 3: 將當前專案套件化安裝到 venv 中 ---
+        print_header("步驟 3: 將當前專案套件化安裝到 venv 中 (pip install -e .)")
         run_command([VENV_PIP, "install", "-e", "."], cwd=".")
         print("✅ 當前專案已成功以可編輯模式安裝。")
 
