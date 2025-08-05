@@ -1,13 +1,14 @@
 # Core dependencies needed for the API server to start
-aiohttp==3.12.15
-fastapi==0.116.1
-psutil==7.0.0
-pydantic-settings==2.10.1
-uvicorn[standard]==0.35.0
-click==8.2.1 # Explicitly add click as a dependency for uvicorn
-websockets==12.0
-pytz==2025.2
-aiofiles==23.2.1 # 用於非同步檔案處理 (由 transcription 模組使用)
+# Versions are managed by pip-compile via requirements/base.in and requirements/dev.txt
+aiohttp
+fastapi
+psutil
+pydantic-settings
+uvicorn[standard]
+click # Explicitly add click as a dependency for uvicorn
+websockets
+pytz
+aiofiles
 # uv is a global tool now, but keeping it here for clarity
 uv==0.1.33
 # Transitive dependencies will be handled by the installer

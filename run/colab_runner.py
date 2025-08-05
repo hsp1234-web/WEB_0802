@@ -270,30 +270,33 @@ class ServerManager:
                 self._log_manager.log("CRITICAL", f"引導程序安裝 pip 失敗:\n{result.stderr}")
                 return None
 
-            self._log_manager.log("INFO", "正在安裝核心依賴...")
-            core_requirements_path = project_path / "requirements/requirements-core.txt"
-            if not core_requirements_path.is_file():
-                self._log_manager.log("CRITICAL", f"找不到依賴檔案: {core_requirements_path}")
-                return None
+            # V66 (Jules): 修正為安裝所有必要的相依性檔案，而不僅僅是核心檔案
+            # 這樣可以確保 Colab 環境與開發環境一致，解決缺少 'python-multipart' 的問題
+            requirements_files = [
+                "requirements/requirements-core.txt",
+                "requirements/dev.txt"
+            ]
 
-            with open(core_requirements_path, 'r', encoding='utf-8') as f:
-                # V64: 修正解析邏輯，先用 '#' 分割來移除行內註解
-                lines = [line.split('#')[0].strip() for line in f]
-                dependencies = [dep for dep in lines if dep]
+            for req_file_name in requirements_files:
+                self._log_manager.log("INFO", f"正在安裝相依性檔案: {req_file_name}...")
+                requirements_path = project_path / req_file_name
+                if not requirements_path.is_file():
+                    self._log_manager.log("CRITICAL", f"找不到依賴檔案: {requirements_path}")
+                    return None
 
-            for dep in dependencies:
-                self._stats['status'] = f"⚙️ 正在安裝: {dep}..."
-                self._log_manager.log("INFO", f"正在安裝套件: {dep}")
-                # V65: 使用 uv 加速安裝。根據 research.md，uv 能正確處理 venv，不需 --ignore-installed。
-                install_command = ["uv", "pip", "install", "--python", str(venv_python), dep]
+                # 使用 uv 直接從檔案安裝，更有效率
+                install_command = ["uv", "pip", "install", "--python", str(venv_python), "-r", str(requirements_path)]
+                self._stats['status'] = f"⚙️ 正在安裝 {req_file_name}..."
                 result = subprocess.run(install_command, check=False, capture_output=True, text=True, encoding='utf-8')
 
                 if result.returncode != 0:
-                    self._log_manager.log("CRITICAL", f"安裝套件 {dep} 失敗:\n{result.stderr}")
+                    self._log_manager.log("CRITICAL", f"安裝 {req_file_name} 失敗:\n{result.stderr}")
+                    # 顯示詳細的 uv 輸出以幫助除錯
+                    self._log_manager.log("DEBUG", f"uv stdout:\n{result.stdout}")
                     return None
-                self._log_manager.log("SUCCESS", f"✅ {dep} 安裝成功。")
+                self._log_manager.log("SUCCESS", f"✅ {req_file_name} 安裝成功。")
 
-            self._log_manager.log("SUCCESS", "✅ 所有核心依賴已成功安裝。")
+            self._log_manager.log("SUCCESS", "✅ 所有相依性套件已成功安裝。")
             return {"project_path": project_path, "venv_python": venv_python}
         except Exception as e:
             self._log_manager.log("CRITICAL", f"環境準備失敗: {e}"); return None
