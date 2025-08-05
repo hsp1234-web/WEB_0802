@@ -1,17 +1,17 @@
 # -*- coding: utf-8 -*-
 # ╔══════════════════════════════════════════════════════════════════╗
 # ║                                                                      ║
-# ║    🐦‍🔥 鳳凰之心 - V63 作戰指揮中心 (加速安裝版)                  🐦‍🔥 ║
+# ║    🐦‍🔥 鳳凰之心 - V65 作戰指揮中心 (加速安裝版)                  🐦‍🔥 ║
 # ║                                                                      ║
 # ╠══════════════════════════════════════════════════════════════════╣
 # ║                                                                      ║
-# ║ - V63 更新日誌:                                                      ║
-# ║   - **安裝器修正**: 移除 `uv` 不支援的 `--ignore-installed` 參數。    ║
-# ║   - **版本號統一**: 將顯示版本全面更新至 V63。                         ║
+# ║ - V65 更新日誌:                                                      ║
+# ║   - **架構重構**: 引入核心啟動器 `scripts/launch.py`。               ║
+# ║   - **版本號統一**: 將顯示版本全面更新至 V65。                         ║
 # ║                                                                      ║
 # ╚══════════════════════════════════════════════════════════════════╝
 
-#@title 🐦‍🔥 鳳凰之心 V63 作戰指揮中心 { vertical-output: true, display-mode: "form" }
+#@title 🐦‍🔥 鳳凰之心 V65 作戰指揮中心 { vertical-output: true, display-mode: "form" }
 #@markdown ---
 #@markdown ### **Part 1: 專案與環境設定**
 #@markdown > **設定 Git 倉庫、分支或標籤，以及專案資料夾。**
@@ -139,9 +139,8 @@ class DisplayManager:
         """建立儀表板的輸出內容緩衝區。"""
         output_buffer = []
 
-        # V63: 加速安裝版
-        output_buffer.append("🐦‍🔥 鳳凰之心 - V63 作戰指揮中心 (加速安裝版) 🐦‍🔥")
-        # V65: Add a blank line for spacing after title
+        # V65: 統一標題
+        output_buffer.append("🐦‍🔥 鳳凰之心 - V65 作戰指揮中心 🐦‍🔥")
         output_buffer.append("")
 
         logs_to_display = self._log_manager.get_display_logs()
@@ -208,20 +207,27 @@ class ServerManager:
 
     def _run(self):
         try:
-            env_paths = self._setup_environment()
-            if not env_paths or self._stop_event.is_set():
-                self._stats['status'] = "❌ 環境準備失敗"; return
+            self._stats['status'] = "🚀 呼叫核心啟動器..."
+            self._log_manager.log("BATTLE", "=== 正在呼叫核心啟動器 `scripts/launch.py` ===")
 
-            self._stats['status'] = "🚀 正在啟動伺服器..."
-            self._log_manager.log("BATTLE", "=== [2/2] 正在啟動後端伺服器 ===")
+            # 使用核心啟動器來處理所有環境設定和伺服器啟動
+            # 我們假設 launch.py 會在 PROJECT_FOLDER_NAME 中執行
+            project_path = Path(PROJECT_FOLDER_NAME)
+            launcher_script_path = project_path / "scripts" / "launch.py"
 
-            project_path, venv_python = env_paths["project_path"], env_paths["venv_python"]
-            process_env = os.environ.copy()
-            process_env.update({"VIRTUAL_ENV": str(venv_python.parent.parent), "PATH": f"{venv_python.parent}:{os.environ.get('PATH', '')}", "PYTHONUNBUFFERED": "1"})
+            if not launcher_script_path.is_file():
+                 # 為了安全，我們先執行 git clone
+                self._log_manager.log("INFO", "專案資料夾不存在，先執行 Git clone...")
+                git_command = ["git", "clone", "--branch", TARGET_BRANCH_OR_TAG, "--depth", "1", REPOSITORY_URL, str(project_path)]
+                result = subprocess.run(git_command, check=False, capture_output=True, text=True, encoding='utf-8');
+                if result.returncode != 0:
+                    self._log_manager.log("CRITICAL", f"Git clone 失敗:\n{result.stderr}"); return
 
-            uvicorn_command = [str(venv_python), "-m", "uvicorn", "src.phoenix_core.main:app", "--host", "0.0.0.0", "--port", str(API_PORT), "--workers", "1"]
+            # 直接使用系統 python 呼叫啟動器，它會自己處理 venv
+            launch_command = [sys.executable, str(launcher_script_path)]
+
             self.server_process = subprocess.Popen(
-                uvicorn_command, cwd=str(project_path), env=process_env,
+                launch_command, cwd=str(project_path), # 在專案目錄下執行
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8', preexec_fn=os.setsid
             )
             self._log_manager.log("INFO", f"Uvicorn 子進程已啟動 (PID: {self.server_process.pid})。")
@@ -240,63 +246,6 @@ class ServerManager:
             self._stats['status'] = "❌ 發生致命錯誤"; self._log_manager.log("CRITICAL", f"ServerManager 執行緒出錯: {e}")
         finally:
              self._stats['status'] = "⏹️ 已停止"
-
-    def _setup_environment(self):
-        try:
-            self._stats['status'] = "設定環境..."; self._log_manager.log("BATTLE", "=== [1/2] 準備專案環境 ===")
-            base_path = Path(".").resolve()
-            project_path = base_path / PROJECT_FOLDER_NAME
-
-            if FORCE_REPO_REFRESH and project_path.exists(): shutil.rmtree(project_path); self._log_manager.log("INFO", f"舊資料夾已刪除: {project_path}")
-
-            self._log_manager.log("INFO", f"正在從 Git 下載 (分支: {TARGET_BRANCH_OR_TAG})...")
-            git_command = ["git", "clone", "--branch", TARGET_BRANCH_OR_TAG, "--depth", "1", REPOSITORY_URL, str(project_path)]
-            result = subprocess.run(git_command, check=False, capture_output=True, text=True, encoding='utf-8');
-            if result.returncode != 0: self._log_manager.log("CRITICAL", f"Git clone 失敗:\n{result.stderr}"); return None
-
-            self._log_manager.log("INFO", "正在建立虛擬環境...")
-            venv_path = project_path / ".venv"
-            result = subprocess.run(["uv", "venv", str(venv_path)], check=False, capture_output=True, text=True, encoding='utf-8')
-            if result.returncode != 0: self._log_manager.log("CRITICAL", f"建立虛擬環境失敗:\n{result.stderr}"); return None
-
-            venv_python = venv_path / "bin" / "python"
-
-            # V55.1 修正：重新加入防禦性的 pip 引導程序，以應對 uv venv 在某些環境下可能不會安裝 pip 的偶發性問題。
-            # 這是根據 marker.MD 的歷史經驗和使用者回報的錯誤日誌所做的決定。
-            self._log_manager.log("INFO", "引導程序：確保 pip 已安裝...")
-            bootstrap_command = ["uv", "pip", "install", "--python", str(venv_python), "pip", "wheel"]
-            result = subprocess.run(bootstrap_command, check=False, capture_output=True, text=True, encoding='utf-8')
-            if result.returncode != 0:
-                self._log_manager.log("CRITICAL", f"引導程序安裝 pip 失敗:\n{result.stderr}")
-                return None
-
-            self._log_manager.log("INFO", "正在安裝核心依賴...")
-            core_requirements_path = project_path / "requirements/requirements-core.txt"
-            if not core_requirements_path.is_file():
-                self._log_manager.log("CRITICAL", f"找不到依賴檔案: {core_requirements_path}")
-                return None
-
-            with open(core_requirements_path, 'r', encoding='utf-8') as f:
-                # V64: 修正解析邏輯，先用 '#' 分割來移除行內註解
-                lines = [line.split('#')[0].strip() for line in f]
-                dependencies = [dep for dep in lines if dep]
-
-            for dep in dependencies:
-                self._stats['status'] = f"⚙️ 正在安裝: {dep}..."
-                self._log_manager.log("INFO", f"正在安裝套件: {dep}")
-                # V65: 使用 uv 加速安裝。根據 research.md，uv 能正確處理 venv，不需 --ignore-installed。
-                install_command = ["uv", "pip", "install", "--python", str(venv_python), dep]
-                result = subprocess.run(install_command, check=False, capture_output=True, text=True, encoding='utf-8')
-
-                if result.returncode != 0:
-                    self._log_manager.log("CRITICAL", f"安裝套件 {dep} 失敗:\n{result.stderr}")
-                    return None
-                self._log_manager.log("SUCCESS", f"✅ {dep} 安裝成功。")
-
-            self._log_manager.log("SUCCESS", "✅ 所有核心依賴已成功安裝。")
-            return {"project_path": project_path, "venv_python": venv_python}
-        except Exception as e:
-            self._log_manager.log("CRITICAL", f"環境準備失敗: {e}"); return None
 
     def start(self): self._thread.start()
     def stop(self):
