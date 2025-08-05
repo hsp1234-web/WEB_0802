@@ -9,7 +9,7 @@ V2 架構:
 這確保了所有日誌都流經同一個「真相來源」(state.db)。
 """
 import threading
-from src.phoenix_core.database import db_manager
+from ..database import db_manager
 from typing import List, Tuple, Optional
 
 class Logger:

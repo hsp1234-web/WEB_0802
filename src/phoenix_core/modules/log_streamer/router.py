@@ -3,8 +3,8 @@ import asyncio
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from datetime import datetime, timezone
 
-from src.phoenix_core.database import db_manager
-from src.phoenix_core.kernel.registry import registered_routers
+from ...database import db_manager
+from ...kernel.registry import registered_routers
 
 router = APIRouter(
     prefix="/ws",

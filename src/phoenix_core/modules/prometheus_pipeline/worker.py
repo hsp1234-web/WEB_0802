@@ -1,9 +1,12 @@
 # -*- coding: utf-8 -*-
 import asyncio
-from phoenix_core.utils.logger import logger
+import asyncio
+from phoenix_core.modules.prometheus_pipeline.core.logging.log_manager import LogManager
 from phoenix_core.modules.prometheus_pipeline.core.db.db_manager import DBManager
 # 假設我們有一個管線執行的主函式
 # from .pipelines.main_executor import run_pipeline_by_name
+
+logger = LogManager.get_instance().get_logger("PrometheusWorker")
 
 async def prometheus_worker_main_loop():
     """
@@ -17,8 +20,18 @@ async def prometheus_worker_main_loop():
     # 這裡只是一個範例，展示如何初始化 DBManager 並使用它
     # 在真實的實現中，管線的執行會更複雜
     try:
-        db_manager = DBManager()
-        logger.info(f"工人成功初始化 DBManager，使用資料庫路徑: {db_manager.db_path}")
+        from phoenix_core.kernel.settings import settings
+        # 初始化主資料庫
+        db_manager_main = DBManager(settings.PROMETHEUS_PIPELINE.database.main_db_path)
+        logger.info(f"工人成功初始化主資料庫，路徑: {db_manager_main.db_path}")
+        db_manager_main.fetch_table("dummy_table_for_init_main")
+
+        # 初始化數據倉庫
+        db_manager_dw = DBManager(settings.PROMETHEUS_PIPELINE.database.data_warehouse_path)
+        logger.info(f"工人成功初始化數據倉庫，路徑: {db_manager_dw.db_path}")
+        db_manager_dw.fetch_table("dummy_table_for_init_dw")
+
+        logger.info("所有資料庫連線測試成功。")
     except Exception as e:
         logger.error(f"工人初始化 DBManager 失敗: {e}", exc_info=True)
         return # 初始化失敗，工人無法繼續

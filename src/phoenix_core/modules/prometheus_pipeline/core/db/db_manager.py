@@ -7,7 +7,7 @@ from phoenix_core.kernel.settings import settings
 class DBManager:
     def __init__(self, db_path: str = None):
         if db_path is None:
-            self.db_path = settings.PROMETHEUS_PIPELINE.DATABASE.MAIN_DB_PATH
+            self.db_path = settings.PROMETHEUS_PIPELINE.database.main_db_path
         else:
             self.db_path = db_path
         self.logger = LogManager.get_instance().get_logger(self.__class__.__name__)
@@ -128,7 +128,8 @@ class DBManager:
             pd.DataFrame: 包含表格數據的 DataFrame。如果表格不存在或為空，則返回一個空的 DataFrame。
         """
         try:
-            with duckdb.connect(self.db_path, read_only=True) as con:
+            # 移除 read_only=True 以確保在檔案不存在時可以被創建
+            with duckdb.connect(self.db_path) as con:
                 # 檢查表格是否存在
                 tables = con.execute("SHOW TABLES").fetchall()
                 if (table_name,) not in tables:

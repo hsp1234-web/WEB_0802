@@ -5,7 +5,7 @@ from typing import Dict, Any
 import psutil
 import yaml
 from .logger import logger
-from src.phoenix_core.database import db_manager
+from ..database import db_manager
 
 def get_system_resources() -> Dict[str, Any]:
     """ 獲取當前系統的記憶體和磁碟使用情況。

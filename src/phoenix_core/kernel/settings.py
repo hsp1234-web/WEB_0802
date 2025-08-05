@@ -16,6 +16,17 @@ class LogSettings(BaseSettings):
     CRITICAL: bool = True
     PERF: bool = False
 
+class PrometheusDatabaseSettings(BaseSettings):
+    """普羅米修斯管線的資料庫相關設定"""
+    main_db_path: str = "storage/prometheus/factors.duckdb"
+    data_warehouse_path: str = "storage/prometheus/data_warehouse.duckdb"
+    task_queue_db_path: str = "storage/prometheus/task_queue.db"
+
+class PrometheusPipelineSettings(BaseSettings):
+    """普羅米修斯管線模組的總設定"""
+    database: PrometheusDatabaseSettings = Field(default_factory=PrometheusDatabaseSettings)
+
+
 class Settings(BaseSettings):
     """
     應用程式的核心設定模型。
@@ -31,6 +42,7 @@ class Settings(BaseSettings):
     APP_STORAGE: str = Field("./storage", description="應用程式的本地儲存路徑")
     LOG_SETTINGS: LogSettings = Field(default_factory=LogSettings)
     TRANSCRIPTION_MODEL_SIZE: str = Field("tiny", description="用於音訊轉錄的 Whisper 模型大小")
+    PROMETHEUS_PIPELINE: PrometheusPipelineSettings = Field(default_factory=PrometheusPipelineSettings)
 
     @model_validator(mode='before')
     @classmethod

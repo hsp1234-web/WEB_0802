@@ -2,8 +2,11 @@
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel
 
+from phoenix_core.modules.prometheus_pipeline.core.logging.log_manager import LogManager
+
 # 暫時使用全域 logger，後續可以替換為模組專用的
-from phoenix_core.utils.logger import logger
+# from phoenix_core.utils.logger import logger
+logger = LogManager.get_instance().get_logger("PrometheusRouter")
 
 router = APIRouter(
     prefix="/prometheus",

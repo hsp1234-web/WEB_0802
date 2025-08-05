@@ -22,7 +22,7 @@ class TestPrometheusPipelineFlow:
     對普羅米修斯管線的完整端對端流程進行整合測試。
     """
 
-    @pytest.fixture(scope="class", autouse=True)
+    @pytest.fixture(scope="function", autouse=True)
     def setup_test_environment(self, mocker):
         """
         在所有測試運行前，使用 mocker 來修補設定，將資料庫路徑指向臨時目錄。
@@ -38,10 +38,9 @@ class TestPrometheusPipelineFlow:
         TEST_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
 
         # 使用 mocker 來修補 settings 物件
-        # 注意：屬性名稱必須與 resource_settings.yml 中定義的完全匹配（小寫）
-        mocker.patch.object(settings.prometheus_pipeline.database, 'main_db_path', str(TEST_STORAGE_DIR / "factors.duckdb"))
-        mocker.patch.object(settings.prometheus_pipeline.database, 'data_warehouse_path', str(TEST_STORAGE_DIR / "data_warehouse.duckdb"))
-        mocker.patch.object(settings.prometheus_pipeline.database, 'task_queue_db_path', str(TEST_STORAGE_DIR / "task_queue.db"))
+        mocker.patch.object(settings.PROMETHEUS_PIPELINE.database, 'main_db_path', str(TEST_STORAGE_DIR / "factors.duckdb"))
+        mocker.patch.object(settings.PROMETHEUS_PIPELINE.database, 'data_warehouse_path', str(TEST_STORAGE_DIR / "data_warehouse.duckdb"))
+        mocker.patch.object(settings.PROMETHEUS_PIPELINE.database, 'task_queue_db_path', str(TEST_STORAGE_DIR / "task_queue.db"))
 
         yield
 
@@ -49,7 +48,7 @@ class TestPrometheusPipelineFlow:
         # setup_test_environment fixture 已經處理了清理，此處無需重複
 
 
-    @pytest.fixture(scope="class")
+    @pytest.fixture(scope="function")
     def live_api_server(self):
         """
         一個 fixture，它會在背景執行緒中啟動一個真實的 uvicorn 伺服器。
@@ -70,7 +69,7 @@ class TestPrometheusPipelineFlow:
         server.should_exit = True
         server_thread.join()
 
-    @pytest.fixture(scope="class")
+    @pytest.fixture(scope="function")
     async def live_prometheus_worker(self):
         """
         一個 fixture，它會在背景啟動普羅米修斯管線的工人。
@@ -106,8 +105,8 @@ class TestPrometheusPipelineFlow:
         await asyncio.sleep(2)
 
         # 從 (已修補的) settings 物件獲取路徑來進行驗證
-        main_db_path = Path(settings.prometheus_pipeline.database.main_db_path)
-        dw_path = Path(settings.prometheus_pipeline.database.data_warehouse_path)
+        main_db_path = Path(settings.PROMETHEUS_PIPELINE.database.main_db_path)
+        dw_path = Path(settings.PROMETHEUS_PIPELINE.database.data_warehouse_path)
 
         assert main_db_path.exists(), f"主資料庫檔案 {main_db_path} 未被創建！"
         assert dw_path.exists(), f"數據倉庫檔案 {dw_path} 未被創建！"

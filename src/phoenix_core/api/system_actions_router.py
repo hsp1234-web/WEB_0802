@@ -5,8 +5,8 @@ import asyncio
 import os
 from pathlib import Path
 from fastapi import APIRouter, HTTPException
-from src.phoenix_core.main import app, discover_and_load_modules
-from src.phoenix_core.kernel.registry import registered_routers
+from ..main import app, discover_and_load_modules
+from ..kernel.registry import registered_routers
 
 router = APIRouter(
     prefix="/api/v1/system",
