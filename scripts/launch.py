@@ -93,13 +93,20 @@ def main():
     else:
         # --- 不在 venv 中：設定環境並重新啟動 ---
         try:
-            print_header("步驟 1: 建立 Python 虛擬環境 (venv)")
+            # V65.3: 改用 uv venv 以提高在 Colab 等特殊環境中的穩定性
+            try:
+                subprocess.run(["uv", "--version"], check=True, capture_output=True, text=True)
+            except (FileNotFoundError, subprocess.CalledProcessError):
+                print("--- 核心工具 uv 未安裝，正在從 pip 安裝 ---")
+                run_sync_command([sys.executable, "-m", "pip", "install", "-U", "uv"])
+
+            print_header("步驟 1: 使用 uv 建立 Python 虛擬環境")
             if os.path.isdir(VENV_DIR):
                 shutil.rmtree(VENV_DIR)
-            run_sync_command([sys.executable, "-m", "venv", VENV_DIR])
+            # 使用 uv venv，並明確指定 python 解釋器以確保一致性
+            run_sync_command(["uv", "venv", "-p", sys.executable, VENV_DIR])
 
-            print_header("步驟 2: 在 venv 中安裝 uv")
-            run_sync_command([VENV_PIP, "install", "-U", "uv"])
+            # 步驟 2 已不再需要，uv venv 會自帶 pip 和 uv
 
             print_header("步驟 3: 將當前專案套件化安裝到 venv 中")
             run_sync_command([VENV_PIP, "install", "-e", "."], cwd=".")
