@@ -17,6 +17,7 @@ import shutil
 import asyncio
 import time
 import platform
+import argparse
 from datetime import datetime
 
 def print_header(title, char="=", length=80):
@@ -110,9 +111,15 @@ def main():
     VENV_PIP = os.path.join(VENV_DIR, "bin", "pip")
 
     if os.environ.get("_IN_VENV") == "1":
-        asyncio.run(run_async_server())
+        parser = argparse.ArgumentParser(description="核心啟動器")
+        parser.add_argument("--port", type=int, default=8080, help="Uvicorn 伺服器運行的埠號")
+        args = parser.parse_args()
+        asyncio.run(run_async_server(port=args.port))
     else:
         try:
+            # 重新啟動時，需要將參數傳遞下去
+            cli_args = sys.argv[1:]
+
             try:
                 subprocess.run(["uv", "--version"], check=True, capture_output=True, text=True)
             except (FileNotFoundError, subprocess.CalledProcessError):
@@ -140,7 +147,7 @@ def main():
             env = os.environ.copy()
             env["_IN_VENV"] = "1"
 
-            args = [VENV_PYTHON, __file__] + sys.argv[1:]
+            args = [VENV_PYTHON, __file__] + cli_args
             os.execve(args[0], args, env)
 
         except (subprocess.CalledProcessError, FileNotFoundError) as e:
