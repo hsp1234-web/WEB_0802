@@ -19,7 +19,7 @@
 #@markdown **後端程式碼倉庫 (REPOSITORY_URL)**
 REPOSITORY_URL = "https://github.com/hsp1234-web/WEB_0802.git" #@param {type:"string"}
 #@markdown **後端版本分支或標籤 (TARGET_BRANCH_OR_TAG)**
-TARGET_BRANCH_OR_TAG = "1.0.8" #@param {type:"string"}
+TARGET_BRANCH_OR_TAG = "1.1.6" #@param {type:"string"}
 #@markdown **專案資料夾名稱 (PROJECT_FOLDER_NAME)**
 PROJECT_FOLDER_NAME = "WEB1" #@param {type:"string"}
 #@markdown **強制刷新後端程式碼 (FORCE_REPO_REFRESH)**
@@ -66,8 +66,6 @@ SERVER_READY_TIMEOUT = 45 #@param {type:"integer"}
 # ==============================================================================
 # SECTION 0: 環境準備與核心依賴導入
 # ==============================================================================
-import sys
-import subprocess
 try:
     import pytz
 except ImportError:
@@ -76,27 +74,16 @@ except ImportError:
     import pytz
 
 import os
+import sys
 import shutil
+import subprocess
 from pathlib import Path
 import time
 from datetime import datetime
 import threading
 from collections import deque
-# from IPython.display import clear_output
-# from google.colab import output as colab_output
-# --- 在本地測試時，我們用 print 模擬 Colab 的輸出功能 ---
-def clear_output(wait=True):
-    # 在非 Colab 環境中，這個函式可以是一個無操作(no-op)或打印一個分隔符
-    print("\n" * 50) # 打印足夠的換行符來模擬清屏
-    print("--- [本地測試] 模擬清空輸出 ---")
-
-class MockColabOutput:
-    def eval_js(self, code):
-        print(f"--- [本地測試] 模擬執行 JS: {code} ---")
-        # 返回一個模擬的 URL，因為我們無法在本地獲取真實的 Colab 代理 URL
-        return f"http://127.0.0.1:{API_PORT}"
-
-colab_output = MockColabOutput()
+from IPython.display import clear_output
+from google.colab import output as colab_output
 
 # ==============================================================================
 # SECTION 1: 管理器類別定義 (Managers)
@@ -230,31 +217,11 @@ class ServerManager:
 
             project_path, venv_python = env_paths["project_path"], env_paths["venv_python"]
             process_env = os.environ.copy()
+            process_env.update({"VIRTUAL_ENV": str(venv_python.parent.parent), "PATH": f"{venv_python.parent}:{os.environ.get('PATH', '')}", "PYTHONUNBUFFERED": "1"})
 
-            # V67 (Jules): 修正 PYTHONPATH，將 src 目錄加入，解決絕對路徑導入問題
-            src_path = project_path / "src"
-            existing_python_path = os.environ.get('PYTHONPATH', '')
-            new_python_path = f"{src_path}{os.pathsep}{existing_python_path}" if existing_python_path else str(src_path)
-
-            process_env.update({
-                "VIRTUAL_ENV": str(venv_python.parent.parent),
-                "PATH": f"{venv_python.parent}:{os.environ.get('PATH', '')}",
-                "PYTHONUNBUFFERED": "1",
-                "PYTHONPATH": new_python_path
-            })
-            self._log_manager.log("DEBUG", f"設定子進程 PYTHONPATH: {new_python_path}")
-
-            # 建立一個指向輕量級啟動器的指令
-            launcher_command = [
-                str(venv_python),
-                "scripts/run_server_only.py",
-                "--port",
-                str(API_PORT)
-            ]
-            self._log_manager.log("INFO", f"正在使用獨立啟動器: {' '.join(launcher_command)}")
-
+            uvicorn_command = [str(venv_python), "-m", "uvicorn", "src.phoenix_core.main:app", "--host", "0.0.0.0", "--port", str(API_PORT), "--workers", "1"]
             self.server_process = subprocess.Popen(
-                launcher_command, cwd=str(project_path), env=process_env,
+                uvicorn_command, cwd=str(project_path), env=process_env,
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8', preexec_fn=os.setsid
             )
             self._log_manager.log("INFO", f"Uvicorn 子進程已啟動 (PID: {self.server_process.pid})。")
@@ -303,34 +270,30 @@ class ServerManager:
                 self._log_manager.log("CRITICAL", f"引導程序安裝 pip 失敗:\n{result.stderr}")
                 return None
 
-            # 修正相依性安裝：確保 Colab 環境與開發環境完全一致。
-            # 我們的專案使用 pip-compile 將所有確定的相依性版本鎖定在 dev.txt 中。
-            # 因此，我們應該只安裝這個檔案，以建立一個可預測且穩定的環境，
-            # 避免因安裝其他未鎖定版本的需求檔案而導致的潛在衝突。
-            requirements_files = [
-                "requirements/dev.txt"
-            ]
+            self._log_manager.log("INFO", "正在安裝核心依賴...")
+            core_requirements_path = project_path / "requirements/requirements-core.txt"
+            if not core_requirements_path.is_file():
+                self._log_manager.log("CRITICAL", f"找不到依賴檔案: {core_requirements_path}")
+                return None
 
-            for req_file_name in requirements_files:
-                self._log_manager.log("INFO", f"正在安裝相依性檔案: {req_file_name}...")
-                requirements_path = project_path / req_file_name
-                if not requirements_path.is_file():
-                    self._log_manager.log("CRITICAL", f"找不到依賴檔案: {requirements_path}")
-                    return None
+            with open(core_requirements_path, 'r', encoding='utf-8') as f:
+                # V64: 修正解析邏輯，先用 '#' 分割來移除行內註解
+                lines = [line.split('#')[0].strip() for line in f]
+                dependencies = [dep for dep in lines if dep]
 
-                # 使用 uv 直接從檔案安裝，更有效率
-                install_command = ["uv", "pip", "install", "--python", str(venv_python), "-r", str(requirements_path)]
-                self._stats['status'] = f"⚙️ 正在安裝 {req_file_name}..."
+            for dep in dependencies:
+                self._stats['status'] = f"⚙️ 正在安裝: {dep}..."
+                self._log_manager.log("INFO", f"正在安裝套件: {dep}")
+                # V65: 使用 uv 加速安裝。根據 research.md，uv 能正確處理 venv，不需 --ignore-installed。
+                install_command = ["uv", "pip", "install", "--python", str(venv_python), dep]
                 result = subprocess.run(install_command, check=False, capture_output=True, text=True, encoding='utf-8')
 
                 if result.returncode != 0:
-                    self._log_manager.log("CRITICAL", f"安裝 {req_file_name} 失敗:\n{result.stderr}")
-                    # 顯示詳細的 uv 輸出以幫助除錯
-                    self._log_manager.log("DEBUG", f"uv stdout:\n{result.stdout}")
+                    self._log_manager.log("CRITICAL", f"安裝套件 {dep} 失敗:\n{result.stderr}")
                     return None
-                self._log_manager.log("SUCCESS", f"✅ {req_file_name} 安裝成功。")
+                self._log_manager.log("SUCCESS", f"✅ {dep} 安裝成功。")
 
-            self._log_manager.log("SUCCESS", "✅ 所有相依性套件已成功安裝。")
+            self._log_manager.log("SUCCESS", "✅ 所有核心依賴已成功安裝。")
             return {"project_path": project_path, "venv_python": venv_python}
         except Exception as e:
             self._log_manager.log("CRITICAL", f"環境準備失敗: {e}"); return None
@@ -454,32 +417,31 @@ def main():
 
             print("\n--- ✅ 所有任務完成，系統已安全關閉 ---")
 
-            # --- 在本地測試中，我們禁用 IPython.display.HTML 的部分 ---
-            print("--- [本地測試] 跳過 Colab 專用的 HTML 按鈕生成 ---")
-            # from IPython.display import display, HTML
-            # import json
-            # full_log_history = log_manager.get_full_history()
+            # Prepare data for copy buttons
+            from IPython.display import display, HTML
+            import json
+            full_log_history = log_manager.get_full_history()
 
-            # # Escape strings for JavaScript
-            # js_escaped_screen_text = json.dumps(final_screen_text)
-            # js_escaped_full_logs = json.dumps(
-            #     "\\n".join([f"[{log['timestamp'].isoformat()}] [{log['level']}] {log['message']}" for log in full_log_history])
-            # )
+            # Escape strings for JavaScript
+            js_escaped_screen_text = json.dumps(final_screen_text)
+            js_escaped_full_logs = json.dumps(
+                "\\n".join([f"[{log['timestamp'].isoformat()}] [{log['level']}] {log['message']}" for log in full_log_history])
+            )
 
-            # # Display HTML buttons with embedded JavaScript for copying
-            # display(HTML(f"""
-            #     <script>
-            #         function copyToClipboard(text) {{
-            #             navigator.clipboard.writeText(text).then(function() {{
-            #                 console.log('Copying to clipboard was successful!');
-            #             }}, function(err) {{
-            #                 console.error('Could not copy text: ', err);
-            #             }});
-            #         }}
-            #     </script>
-            #     <button onclick='copyToClipboard({js_escaped_screen_text})'>📋 複製上方儲存格輸出</button>
-            #     <button onclick='copyToClipboard({js_escaped_full_logs})'>📄 複製完整詳細日誌</button>
-            # """))
+            # Display HTML buttons with embedded JavaScript for copying
+            display(HTML(f"""
+                <script>
+                    function copyToClipboard(text) {{
+                        navigator.clipboard.writeText(text).then(function() {{
+                            console.log('Copying to clipboard was successful!');
+                        }}, function(err) {{
+                            console.error('Could not copy text: ', err);
+                        }});
+                    }}
+                </script>
+                <button onclick='copyToClipboard({js_escaped_screen_text})'>📋 複製上方儲存格輸出</button>
+                <button onclick='copyToClipboard({js_escaped_full_logs})'>📄 複製完整詳細日誌</button>
+            """))
 
             archive_reports(log_manager, start_time, end_time, shared_stats.get('status', '未知'))
 

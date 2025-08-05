@@ -22,13 +22,8 @@ sys.path.insert(0, os.path.abspath('src'))
 import subprocess
 import shutil
 import asyncio
-import uvicorn
 import time
 from datetime import datetime
-
-from phoenix_core.main import app  # 現在可以直接導入
-from phoenix_core.database import db_manager
-from phoenix_core.watchdog import HEARTBEAT_KEY
 
 # --- 全域設定 (Global Settings) ---
 VENV_DIR = ".venv_gold"
@@ -72,7 +67,7 @@ def run_sync_command(command, cwd=".", env=None):
         raise subprocess.CalledProcessError(return_code, command)
     print(f"   ✅ 命令成功完成。")
 
-async def watchdog_and_closer(server: uvicorn.Server) -> bool:
+async def watchdog_and_closer(server: "uvicorn.Server") -> bool:
     """
     【Asyncio 原生看門狗】
     監控心跳，成功後或超時後關閉伺服器。
@@ -82,6 +77,8 @@ async def watchdog_and_closer(server: uvicorn.Server) -> bool:
     print_header(f"看門狗已啟動 (超時設定: {WATCHDOG_TIMEOUT} 秒)")
 
     # db_manager 是單例，在導入時已初始化，無需手動調用 initialize。
+    from phoenix_core.database import db_manager
+    from phoenix_core.watchdog import HEARTBEAT_KEY
 
     while time.monotonic() - start_time < WATCHDOG_TIMEOUT:
         print(f"   [看門狗] 正在檢查心跳...")
@@ -113,6 +110,10 @@ async def main_async():
     【異步主函式】
     協調 Uvicorn 伺服器和看門狗的啟動與關閉。
     """
+    # 將應用程式相關的導入放在這裡，確保它們在 venv 環境設定好之後才被執行
+    import uvicorn
+    from phoenix_core.main import app
+
     print_header("步驟 4: 以程式化方式啟動核心應用程式")
 
     config = uvicorn.Config(
@@ -159,52 +160,61 @@ def main():
     os.environ["PYTHONUNBUFFERED"] = "1"
 
     try:
-        # --- 步驟 1-3 & 5: 同步的環境設定 ---
-        print_header("步驟 1: 建立 Python 虛擬環境 (venv)")
-        if os.path.isdir(VENV_DIR):
-            shutil.rmtree(VENV_DIR)
-        run_sync_command([sys.executable, "-m", "venv", VENV_DIR])
+        # 檢查是否已在 venv 中執行
+        if os.environ.get("_IN_VENV") == "1":
+            # --- 我們已經在 venv 中 ---
+            # 步驟 4 & 6: 執行核心異步邏輯
+            asyncio.run(main_async())
+            print("✅ 核心應用程式測試運行已完成。")
 
-        print_header("步驟 2: 在 venv 中安裝 uv")
-        run_sync_command([VENV_PIP, "install", "-U", "uv"])
+            # 步驟 7: 執行報告生成器
+            print_header("步驟 7: 執行報告生成器")
+            db_original_path = "state.db"
+            db_renamed_path = "logs.sqlite"
+            if os.path.exists(db_original_path):
+                shutil.move(db_original_path, db_renamed_path)
+                print(f"✅ 資料庫已重命名為 {db_renamed_path}")
+            else:
+                print(f"⚠️ 找不到資料庫檔案 {db_original_path}，無法生成報告。")
+                open(db_renamed_path, 'a').close()
 
-        print_header("步驟 3: 將當前專案套件化安裝到 venv 中")
-        run_sync_command([VENV_PIP, "install", "-e", "."], cwd=".")
+            report_generator_script = os.path.join("scripts", "generate_report.py")
+            if os.path.exists(report_generator_script):
+                requirements_report_file = "requirements/report.txt"
+                if os.path.exists(requirements_report_file):
+                     print("\\n--- 安裝報告依賴 ---")
+                     run_sync_command([VENV_UV, "pip", "install", "--python", VENV_PYTHON, "-r", requirements_report_file], cwd=".")
 
-        print_header("步驟 5: 在 venv 中安裝專案依賴")
-        run_sync_command([VENV_UV, "pip", "install", "--python", VENV_PYTHON, "-r", "requirements/base.txt"], cwd=".")
+                report_command = [
+                    VENV_PYTHON, report_generator_script,
+                    "--db-file", db_renamed_path,
+                    "--report-dir", "reports",
+                ]
+                run_sync_command(report_command, cwd=".")
+                print("✅ 報告生成完畢。")
 
-        # --- 步驟 4 & 6: 執行核心異步邏輯 ---
-        asyncio.run(main_async())
-        print("✅ 核心應用程式測試運行已完成。")
-
-        # --- 步驟 7: 執行報告生成器 (同步) ---
-        print_header("步驟 7: 執行報告生成器")
-        db_original_path = "state.db"
-        db_renamed_path = "logs.sqlite"
-        if os.path.exists(db_original_path):
-            shutil.move(db_original_path, db_renamed_path)
-            print(f"✅ 資料庫已重命名為 {db_renamed_path}")
         else:
-            print(f"⚠️ 找不到資料庫檔案 {db_original_path}，無法生成報告。")
-            # 創建一個空文件以避免後續流程出錯
-            open(db_renamed_path, 'a').close()
+            # --- 首次執行：設定環境並重新啟動 ---
+            print_header("步驟 1: 建立 Python 虛擬環境 (venv)")
+            if os.path.isdir(VENV_DIR):
+                shutil.rmtree(VENV_DIR)
+            run_sync_command([sys.executable, "-m", "venv", VENV_DIR])
 
+            print_header("步驟 2: 在 venv 中安裝 uv")
+            run_sync_command([VENV_PIP, "install", "-U", "uv"])
 
-        report_generator_script = os.path.join("scripts", "generate_report.py")
-        if os.path.exists(report_generator_script):
-            requirements_report_file = "requirements/report.txt"
-            if os.path.exists(requirements_report_file):
-                 print("\\n--- 安裝報告依賴 ---")
-                 run_sync_command([VENV_UV, "pip", "install", "--python", VENV_PYTHON, "-r", requirements_report_file], cwd=".")
+            print_header("步驟 3: 將當前專案套件化安裝到 venv 中")
+            run_sync_command([VENV_PIP, "install", "-e", "."], cwd=".")
 
-            report_command = [
-                VENV_PYTHON, report_generator_script,
-                "--db-file", db_renamed_path,
-                "--report-dir", "reports",
-            ]
-            run_sync_command(report_command, cwd=".")
-            print("✅ 報告生成完畢。")
+            print_header("步驟 5: 在 venv 中安裝專案依賴")
+            run_sync_command([VENV_UV, "pip", "install", "--python", VENV_PYTHON, "-r", "requirements/base.txt"], cwd=".")
+
+            print_header("重新啟動腳本以在 venv 中執行")
+            env = os.environ.copy()
+            env["_IN_VENV"] = "1"
+
+            args = [VENV_PYTHON, __file__] + sys.argv[1:]
+            os.execve(args[0], args, env)
 
     except subprocess.CalledProcessError as e:
         print(f"\n❌ 一個關鍵命令執行失敗，返回碼: {e.returncode}", file=sys.stderr)
