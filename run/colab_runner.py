@@ -1,17 +1,19 @@
 # -*- coding: utf-8 -*-
 # ╔══════════════════════════════════════════════════════════════════╗
 # ║                                                                      ║
-# ║    🐦‍🔥 鳳凰之心 - V63 作戰指揮中心 (加速安裝版)                  🐦‍🔥 ║
+# ║    🐦‍🔥 鳳凰之心 - V65 作戰指揮中心 (加速安裝版)                  🐦‍🔥 ║
 # ║                                                                      ║
 # ╠══════════════════════════════════════════════════════════════════╣
 # ║                                                                      ║
-# ║ - V63 更新日誌:                                                      ║
-# ║   - **安裝器修正**: 移除 `uv` 不支援的 `--ignore-installed` 參數。    ║
-# ║   - **版本號統一**: 將顯示版本全面更新至 V63。                         ║
+# ║ - V65 更新日誌:                                                      ║
+# ║   - **V65.3**: 改用 `uv venv` 建立虛擬環境，解決 Colab `ensurepip` 問題。║
+# ║   - **V65.2**: 修正 `subprocess` 中的路徑解析，改用相對路徑。        ║
+# ║   - **V65.1**: 增加 `git clone` 前的強制刪除，避免路徑已存在錯誤。   ║
+# ║   - **V65.0**: 引入核心啟動器 `scripts/launch.py`，統一執行環境。      ║
 # ║                                                                      ║
 # ╚══════════════════════════════════════════════════════════════════╝
 
-#@title 🐦‍🔥 鳳凰之心 V63 作戰指揮中心 { vertical-output: true, display-mode: "form" }
+#@title 🐦‍🔥 鳳凰之心 V65 作戰指揮中心 { vertical-output: true, display-mode: "form" }
 #@markdown ---
 #@markdown ### **Part 1: 專案與環境設定**
 #@markdown > **設定 Git 倉庫、分支或標籤，以及專案資料夾。**
@@ -19,7 +21,7 @@
 #@markdown **後端程式碼倉庫 (REPOSITORY_URL)**
 REPOSITORY_URL = "https://github.com/hsp1234-web/WEB_0802.git" #@param {type:"string"}
 #@markdown **後端版本分支或標籤 (TARGET_BRANCH_OR_TAG)**
-TARGET_BRANCH_OR_TAG = "1.0.8" #@param {type:"string"}
+TARGET_BRANCH_OR_TAG = "1.1.6" #@param {type:"string"}
 #@markdown **專案資料夾名稱 (PROJECT_FOLDER_NAME)**
 PROJECT_FOLDER_NAME = "WEB1" #@param {type:"string"}
 #@markdown **強制刷新後端程式碼 (FORCE_REPO_REFRESH)**
@@ -66,8 +68,6 @@ SERVER_READY_TIMEOUT = 45 #@param {type:"integer"}
 # ==============================================================================
 # SECTION 0: 環境準備與核心依賴導入
 # ==============================================================================
-import sys
-import subprocess
 try:
     import pytz
 except ImportError:
@@ -76,27 +76,16 @@ except ImportError:
     import pytz
 
 import os
+import sys
 import shutil
+import subprocess
 from pathlib import Path
 import time
 from datetime import datetime
 import threading
 from collections import deque
-# from IPython.display import clear_output
-# from google.colab import output as colab_output
-# --- 在本地測試時，我們用 print 模擬 Colab 的輸出功能 ---
-def clear_output(wait=True):
-    # 在非 Colab 環境中，這個函式可以是一個無操作(no-op)或打印一個分隔符
-    print("\n" * 50) # 打印足夠的換行符來模擬清屏
-    print("--- [本地測試] 模擬清空輸出 ---")
-
-class MockColabOutput:
-    def eval_js(self, code):
-        print(f"--- [本地測試] 模擬執行 JS: {code} ---")
-        # 返回一個模擬的 URL，因為我們無法在本地獲取真實的 Colab 代理 URL
-        return f"http://127.0.0.1:{API_PORT}"
-
-colab_output = MockColabOutput()
+from IPython.display import clear_output
+from google.colab import output as colab_output
 
 # ==============================================================================
 # SECTION 1: 管理器類別定義 (Managers)
@@ -152,9 +141,8 @@ class DisplayManager:
         """建立儀表板的輸出內容緩衝區。"""
         output_buffer = []
 
-        # V63: 加速安裝版
-        output_buffer.append("🐦‍🔥 鳳凰之心 - V63 作戰指揮中心 (加速安裝版) 🐦‍🔥")
-        # V65: Add a blank line for spacing after title
+        # V65: 統一標題
+        output_buffer.append("🐦‍🔥 鳳凰之心 - V65 作戰指揮中心 🐦‍🔥")
         output_buffer.append("")
 
         logs_to_display = self._log_manager.get_display_logs()
@@ -221,40 +209,37 @@ class ServerManager:
 
     def _run(self):
         try:
-            env_paths = self._setup_environment()
-            if not env_paths or self._stop_event.is_set():
-                self._stats['status'] = "❌ 環境準備失敗"; return
+            self._stats['status'] = "🚀 呼叫核心啟動器..."
+            self._log_manager.log("BATTLE", "=== 正在呼叫核心啟動器 `scripts/launch.py` ===")
 
-            self._stats['status'] = "🚀 正在啟動伺服器..."
-            self._log_manager.log("BATTLE", "=== [2/2] 正在啟動後端伺服器 ===")
+            # 使用核心啟動器來處理所有環境設定和伺服器啟動
+            # 我們假設 launch.py 會在 PROJECT_FOLDER_NAME 中執行
+            project_path = Path(PROJECT_FOLDER_NAME)
+            launcher_script_path = project_path / "scripts" / "launch.py"
 
-            project_path, venv_python = env_paths["project_path"], env_paths["venv_python"]
-            process_env = os.environ.copy()
+            # V65.1: 增加防禦性程式碼，確保 git clone 的目標路徑是乾淨的
+            if project_path.exists():
+                self._log_manager.log("INFO", f"偵測到舊的專案資料夾 '{project_path}'，正在強制刪除...")
+                shutil.rmtree(project_path)
 
-            # V67 (Jules): 修正 PYTHONPATH，將 src 目錄加入，解決絕對路徑導入問題
-            src_path = project_path / "src"
-            existing_python_path = os.environ.get('PYTHONPATH', '')
-            new_python_path = f"{src_path}{os.pathsep}{existing_python_path}" if existing_python_path else str(src_path)
+            # 現在我們可以安全地執行 git clone
+            self._log_manager.log("INFO", f"正在從 Git 下載 (分支: {TARGET_BRANCH_OR_TAG})...")
+            git_command = ["git", "clone", "--branch", TARGET_BRANCH_OR_TAG, "--depth", "1", REPOSITORY_URL, str(project_path)]
+            result = subprocess.run(git_command, check=False, capture_output=True, text=True, encoding='utf-8');
+            if result.returncode != 0:
+                self._log_manager.log("CRITICAL", f"Git clone 失敗:\n{result.stderr}"); return
 
-            process_env.update({
-                "VIRTUAL_ENV": str(venv_python.parent.parent),
-                "PATH": f"{venv_python.parent}:{os.environ.get('PATH', '')}",
-                "PYTHONUNBUFFERED": "1",
-                "PYTHONPATH": new_python_path
-            })
-            self._log_manager.log("DEBUG", f"設定子進程 PYTHONPATH: {new_python_path}")
+            launcher_script_path = project_path / "scripts" / "launch.py"
+            if not launcher_script_path.is_file():
+                self._log_manager.log("CRITICAL", f"核心啟動器未找到: {launcher_script_path}"); return
 
-            # 建立一個指向輕量級啟動器的指令
-            launcher_command = [
-                str(venv_python),
-                "scripts/run_server_only.py",
-                "--port",
-                str(API_PORT)
-            ]
-            self._log_manager.log("INFO", f"正在使用獨立啟動器: {' '.join(launcher_command)}")
+            # V65.2: 修正路徑問題。當 cwd 被設定為 project_path 時，
+            # 我們必須使用相對於 cwd 的路徑來執行腳本。
+            relative_launcher_path = "scripts/launch.py"
+            launch_command = [sys.executable, relative_launcher_path]
 
             self.server_process = subprocess.Popen(
-                launcher_command, cwd=str(project_path), env=process_env,
+                launch_command, cwd=str(project_path), # 在專案目錄下執行
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8', preexec_fn=os.setsid
             )
             self._log_manager.log("INFO", f"Uvicorn 子進程已啟動 (PID: {self.server_process.pid})。")
@@ -273,67 +258,6 @@ class ServerManager:
             self._stats['status'] = "❌ 發生致命錯誤"; self._log_manager.log("CRITICAL", f"ServerManager 執行緒出錯: {e}")
         finally:
              self._stats['status'] = "⏹️ 已停止"
-
-    def _setup_environment(self):
-        try:
-            self._stats['status'] = "設定環境..."; self._log_manager.log("BATTLE", "=== [1/2] 準備專案環境 ===")
-            base_path = Path(".").resolve()
-            project_path = base_path / PROJECT_FOLDER_NAME
-
-            if FORCE_REPO_REFRESH and project_path.exists(): shutil.rmtree(project_path); self._log_manager.log("INFO", f"舊資料夾已刪除: {project_path}")
-
-            self._log_manager.log("INFO", f"正在從 Git 下載 (分支: {TARGET_BRANCH_OR_TAG})...")
-            git_command = ["git", "clone", "--branch", TARGET_BRANCH_OR_TAG, "--depth", "1", REPOSITORY_URL, str(project_path)]
-            result = subprocess.run(git_command, check=False, capture_output=True, text=True, encoding='utf-8');
-            if result.returncode != 0: self._log_manager.log("CRITICAL", f"Git clone 失敗:\n{result.stderr}"); return None
-
-            self._log_manager.log("INFO", "正在建立虛擬環境...")
-            venv_path = project_path / ".venv"
-            result = subprocess.run(["uv", "venv", str(venv_path)], check=False, capture_output=True, text=True, encoding='utf-8')
-            if result.returncode != 0: self._log_manager.log("CRITICAL", f"建立虛擬環境失敗:\n{result.stderr}"); return None
-
-            venv_python = venv_path / "bin" / "python"
-
-            # V55.1 修正：重新加入防禦性的 pip 引導程序，以應對 uv venv 在某些環境下可能不會安裝 pip 的偶發性問題。
-            # 這是根據 marker.MD 的歷史經驗和使用者回報的錯誤日誌所做的決定。
-            self._log_manager.log("INFO", "引導程序：確保 pip 已安裝...")
-            bootstrap_command = ["uv", "pip", "install", "--python", str(venv_python), "pip", "wheel"]
-            result = subprocess.run(bootstrap_command, check=False, capture_output=True, text=True, encoding='utf-8')
-            if result.returncode != 0:
-                self._log_manager.log("CRITICAL", f"引導程序安裝 pip 失敗:\n{result.stderr}")
-                return None
-
-            # 修正相依性安裝：確保 Colab 環境與開發環境完全一致。
-            # 我們的專案使用 pip-compile 將所有確定的相依性版本鎖定在 dev.txt 中。
-            # 因此，我們應該只安裝這個檔案，以建立一個可預測且穩定的環境，
-            # 避免因安裝其他未鎖定版本的需求檔案而導致的潛在衝突。
-            requirements_files = [
-                "requirements/dev.txt"
-            ]
-
-            for req_file_name in requirements_files:
-                self._log_manager.log("INFO", f"正在安裝相依性檔案: {req_file_name}...")
-                requirements_path = project_path / req_file_name
-                if not requirements_path.is_file():
-                    self._log_manager.log("CRITICAL", f"找不到依賴檔案: {requirements_path}")
-                    return None
-
-                # 使用 uv 直接從檔案安裝，更有效率
-                install_command = ["uv", "pip", "install", "--python", str(venv_python), "-r", str(requirements_path)]
-                self._stats['status'] = f"⚙️ 正在安裝 {req_file_name}..."
-                result = subprocess.run(install_command, check=False, capture_output=True, text=True, encoding='utf-8')
-
-                if result.returncode != 0:
-                    self._log_manager.log("CRITICAL", f"安裝 {req_file_name} 失敗:\n{result.stderr}")
-                    # 顯示詳細的 uv 輸出以幫助除錯
-                    self._log_manager.log("DEBUG", f"uv stdout:\n{result.stdout}")
-                    return None
-                self._log_manager.log("SUCCESS", f"✅ {req_file_name} 安裝成功。")
-
-            self._log_manager.log("SUCCESS", "✅ 所有相依性套件已成功安裝。")
-            return {"project_path": project_path, "venv_python": venv_python}
-        except Exception as e:
-            self._log_manager.log("CRITICAL", f"環境準備失敗: {e}"); return None
 
     def start(self): self._thread.start()
     def stop(self):
@@ -454,32 +378,31 @@ def main():
 
             print("\n--- ✅ 所有任務完成，系統已安全關閉 ---")
 
-            # --- 在本地測試中，我們禁用 IPython.display.HTML 的部分 ---
-            print("--- [本地測試] 跳過 Colab 專用的 HTML 按鈕生成 ---")
-            # from IPython.display import display, HTML
-            # import json
-            # full_log_history = log_manager.get_full_history()
+            # Prepare data for copy buttons
+            from IPython.display import display, HTML
+            import json
+            full_log_history = log_manager.get_full_history()
 
-            # # Escape strings for JavaScript
-            # js_escaped_screen_text = json.dumps(final_screen_text)
-            # js_escaped_full_logs = json.dumps(
-            #     "\\n".join([f"[{log['timestamp'].isoformat()}] [{log['level']}] {log['message']}" for log in full_log_history])
-            # )
+            # Escape strings for JavaScript
+            js_escaped_screen_text = json.dumps(final_screen_text)
+            js_escaped_full_logs = json.dumps(
+                "\\n".join([f"[{log['timestamp'].isoformat()}] [{log['level']}] {log['message']}" for log in full_log_history])
+            )
 
-            # # Display HTML buttons with embedded JavaScript for copying
-            # display(HTML(f"""
-            #     <script>
-            #         function copyToClipboard(text) {{
-            #             navigator.clipboard.writeText(text).then(function() {{
-            #                 console.log('Copying to clipboard was successful!');
-            #             }}, function(err) {{
-            #                 console.error('Could not copy text: ', err);
-            #             }});
-            #         }}
-            #     </script>
-            #     <button onclick='copyToClipboard({js_escaped_screen_text})'>📋 複製上方儲存格輸出</button>
-            #     <button onclick='copyToClipboard({js_escaped_full_logs})'>📄 複製完整詳細日誌</button>
-            # """))
+            # Display HTML buttons with embedded JavaScript for copying
+            display(HTML(f"""
+                <script>
+                    function copyToClipboard(text) {{
+                        navigator.clipboard.writeText(text).then(function() {{
+                            console.log('Copying to clipboard was successful!');
+                        }}, function(err) {{
+                            console.error('Could not copy text: ', err);
+                        }});
+                    }}
+                </script>
+                <button onclick='copyToClipboard({js_escaped_screen_text})'>📋 複製上方儲存格輸出</button>
+                <button onclick='copyToClipboard({js_escaped_full_logs})'>📄 複製完整詳細日誌</button>
+            """))
 
             archive_reports(log_manager, start_time, end_time, shared_stats.get('status', '未知'))
 
