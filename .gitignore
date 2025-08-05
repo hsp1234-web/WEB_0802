@@ -24,6 +24,7 @@ dist/
 # Test artifacts
 .test_venv/
 .e2e_venv/
+.venv_e2e_test/
 .venv_test/
 test_final_archive/
 

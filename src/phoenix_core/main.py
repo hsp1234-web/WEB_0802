@@ -75,7 +75,8 @@ async def startup_event():
     await logger.log("INFO", "核心服務啟動成功。")
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-app.mount("/static", StaticFiles(directory=PROJECT_ROOT), name="static")
+# 修正：將掛載的目錄明確指向 'static' 子目錄
+app.mount("/static", StaticFiles(directory=os.path.join(PROJECT_ROOT, 'static')), name="static")
 
 @app.get("/", response_class=FileResponse, tags=["系統 (System)"])
 async def read_root():
