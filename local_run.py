@@ -1,32 +1,40 @@
 # -*- coding: utf-8 -*-
 # ╔══════════════════════════════════════════════════════════════════╗
 # ║                                                                      ║
-# ║      🚀 linux_RUN.py (V28 - 黃金基準版 / 環境適應版)               ║
+# ║      🚀 local_run.py (V29 - Programmatic Uvicorn / Asyncio)          ║
 # ║                                                                      ║
 # ╠══════════════════════════════════════════════════════════════════╣
 # ║                                                                      ║
 # ║   - 作者: Jules (AI Software Engineer)                               ║
-# ║   - 目的: 在任何乾淨的 Linux 環境下，從零開始，全自動地完成        ║
-# ║           專案的部署、執行和報告生成。                             ║
-# ║   - 核心: venv 隔離, pip install -e ., 自動化流程                  ║
-# ║   - 備註: 此版本為適應特殊工具鏈環境，將下載驗證與執行分離。       ║
+# ║   - 目的: 在任何乾淨的 Linux 環境下，全自動地完成專案的部署、      ║
+# ║           執行和報告生成。此版本使用程式化方式控制 Uvicorn。       ║
+# ║   - 核心: venv, uv, Programmatic Uvicorn, Asyncio Watchdog         ║
 # ║                                                                      ║
 # ╚══════════════════════════════════════════════════════════════════╝
 
 import sys
 import os
+
+# 將 'src' 目錄添加到 Python 路徑中，以解決模組導入問題
+# 這確保了即使在 venv 啟用前，腳本也能找到 'phoenix_core' 模組
+sys.path.insert(0, os.path.abspath('src'))
+
 import subprocess
 import shutil
-import threading
+import asyncio
+import uvicorn
 import time
 from datetime import datetime
 
+from phoenix_core.main import app  # 現在可以直接導入
+from phoenix_core.database import db_manager
+from phoenix_core.watchdog import HEARTBEAT_KEY
+
 # --- 全域設定 (Global Settings) ---
 VENV_DIR = ".venv_gold"
-TEMP_CLONE_DIR = "temp_clone_dir_for_validation" # 用於驗證下載功能的臨時目錄
-GIT_REPO = "https://github.com/hsp1234-web/WEB_0802.git"
-GIT_BRANCH = "0.1.6"
-WATCHDOG_TIMEOUT = 60  # 延長看門狗時間以應對較慢的啟動過程
+WATCHDOG_TIMEOUT = 20  # 看門狗總體超時時間 (秒)
+HEARTBEAT_CHECK_INTERVAL = 1  # 心跳檢查間隔 (秒)
+
 VENV_PYTHON = os.path.join(VENV_DIR, "bin", "python")
 VENV_UV = os.path.join(VENV_DIR, "bin", "uv")
 VENV_PIP = os.path.join(VENV_DIR, "bin", "pip")
@@ -41,212 +49,176 @@ def print_header(title):
     print(f"🚀 {get_timestamp()} - {title}")
     print("="*80)
 
-def run_command(command, cwd=".", env=None):
+def run_sync_command(command, cwd=".", env=None):
     """
-    執行一個子程序命令，並即時串流其輸出。
-    如果命令失敗，則拋出例外。
+    【同步版本】執行一個子程序命令，並即時串流其輸出。
+    用於環境設定等同步任務。
     """
     print(f"   🔹 執行命令: {' '.join(command)} (於 {cwd})")
     process = subprocess.Popen(
         command,
         stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
         text=True,
         encoding='utf-8',
         cwd=cwd,
         env=env
     )
-
-    # 即時讀取 stdout 和 stderr
-    while True:
-        stdout_line = process.stdout.readline()
-        stderr_line = process.stderr.readline()
-
-        if stdout_line:
-            print(f"     [STDOUT] {stdout_line.strip()}")
-        if stderr_line:
-            print(f"     [STDERR] {stderr_line.strip()}", file=sys.stderr)
-
-        if process.poll() is not None and not stdout_line and not stderr_line:
-            break
+    for line in process.stdout:
+        print(f"     [OUTPUT] {line.strip()}")
 
     return_code = process.wait()
     if return_code != 0:
         raise subprocess.CalledProcessError(return_code, command)
     print(f"   ✅ 命令成功完成。")
 
-def run_core_application(stop_event):
+async def watchdog_and_closer(server: uvicorn.Server) -> bool:
     """
-    【已升級】啟動並使用看門狗監控 FastAPI 伺服器。
+    【Asyncio 原生看門狗】
+    監控心跳，成功後或超時後關閉伺服器。
+    返回 True 表示成功，False 表示超時。
     """
-    print_header("步驟 4: 啟動並監控核心應用程式")
+    start_time = time.monotonic()
+    print_header(f"看門狗已啟動 (超時設定: {WATCHDOG_TIMEOUT} 秒)")
 
-    server_process = None
-    watchdog_timer = None
+    # db_manager 是單例，在導入時已初始化，無需手動調用 initialize。
 
-    def handle_timeout():
-        print(f"❌ {get_timestamp()} - 看門狗觸發！超過 10 秒未收到日誌，正在終止伺服器...", file=sys.stderr)
-        if server_process and server_process.poll() is None:
-            server_process.kill() # 使用 kill 確保進程被終止
+    while time.monotonic() - start_time < WATCHDOG_TIMEOUT:
+        print(f"   [看門狗] 正在檢查心跳...")
+        try:
+            # 使用 asyncio.to_thread 在異步事件循環中安全地調用阻塞的資料庫方法
+            heartbeat_value = await asyncio.to_thread(db_manager.get_status, HEARTBEAT_KEY)
+            if heartbeat_value:
+                print(f"   [看門狗] ✅ 成功偵測到心跳！值: {heartbeat_value}")
+                print("   [看門狗] 測試通過。等待 5 秒觀察期...")
+                await asyncio.sleep(5)
+                server.should_exit = True
+                print("   [看門狗] 已發出關閉信號。")
+                return True  # 成功
+            else:
+                print(f"   [看門狗] ⚠️ 未找到心跳值，將在 {HEARTBEAT_CHECK_INTERVAL} 秒後重試...")
 
-    def reset_watchdog(timeout=10.0):
-        nonlocal watchdog_timer
-        if watchdog_timer:
-            watchdog_timer.cancel()
-        watchdog_timer = threading.Timer(timeout, handle_timeout)
-        watchdog_timer.start()
+        except Exception as e:
+            print(f"   [看門狗] ❌ 檢查心跳時發生錯誤: {e}", file=sys.stderr)
 
-    try:
-        api_server_command = [
-            VENV_PYTHON, "-m", "uvicorn", "src.phoenix_core.main:app",
-            "--host", "0.0.0.0", "--port", "8080",
-        ]
-        print(f"   🔹 執行命令: {' '.join(api_server_command)}")
+        await asyncio.sleep(HEARTBEAT_CHECK_INTERVAL)
 
-        # 使用 Popen 在背景啟動伺服器，確保設定 PYTHONUNBUFFERED
-        process_env = os.environ.copy()
-        process_env["PYTHONUNBUFFERED"] = "1"
-        server_process = subprocess.Popen(
-            api_server_command,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT, # 將 stderr 合併到 stdout
-            text=True,
-            encoding='utf-8',
-            env=process_env
-        )
+    # 如果循環結束仍未返回，說明超時
+    print(f"   [看門狗] ❌ 超時！在 {WATCHDOG_TIMEOUT} 秒內未偵測到有效心跳。", file=sys.stderr)
+    server.should_exit = True # 無論如何都嘗試關閉伺服器
+    return False # 失敗
 
-        print(f"   ✅ 伺服器進程已啟動 (PID: {server_process.pid})。")
-        reset_watchdog() # 啟動第一個看門狗計時器
+async def main_async():
+    """
+    【異步主函式】
+    協調 Uvicorn 伺服器和看門狗的啟動與關閉。
+    """
+    print_header("步驟 4: 以程式化方式啟動核心應用程式")
 
-        # 即時讀取日誌並餵狗
-        for line in iter(server_process.stdout.readline, ''):
-            if not line: # 當輸出結束時退出
-                break
+    config = uvicorn.Config(
+        app,
+        host="0.0.0.0",
+        port=8080,
+        log_level="info",
+        lifespan="on"  # 確保 FastAPI 的 startup/shutdown 事件被觸發
+    )
+    server = uvicorn.Server(config)
 
-            log_line = line.strip()
-            print(f"     [伺服器日誌] {log_line}")
-            reset_watchdog() # 每次收到日誌就重置看門狗
+    # 使用 asyncio.gather 來並發運行伺服器和看門狗
+    # 我們只關心看門狗的返回結果
+    server_task = asyncio.create_task(server.serve())
+    watchdog_task = asyncio.create_task(watchdog_and_closer(server))
 
-        # 檢查進程結束後是否有錯誤
-        return_code = server_process.wait()
-        if return_code != 0:
-             print(f"   ⚠️ 伺服器進程已終止，返回碼: {return_code}", file=sys.stderr)
+    done, pending = await asyncio.wait(
+        [server_task, watchdog_task],
+        return_when=asyncio.FIRST_COMPLETED
+    )
 
-    except Exception as e:
-        print(f"❌ 核心應用程式執行緒發生未預期的錯誤: {e}", file=sys.stderr)
-    finally:
-        print("   ℹ️ 執行結束，正在進行最終清理...")
-        if watchdog_timer:
-            watchdog_timer.cancel() # 確保計時器被清理
-        if server_process and server_process.poll() is None:
-            print("   ℹ️ 正在終止伺服器...")
-            server_process.terminate()
-            try:
-                server_process.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                server_process.kill()
-        print("   ✅ 清理完畢。")
-        stop_event.set()
+    # 檢查看門狗的結果
+    watchdog_result = False
+    if watchdog_task in done:
+        watchdog_result = watchdog_task.result()
+
+    # 取消仍在運行的任務
+    for task in pending:
+        task.cancel()
+
+    # 重新 gather 以確保取消操作完成
+    await asyncio.gather(*pending, return_exceptions=True)
+
+    if not watchdog_result:
+        raise RuntimeError("看門狗超時，測試失敗。")
+
+    print("✅ 伺服器已優雅地關閉。")
 
 def main():
     """
-    主執行函式，協調所有步驟。
+    主執行函式，協調所有同步和異步步驟。
     """
     start_time = time.time()
     os.environ["PYTHONUNBUFFERED"] = "1"
 
     try:
-        # --- 步驟 1: 建立 venv ---
+        # --- 步驟 1-3 & 5: 同步的環境設定 ---
         print_header("步驟 1: 建立 Python 虛擬環境 (venv)")
         if os.path.isdir(VENV_DIR):
-            print(f"發現舊的虛擬環境 '{VENV_DIR}'，正在刪除以確保環境純淨...")
             shutil.rmtree(VENV_DIR)
+        run_sync_command([sys.executable, "-m", "venv", VENV_DIR])
 
-        print(f"正在建立新的虛擬環境 '{VENV_DIR}'...")
-        run_command([sys.executable, "-m", "venv", VENV_DIR])
-        print(f"✅ 虛擬環境 '{VENV_DIR}' 建立成功。")
-
-        # --- 步驟 2: 在 venv 中安裝 uv ---
         print_header("步驟 2: 在 venv 中安裝 uv")
-        run_command([VENV_PIP, "install", "-U", "uv"])
-        print("✅ uv 安裝成功。")
+        run_sync_command([VENV_PIP, "install", "-U", "uv"])
 
-        # --- 步驟 3: 將當前專案套件化安裝到 venv 中 ---
-        print_header("步驟 3: 將當前專案套件化安裝到 venv 中 (pip install -e .)")
-        run_command([VENV_PIP, "install", "-e", "."], cwd=".")
-        print("✅ 當前專案已成功以可編輯模式安裝。")
+        print_header("步驟 3: 將當前專案套件化安裝到 venv 中")
+        run_sync_command([VENV_PIP, "install", "-e", "."], cwd=".")
 
-        # --- 步驟 5: 在 venv 中安裝專案依賴 ---
         print_header("步驟 5: 在 venv 中安裝專案依賴")
-        requirements_file = "requirements/base.txt"
-        if os.path.exists(requirements_file):
-            run_command([VENV_UV, "pip", "install", "--python", VENV_PYTHON, "-r", requirements_file], cwd=".")
-            print("✅ 專案依賴安裝成功。")
-        else:
-            print(f"⚠️ 找不到 {requirements_file}，跳過依賴安裝。")
+        run_sync_command([VENV_UV, "pip", "install", "--python", VENV_PYTHON, "-r", "requirements/base.txt"], cwd=".")
 
-        # --- 步驟 6: 執行核心應用程式 ---
-        # 由於 run_core_application 現在是阻塞的，我們不再需要獨立的執行緒和複雜的看門狗
-        stop_event = threading.Event() # 雖然簡化了，但保留事件以備未來擴展
-        run_core_application(stop_event)
+        # --- 步驟 4 & 6: 執行核心異步邏輯 ---
+        asyncio.run(main_async())
         print("✅ 核心應用程式測試運行已完成。")
 
-        # --- 步驟 7: 執行報告生成器 ---
+        # --- 步驟 7: 執行報告生成器 (同步) ---
         print_header("步驟 7: 執行報告生成器")
-
-        # 7.1 重命名資料庫 (在專案根目錄)
         db_original_path = "state.db"
         db_renamed_path = "logs.sqlite"
+        if os.path.exists(db_original_path):
+            shutil.move(db_original_path, db_renamed_path)
+            print(f"✅ 資料庫已重命名為 {db_renamed_path}")
+        else:
+            print(f"⚠️ 找不到資料庫檔案 {db_original_path}，無法生成報告。")
+            # 創建一個空文件以避免後續流程出錯
+            open(db_renamed_path, 'a').close()
 
-        # 確保 state.db 存在，以防伺服器運行時間過短未及建立
-        if not os.path.exists(db_original_path):
-            print(f"⚠️ 警告: '{db_original_path}' 不存在，將建立一個空檔案以確保測試流程完整。")
-            open(db_original_path, 'a').close()
 
-        print(f"正在將 '{db_original_path}' 重命名為 '{db_renamed_path}'...")
-        shutil.move(db_original_path, db_renamed_path)
-        print("✅ 資料庫重命名成功。")
-
-        # 7.2 執行報告生成腳本
         report_generator_script = os.path.join("scripts", "generate_report.py")
         if os.path.exists(report_generator_script):
-            print(f"偵測到 {report_generator_script}，將直接呼叫它。")
-
-            # 安裝報告依賴
             requirements_report_file = "requirements/report.txt"
             if os.path.exists(requirements_report_file):
                  print("\\n--- 安裝報告依賴 ---")
-                 run_command([VENV_UV, "pip", "install", "--python", VENV_PYTHON, "-r", requirements_report_file], cwd=".")
-                 print("✅ 報告依賴安裝成功。")
+                 run_sync_command([VENV_UV, "pip", "install", "--python", VENV_PYTHON, "-r", requirements_report_file], cwd=".")
 
             report_command = [
-                VENV_PYTHON,
-                report_generator_script,
+                VENV_PYTHON, report_generator_script,
                 "--db-file", db_renamed_path,
                 "--report-dir", "reports",
             ]
-            run_command(report_command, cwd=".")
+            run_sync_command(report_command, cwd=".")
             print("✅ 報告生成完畢。")
-        else:
-            print(f"⚠️ 找不到報告生成腳本 '{report_generator_script}'，跳過此步驟。")
 
     except subprocess.CalledProcessError as e:
         print(f"\n❌ 一個關鍵命令執行失敗，返回碼: {e.returncode}", file=sys.stderr)
-        print(f"   命令: {' '.join(e.cmd)}", file=sys.stderr)
-        print("   🔥 自動化流程中止。", file=sys.stderr)
         sys.exit(1)
     except Exception as e:
         print(f"\n❌ 發生未預期的錯誤: {e}", file=sys.stderr)
         import traceback
         traceback.print_exc()
-        print("   🔥 自動化流程中止。", file=sys.stderr)
         sys.exit(1)
     finally:
         end_time = time.time()
         print("\n" + "="*80)
         print(f"🏁 全部流程結束，總耗時: {end_time - start_time:.2f} 秒。")
         print("="*80)
-
 
 if __name__ == "__main__":
     main()

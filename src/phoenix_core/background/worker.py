@@ -18,10 +18,10 @@ def start_background_tasks():
 
     # 使用 asyncio.create_task 來安排協程在事件循環中運行
     # 這是一個非阻塞操作
-    # --- 偵錯：隔離任務，只運行心跳 ---
+    # --- 恢復所有任務 ---
     asyncio.create_task(periodic_heartbeat())
-    # asyncio.create_task(transcription_worker_main_loop())
-    # asyncio.create_task(prometheus_worker_main_loop())
+    asyncio.create_task(transcription_worker_main_loop())
+    asyncio.create_task(prometheus_worker_main_loop())
 
     logger.info("所有背景任務已成功提交至事件循環。")
 

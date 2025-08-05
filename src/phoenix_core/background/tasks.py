@@ -15,13 +15,17 @@ logger = logging.getLogger(__name__)
 
 async def periodic_heartbeat(interval_seconds: int = 5):
     """
-    一個極簡化的心跳任務，用於最終的偵錯。
-    它只打印到 stdout，沒有任何外部依賴。
+    定期將當前時間戳寫入資料庫，作為系統存活的信號。
+    這是看門狗監控的主要目標。
     """
-    print("--- HEARTBEAT TASK CREATED ---", flush=True)
-    # 移除不必要的初始延遲，讓任務立即開始。
-    # await asyncio.sleep(1) # <-- 已移除的除錯程式碼
-    print("--- HEARTBEAT TASK STARTED ---", flush=True)
+    logger.info("心跳任務已啟動。")
     while True:
-        print(f"--- HEARTBEAT PING ({datetime.now(timezone.utc)}) ---", flush=True)
+        try:
+            current_time_str = datetime.now(timezone.utc).isoformat()
+            # 使用 asyncio.to_thread 在異步事件循環中安全地調用阻塞的資料庫方法
+            await asyncio.to_thread(db_manager.write_status_update, HEARTBEAT_KEY, current_time_str)
+            # logger.debug(f"心跳已更新: {current_time_str}")
+        except Exception as e:
+            logger.error(f"心跳任務發生錯誤: {e}", exc_info=True)
+
         await asyncio.sleep(interval_seconds)
