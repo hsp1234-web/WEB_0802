@@ -4,7 +4,7 @@
 
 import asyncio
 import logging
-from .tasks import periodic_heartbeat, transcription_worker_main_loop
+from .tasks import periodic_heartbeat, transcription_worker_main_loop, prometheus_worker_main_loop
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +18,7 @@ def start_background_tasks():
     # 這是一個非阻塞操作
     asyncio.create_task(periodic_heartbeat())
     asyncio.create_task(transcription_worker_main_loop())
+    asyncio.create_task(prometheus_worker_main_loop())
 
     logger.info("所有背景任務已成功提交至事件循環。")
 

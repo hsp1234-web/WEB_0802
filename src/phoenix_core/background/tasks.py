@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from ..database import db_manager
 from ..watchdog import HEARTBEAT_KEY
 from ..modules.transcription.worker import transcription_worker_main_loop
+from ..modules.prometheus_pipeline.worker import prometheus_worker_main_loop
 
 # 獲取一個 logger 實例，這是進行日誌記錄的最佳實踐
 logger = logging.getLogger(__name__)

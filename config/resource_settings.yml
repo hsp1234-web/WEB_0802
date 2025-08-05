@@ -38,3 +38,50 @@ resource_monitoring:
   # 在 Colab 環境中，前端獲取代理 URL 的重試次數。
   # 此設定由 run/colab_runner.py 讀取並寫入動態的 config.json。
   colab_url_retries: 10
+
+# ==============================================================================
+# 普羅米修斯管線設定 (Prometheus Pipeline Settings)
+# ==============================================================================
+#
+# 這是從舊的 wolf88/prometheus 專案遷移過來的設定。
+#
+# ------------------------------------------------------------------------------
+prometheus_pipeline:
+  # --- API 金鑰管理 ---
+  api_keys:
+    # 請在此處填入您的 FRED API 金鑰
+    fred: "c85a224a0e0d72a7bccb471c0021eb7b"
+    # 其他未來可能用到的金鑰
+    fmp: "YOUR_REAL_FMP_API_KEY_HERE"
+    finmind: "YOUR_REAL_FINMIND_API_TOKEN_HERE"
+
+  # --- 資料庫設定 ---
+  database:
+    # 注意：路徑是相對於專案根目錄
+    main_db_path: "storage/prometheus/factors.duckdb"
+    data_warehouse_path: "storage/prometheus/data_warehouse.duckdb"
+    task_queue_db_path: "storage/prometheus/task_queue.db"
+
+  # --- 數據獲取設定 ---
+  data_acquisition:
+    retries: 3
+    retry_backoff: 2
+    taifex:
+      base_url: "https://www.taifex.com.tw"
+      user_agents:
+        - "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"
+        - "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"
+
+  # --- 因子宇宙設定 ---
+  factor_universe:
+    - name: "RSI"
+      params:
+        window: [10, 30]
+      operators: ["less_than", "greater_than"]
+      value_range: [20, 80]
+
+    - name: "SMA_cross"
+      params:
+        fast_window: [5, 50]
+        slow_window: [10, 100]
+      operators: ["cross_above", "cross_below"]

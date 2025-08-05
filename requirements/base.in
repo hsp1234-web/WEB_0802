@@ -10,3 +10,10 @@ aiofiles
 faster-whisper
 ffmpeg-python
 python-multipart
+typer
+duckdb
+fredapi
+yfinance
+vectorbt
+pandas-ta
+deap
