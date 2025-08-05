@@ -4,25 +4,19 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>善狼研究平台 v10.1 - 風險評估資料庫版</title>
-    <!-- 引入 Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- 引入 Google Fonts (Noto Sans TC & Inter) -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <!-- 引入 Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
-    <!-- 引入 Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script>
-        // 設定 Tailwind CSS 暗色模式
         tailwind.config = { darkMode: 'class' }
     </script>
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="/static/style.css">
 </head>
 <body class="min-h-screen p-4 sm:p-6 lg:p-8">
     <div class="max-w-7xl mx-auto">
-        <!-- 頂部標題與控制 -->
         <header class="flex justify-between items-center mb-6">
             <div class="flex items-center gap-3">
                 <svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -46,10 +40,7 @@
                 </div>
             </div>
         </header>
-
-        <!-- 主工作區 -->
         <main class="gemini-panel rounded-xl">
-            <!-- Tab 選單 -->
             <div class="border-b border-gray-200 dark:border-gray-700">
                 <nav id="tabs" class="flex space-x-2" aria-label="Tabs">
                     <div class="tab" data-tab="shan">週報深度覆盤</div>
@@ -61,324 +52,29 @@
                     <div class="tab" data-tab="system">系統監控</div>
                 </nav>
             </div>
-
             <div class="p-4 sm:p-6">
-                <!-- 週報深度覆盤 -->
-                <div id="tab-content-shan" class="tab-content hidden">
-                    <div class="grid grid-cols-1 lg:grid-cols-5 gap-6">
-                        <!-- 左側：研究資料庫 -->
-                        <div class="lg:col-span-2 space-y-4">
-                            <h2 class="text-xl font-semibold">研究資料庫</h2>
-                            <div>
-                                <label for="week-selector" class="block text-sm font-medium mb-1">選擇分析週次 (1/150)</label>
-                                <select id="week-selector" class="w-full p-2 rounded-md bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600">
-                                    <option>2025年第14週</option>
-                                    <option>2025年第13週</option>
-                                </select>
-                            </div>
-                            <div>
-                                <h3 class="text-lg font-semibold mb-2">本週原始文本</h3>
-                                <div id="raw-content" class="h-64 overflow-y-auto p-3 bg-gray-100 dark:bg-gray-800 rounded-md text-xs font-mono whitespace-pre-wrap"></div>
-                            </div>
-                            <div>
-                                <h3 class="text-lg font-semibold mb-2">載入大師觀點 (可選)</h3>
-                                <div id="master-insights-selector" class="space-y-2"></div>
-                            </div>
-                        </div>
-                        <!-- 右側：AI 協同分析室 -->
-                        <div class="lg:col-span-3">
-                             <h2 class="text-xl font-semibold mb-4">AI 協同分析室</h2>
-                             <div id="chat-window" class="h-[36rem] overflow-y-auto p-4 bg-gray-100 dark:bg-gray-800/50 rounded-lg flex flex-col space-y-4"></div>
-                             <div class="mt-4">
-                                <textarea id="chat-input" class="w-full p-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700" rows="3" placeholder="請在此輸入您的指令，例如：「請總結本週觀點並提供量化策略方向」"></textarea>
-                                <button id="send-button" class="mt-2 w-full gemini-button-primary font-bold py-2 px-4 rounded-lg">提交分析請求</button>
-                             </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- 市場數據總覽 -->
-                <div id="tab-content-snapshot" class="tab-content hidden">
-                    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6">
-                        <div>
-                            <h2 class="text-xl font-semibold">市場因子總覽</h2>
-                        </div>
-                        <div class="flex items-center gap-2 mt-2 sm:mt-0">
-                            <label for="date-range-start" class="text-sm font-medium">從</label>
-                            <input type="date" id="date-range-start" class="w-32 p-1 rounded-md text-sm bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600">
-                            <label for="date-range-end" class="text-sm font-medium">到</label>
-                            <input type="date" id="date-range-end" class="w-32 p-1 rounded-md text-sm bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600">
-                            <button id="apply-date-range-btn" class="gemini-button-primary font-bold py-1 px-4 rounded-lg text-sm">更新趨勢</button>
-                        </div>
-                    </div>
-                    <div id="factors-list" class="space-y-2"></div>
-
-                    <!-- 後續開發參考說明 -->
-                    <div class="mt-8">
-                        <h3 class="text-xl font-semibold mb-4">後續開發參考：市場因子趨勢圖</h3>
-                        <div class="gemini-panel p-4 rounded-lg text-sm dark:bg-gray-800/50">
-                            <p class="mb-2">此頁面的市場因子趨勢圖是一個動態且反應式的設計。其核心邏輯如下：</p>
-                            <ol class="list-decimal list-inside space-y-2">
-                                <li>**數據獲取 (Data Fetching)**: `applyDateRange()` 函式會根據使用者選擇的起始和結束日期，模擬從數據源（例如 `yfinance`）獲取該時間範圍內所有因子的歷史數據。</li>
-                                <li>**趨勢圖繪製 (Chart Rendering)**: `renderAllSparklines()` 函式會遍歷所有因子，並使用 `Chart.js` 函式庫來為每個因子的歷史數據繪製一個迷你趨勢圖（Sparkline）。</li>
-                                <li>**動態更新 (Dynamic Update)**: 當使用者點擊「更新趨勢」按鈕時，`applyDateRangeBtn` 的事件監聽器會觸發數據獲取和圖表重新繪製的流程，確保介面數據與使用者選擇的時間範圍保持同步。</li>
-                                <li>**數據結構 (Data Structure)**: 每個因子都包含一個 `trend` 陣列，儲存了該時間範圍內的數據點。在實際開發中，這個陣列會是從後端資料庫或 API 獲取的歷史時間序列數據。</li>
-                            </ol>
-                            <p class="mt-4">這個模式是前端開發中常見的「**資料驅動介面 (Data-Driven UI)**」設計。在後續開發中，你可以將模擬數據替換為實際的後端 API 呼叫，例如：`fetch('/api/market_factors?start_date=...&end_date=...')`，並將 API 回傳的 JSON 數據傳入圖表繪製函式，即可實現真實的數據可視化。</p>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- 因子儲存庫分頁 -->
-                <div id="tab-content-factors" class="tab-content hidden">
-                    <h2 class="text-xl font-semibold mb-6">因子儲存庫</h2>
-                    <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">集中化、有組織的量化因子儲存庫。點擊因子名稱查看詳細資訊。</p>
-                    <div id="factor-store" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        <!-- 因子將在這裡動態生成 -->
-                    </div>
-                </div>
-
-                <!-- 策略回測中心 -->
-                <div id="tab-content-lab" class="tab-content hidden">
-                    <h2 class="text-xl font-semibold mb-6">策略回測中心</h2>
-                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                        <div>
-                            <h3 class="font-semibold mb-2">策略編輯器 (Python)</h3>
-                            <div class="flex justify-end mb-2">
-                                <select id="strategy-selector" class="p-1 rounded-md bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-sm">
-                                    <option value="ma_crossover">移動平均線交叉</option>
-                                    <option value="maa_strategy">最大幅度分析法 (MAA)</option>
-                                    <option value="volatility_entry">進場波動率策略</option>
-                                </select>
-                            </div>
-                            <textarea id="strategy-editor" class="w-full h-64 p-2 font-mono text-sm bg-gray-100 dark:bg-gray-800 rounded-md border border-gray-300 dark:border-gray-600"></textarea>
-                            <button class="mt-4 w-full gemini-button-primary font-bold py-2 px-4 rounded-lg">執行策略回測</button>
-                        </div>
-                        <div>
-                            <h3 class="font-semibold mb-2">回測績效報告 (#BKT-0980)</h3>
-                            <div class="gemini-panel p-4 rounded-lg border-none">
-                                <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center mb-4">
-                                    <div class="tooltip-container">
-                                        <p class="text-xs text-gray-500">年化報酬率</p>
-                                        <p class="text-lg font-bold change-up" id="annual-return">25.8%</p>
-                                        <span class="tooltip-text">衡量策略的平均年度獲利。</span>
-                                    </div>
-                                    <div class="tooltip-container">
-                                        <p class="text-xs text-gray-500">最大回撤 (MDD)</p>
-                                        <p class="text-lg font-bold change-down" id="mdd">-15.2%</p>
-                                        <span class="tooltip-text">衡量策略可能承受的最大損失。</span>
-                                    </div>
-                                    <div class="tooltip-container">
-                                        <p class="text-xs text-gray-500">夏普比率</p>
-                                        <p class="text-lg font-bold" id="sharpe-ratio">1.82</p>
-                                        <span class="tooltip-text">衡量每單位波動率下，超出無風險利率的平均報酬，越高越好。</span>
-                                    </div>
-                                    <div class="tooltip-container">
-                                        <p class="text-xs text-gray-500">勝率</p>
-                                        <p class="text-lg font-bold" id="win-rate">62%</p>
-                                        <span class="tooltip-text">衡量交易成功的比例。</span>
-                                    </div>
-                                </div>
-                                <div class="w-full h-52 bg-gray-200 dark:bg-gray-800/50 rounded-lg p-2">
-                                    <canvas id="backtestChart"></canvas>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- 策略簡介區塊 -->
-                    <div class="mt-6">
-                        <h3 class="text-xl font-semibold mb-4">策略簡介</h3>
-                        <div id="strategy-info" class="gemini-panel p-4 rounded-lg">
-                            <!-- 策略說明將動態載入至此 -->
-                        </div>
-                    </div>
-                </div>
-
-                <!-- 資料庫管理系統分頁 -->
                 <div id="tab-content-db_management" class="tab-content">
                     <h2 class="text-xl font-semibold mb-6">資料庫管理系統</h2>
                     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                        <!-- 左側：專案結構與指令 -->
                         <div class="lg:col-span-1 space-y-4">
-                            <h3 class="font-semibold text-lg">專案結構總覽 (src/prometheus/)</h3>
-                            <div class="gemini-panel p-4 rounded-lg text-sm dark:bg-gray-800/50">
-                                <ul class="file-tree text-gray-700 dark:text-gray-300">
-                                    <li>
-                                        <div class="file-tree-item"><i data-lucide="folder" class="file-tree-icon"></i>cli/</div>
-                                        <ul class="file-tree">
-                                            <li>
-                                                <div class="file-tree-item"><i data-lucide="file-code" class="file-tree-icon"></i>main.py</div>
-                                            </li>
-                                        </ul>
-                                    </li>
-                                    <li>
-                                        <div class="file-tree-item"><i data-lucide="folder" class="file-tree-icon"></i>core/</div>
-                                        <ul class="file-tree">
-                                            <li>
-                                                <div class="file-tree-item"><i data-lucide="folder" class="file-tree-icon"></i>clients/</div>
-                                                <ul class="file-tree">
-                                                    <li><div class="file-tree-item"><i data-lucide="file-code" class="file-tree-icon"></i>YFinanceClient.py</div></li>
-                                                    <li><div class="file-tree-item"><i data-lucide="file-code" class="file-tree-icon"></i>FredClient.py</div></li>
-                                                </ul>
-                                            </li>
-                                            <li>
-                                                <div class="file-tree-item"><i data-lucide="folder" class="file-tree-icon"></i>db/</div>
-                                                <ul class="file-tree">
-                                                    <li><div class="file-tree-item"><i data-lucide="file-code" class="file-tree-icon"></i>db_manager.py</div></li>
-                                                    <li><div class="file-tree-item"><i data-lucide="file-code" class="file-tree-icon"></i>data_warehouse.py</div></li>
-                                                    <li><div class="file-tree-item"><i data-lucide="file-code" class="file-tree-icon"></i>schema.py</div></li>
-                                                </ul>
-                                            </li>
-                                            <li><div class="file-tree-item"><i data-lucide="folder" class="file-tree-icon"></i>engines/</div></li>
-                                            <li><div class="file-tree-item"><i data-lucide="folder" class="file-tree-icon"></i>logging/</div></li>
-                                            <li><div class="file-tree-item"><i data-lucide="folder" class="file-tree-icon"></i>queue/</div></li>
-                                            <li><div class="file-tree-item"><i data-lucide="folder" class="file-tree-icon"></i>services/</div></li>
-                                        </ul>
-                                    </li>
-                                    <li>
-                                        <div class="file-tree-item"><i data-lucide="folder" class="file-tree-icon"></i>pipelines/</div>
-                                        <ul class="file-tree">
-                                            <li><div class="file-tree-item"><i data-lucide="file-code" class="file-tree-icon"></i>p4_stock_factor_generation.py</div></li>
-                                            <li><div class="file-tree-item"><i data-lucide="file-code" class="file-tree-icon"></i>p5_crypto_factor_generation.py</div></li>
-                                            <li><div class="file-tree-item"><i data-lucide="file-code" class="file-tree-icon"></i>p6_simulation_training.py</div></li>
-                                        </ul>
-                                    </li>
-                                    <li><div class="file-tree-item"><i data-lucide="folder" class="file-tree-icon"></i>steps/</div></li>
-                                </ul>
-                            </div>
                             <h3 class="font-semibold text-lg">模擬指令執行</h3>
                             <div class="flex items-center gap-2">
                                 <select id="pipeline-selector" class="flex-grow p-2 rounded-md bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-sm">
                                     <option value="p4_stock_factor_generation">執行股票因子生成管線</option>
-                                    <option value="p5_crypto_factor_generation">執行加密貨幣因子生成管線</option>
-                                    <option value="p6_simulation_training">執行模擬器訓練管線</option>
                                 </select>
                                 <button id="run-pipeline-btn" class="gemini-button-primary font-bold py-2 px-4 rounded-lg text-sm">運行</button>
                             </div>
                         </div>
-
-                        <!-- 右側：資料庫狀態與日誌 -->
                         <div class="lg:col-span-2 space-y-4">
-                            <h3 class="font-semibold text-lg">數據倉庫狀態</h3>
-                            <div class="gemini-panel p-4 rounded-lg">
-                                <div class="space-y-3">
-                                    <div class="flex justify-between items-center">
-                                        <div class="flex items-center gap-2">
-                                            <i data-lucide="database" class="lucide lucide-database text-blue-500"></i>
-                                            <p class="font-semibold">YFinanceClient</p>
-                                        </div>
-                                        <span id="yfinance-status" class="text-sm text-gray-500 dark:text-gray-400">連線中...</span>
-                                    </div>
-                                    <div class="flex justify-between items-center">
-                                        <div class="flex items-center gap-2">
-                                            <i data-lucide="database" class="lucide lucide-database text-green-500"></i>
-                                            <p class="font-semibold">FredClient</p>
-                                        </div>
-                                        <span id="fred-status" class="text-sm text-gray-500 dark:text-gray-400">待機中...</span>
-                                    </div>
-                                </div>
-                            </div>
-                            <h3 class="font-semibold text-lg">因子庫狀態 (factor_details)</h3>
-                            <div class="gemini-panel p-4 rounded-lg overflow-x-auto">
-                                <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                                    <thead class="bg-gray-50 dark:bg-gray-700">
-                                        <tr>
-                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">因子名稱</th>
-                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">類型</th>
-                                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">最後更新</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="factor-table-body" class="bg-white divide-y divide-gray-200 dark:bg-gray-800 dark:divide-gray-700">
-                                        <!-- 因子列表將在這裡動態生成 -->
-                                    </tbody>
-                                </table>
+                            <h3 class="font-semibold text-lg">系統日誌</h3>
+                            <div class="gemini-panel p-4 rounded-lg h-48 overflow-y-auto bg-gray-100 dark:bg-gray-800 font-mono text-xs" id="system-log-content">
                             </div>
                         </div>
                     </div>
-                </div>
-
-                <!-- 音訊轉錄儀分頁 -->
-                <div id="tab-content-transcription" class="tab-content hidden">
-                    <div class="flex-grow grid grid-cols-1 lg:grid-cols-2 gap-6 min-h-0">
-                        <!-- 左側：上傳與任務池 -->
-                        <div class="flex flex-col gap-6 min-h-0">
-                            <div id="upload-area" class="phoenix-glass-effect rounded-xl p-6 border-2 border-dashed border-gray-600/50 dark:border-gray-600 hover:border-sky-400 transition-all duration-300 flex flex-col items-center justify-center text-center cursor-pointer">
-                                <i data-lucide="upload" class="lucide lucide-upload text-5xl gemini-gradient-text mb-4"></i>
-                                <h2 class="text-xl font-semibold text-[color:var(--text-color)] mb-2">拖曳音訊檔至此，或點擊選擇</h2>
-                                <p class="text-[color:var(--text-muted-color)]">支援 MP3, WAV, M4A, FLAC 等格式</p>
-                                <input type="file" id="file-input" class="hidden" multiple accept="audio/*">
-                            </div>
-                            <div class="phoenix-glass-effect rounded-xl flex-grow flex flex-col min-h-0">
-                                <h2 class="text-lg font-semibold text-[color:var(--text-color)] p-4 border-b dark:border-gray-700">任務進度池</h2>
-                                <div id="log-container" class="p-4 space-y-3 overflow-y-auto flex-grow h-64 lg:h-auto">
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- 右側：結果與待機畫面 -->
-                        <div class="relative min-h-0">
-                            <div id="standby-section" class="phoenix-glass-effect rounded-xl flex flex-col items-center justify-center text-center p-8 absolute inset-0 transition-opacity duration-300">
-                                <h2 class="text-2xl font-bold text-[color:var(--text-muted-color)]">等待任務</h2>
-                                <p class="text-gray-500 mt-2">請上傳音訊檔以開始轉錄流程。</p>
-                            </div>
-                            <div id="result-section" class="phoenix-glass-effect rounded-xl flex flex-col absolute inset-0 transition-opacity duration-300 opacity-0 pointer-events-none">
-                                <div class="p-4 border-b flex justify-between items-center dark:border-gray-700">
-                                    <h2 class="text-lg font-semibold text-[color:var(--text-color)]">轉錄結果</h2>
-                                    <div>
-                                        <button id="copy-btn" class="bg-gray-200 dark:bg-gray-700 hover:bg-sky-500/80 dark:hover:bg-sky-500 text-gray-800 dark:text-gray-100 font-bold py-2 px-4 rounded-lg inline-flex items-center transition-all">
-                                            <i data-lucide="copy" class="lucide lucide-copy mr-2"></i>
-                                            <span>複製</span>
-                                        </button>
-                                        <button id="download-btn" class="bg-purple-600 hover:bg-purple-500 text-white font-bold py-2 px-4 rounded-lg inline-flex items-center transition-all ml-2">
-                                            <i data-lucide="download" class="lucide lucide-download mr-2"></i>
-                                            <span>下載 .txt</span>
-                                        </button>
-                                    </div>
-                                </div>
-                                <div class="p-4 flex-grow overflow-y-auto">
-                                    <pre id="transcript-output" class="whitespace-pre-wrap text-[color:var(--text-color)] leading-relaxed"></pre>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- 系統監控 -->
-                <div id="tab-content-system" class="tab-content hidden">
-                    <h2 class="text-xl font-semibold mb-6">系統監控</h2>
-                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div class="gemini-panel p-4 rounded-lg">
-                            <h3 class="font-semibold mb-4">系統資源監控</h3>
-                            <div class="space-y-4">
-                                <div>
-                                    <div class="flex justify-between items-center mb-1"><span class="text-sm font-medium">CPU 使用率</span><span id="cpu-usage" class="text-sm font-bold">34%</span></div>
-                                    <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5"><div class="bg-blue-500 h-2.5 rounded-full" style="width: 34%"></div></div>
-                                </div>
-                                <div>
-                                    <div class="flex justify-between items-center mb-1"><span class="text-sm font-medium">GPU 使用率</span><span id="gpu-usage" class="text-sm font-bold">5.2%</span></div>
-                                    <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5"><div class="bg-purple-500 h-2.5 rounded-full" style="width: 32.5%"></div></div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="gemini-panel p-4 rounded-lg">
-                            <h3 class="font-semibold mb-4">背景任務佇列</h3>
-                            <div class="space-y-3">
-                                <p class="text-sm">任務 #EVO-1701 (基因演化) - <span class="font-semibold text-yellow-500">執行中</span></p>
-                                <p class="text-sm">任務 #BKT-0982 (策略回測) - <span class="font-semibold text-blue-500">待處理</span></p>
-                            </div>
-                        </div>
-                        <div class="md:col-span-2 gemini-panel p-4 rounded-lg">
-                             <h3 class="font-semibold mb-4">系統日誌</h3>
-                             <div class="h-48 overflow-y-auto bg-gray-100 dark:bg-gray-800 rounded-md p-2 font-mono text-xs">
-                                <p><span class="text-green-400">[INFO]</span> [2025-07-18 13:30:00] System initialized.</p>
-                             </div>
-                        </div>
-                     </div>
                 </div>
             </div>
         </main>
     </div>
-    <script src="script.js"></script>
+    <script src="/static/script.js"></script>
 </body>
 </html>

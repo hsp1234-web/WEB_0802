@@ -74,3 +74,7 @@ bin/
 
 # 測試執行器 (Test Runner) 虛擬環境
 .venv_test_runner/
+.venv_e2e/
+
+# E2E 測試日誌
+server_e2e.log

@@ -1,4 +1,4 @@
-# 檔案: src/phoenix_core/main.py (V36 - 動態加載版)
+# 檔案: src/phoenix_core/main.py (V37 - Static Fix)
 import pkgutil
 import importlib
 from fastapi import FastAPI
@@ -75,7 +75,9 @@ async def startup_event():
     await logger.log("INFO", "核心服務啟動成功。")
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-app.mount("/static", StaticFiles(directory=PROJECT_ROOT), name="static")
+
+# *** FIX: Correctly mount the static directory ***
+app.mount("/static", StaticFiles(directory=os.path.join(PROJECT_ROOT, "static")), name="static")
 
 @app.get("/", response_class=FileResponse, tags=["系統 (System)"])
 async def read_root():

@@ -422,7 +422,13 @@ function renderBacktestChart() {
 function addSystemLog(level, message) {
     const timestamp = new Date().toLocaleTimeString('zh-TW', { hour12: false });
     const levelColor = { '系統': 'text-sky-400', '成功': 'text-green-400', '錯誤': 'text-red-400', '進度': 'text-yellow-400' }[level] || 'text-gray-400';
-    const logContainer = document.querySelector('#tab-content-system .h-48');
+    const logContainer = document.getElementById('system-log-content');
+
+    // 如果找不到目標日誌容器，就直接返回，避免錯誤
+    if (!logContainer) {
+        console.error("無法找到 #system-log-content 元素！");
+        return;
+    }
 
     const logEntry = document.createElement('p');
     logEntry.innerHTML = `<span class="${levelColor}">[${level}]</span> [${timestamp}] ${message}`;
