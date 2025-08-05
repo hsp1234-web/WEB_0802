@@ -217,7 +217,19 @@ class ServerManager:
 
             project_path, venv_python = env_paths["project_path"], env_paths["venv_python"]
             process_env = os.environ.copy()
-            process_env.update({"VIRTUAL_ENV": str(venv_python.parent.parent), "PATH": f"{venv_python.parent}:{os.environ.get('PATH', '')}", "PYTHONUNBUFFERED": "1"})
+
+            # V67 (Jules): 修正 PYTHONPATH，將 src 目錄加入，解決絕對路徑導入問題
+            src_path = project_path / "src"
+            existing_python_path = os.environ.get('PYTHONPATH', '')
+            new_python_path = f"{src_path}{os.pathsep}{existing_python_path}" if existing_python_path else str(src_path)
+
+            process_env.update({
+                "VIRTUAL_ENV": str(venv_python.parent.parent),
+                "PATH": f"{venv_python.parent}:{os.environ.get('PATH', '')}",
+                "PYTHONUNBUFFERED": "1",
+                "PYTHONPATH": new_python_path
+            })
+            self._log_manager.log("DEBUG", f"設定子進程 PYTHONPATH: {new_python_path}")
 
             uvicorn_command = [str(venv_python), "-m", "uvicorn", "src.phoenix_core.main:app", "--host", "0.0.0.0", "--port", str(API_PORT), "--workers", "1"]
             self.server_process = subprocess.Popen(
