@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
 # ╔══════════════════════════════════════════════════════════════════╗
 # ║                                                                      ║
-# ║    🐦‍🔥 鳳凰之心 - V65.4 作戰指揮中心 (加速安裝版)                🐦‍🔥 ║
+# ║    🐦‍🔥 鳳凰之心 - V65.5 作戰指揮中心 (加速安裝版)                🐦‍🔥 ║
 # ║                                                                      ║
 # ╠══════════════════════════════════════════════════════════════════╣
 # ║                                                                      ║
 # ║ - V65 更新日誌:                                                      ║
+# ║   - **V65.5**: 增強代理連結獲取邏輯，確保重試機制穩定。            ║
 # ║   - **V65.4**: 動態尋找可用埠號，解決「地址已被使用」的錯誤。        ║
 # ║   - **V65.3**: 改用 `uv venv` 建立虛擬環境，解決 Colab `ensurepip` 問題。║
 # ║   - **V65.2**: 修正 `subprocess` 中的路徑解析，改用相對路徑。        ║
@@ -14,7 +15,7 @@
 # ║                                                                      ║
 # ╚══════════════════════════════════════════════════════════════════╝
 
-#@title 🐦‍🔥 鳳凰之心 V65.4 作戰指揮中心 { vertical-output: true, display-mode: "form" }
+#@title 🐦‍🔥 鳳凰之心 V65.5 作戰指揮中心 { vertical-output: true, display-mode: "form" }
 #@markdown ---
 #@markdown ### **Part 1: 專案與環境設定**
 #@markdown > **設定 Git 倉庫、分支或標籤，以及專案資料夾。**
@@ -27,8 +28,6 @@ TARGET_BRANCH_OR_TAG = "1.1.7" #@param {type:"string"}
 PROJECT_FOLDER_NAME = "WEB1" #@param {type:"string"}
 #@markdown **強制刷新後端程式碼 (FORCE_REPO_REFRESH)**
 FORCE_REPO_REFRESH = True #@param {type:"boolean"}
-#@markdown **後端 API 服務埠號 (API_PORT) - V65.4 已棄用**
-# API_PORT = 8088 #@param {type:"integer"}
 
 #@markdown ---
 #@markdown ### **Part 2: 儀表板與監控設定**
@@ -140,7 +139,7 @@ class DisplayManager:
         self._thread = threading.Thread(target=self._run, daemon=True)
 
     def _build_output_buffer(self) -> list[str]:
-        output_buffer = ["🐦‍🔥 鳳凰之心 - V65.4 作戰指揮中心 🐦‍🔥", ""]
+        output_buffer = ["🐦‍🔥 鳳凰之心 - V65.5 作戰指揮中心 🐦‍🔥", ""]
         logs_to_display = self._log_manager.get_display_logs()
         for log in logs_to_display:
             ts, level = log['timestamp'].strftime('%H:%M:%S'), log['level']
@@ -263,18 +262,31 @@ def main():
         server_manager.start()
 
         if server_manager.server_ready_event.wait(timeout=SERVER_READY_TIMEOUT):
+            # V65.5: 增強重試邏輯
             max_retries, retry_delay = 10, 3
             for attempt in range(max_retries):
                 try:
                     log_manager.log("INFO", f"正在嘗試取得代理連結... (第 {attempt + 1}/{max_retries} 次)")
                     url = colab_output.eval_js(f'google.colab.kernel.proxyPort({server_manager.port})')
                     if url and url.strip():
-                        shared_stats['proxy_url'] = url; log_manager.log("SUCCESS", "✅ 成功取得代理連結！"); break
-                    else: log_manager.log("WARN", f"取得的代理連結為空，將於 {retry_delay} 秒後重試...")
-                except Exception as e: log_manager.log("WARN", f"取得代理連結時發生錯誤: {e}，將於 {retry_delay} 秒後重試...")
-                time.sleep(retry_delay)
-            else: shared_stats['status'] = "❌ 取得代理連結失敗"; log_manager.log("CRITICAL", f"在 {max_retries} 次嘗試後，仍無法取得有效的代理連結。")
-        else: shared_stats['status'] = "❌ 伺服器啟動超時"; log_manager.log("CRITICAL", f"伺服器在 {SERVER_READY_TIMEOUT} 秒內未能就緒。")
+                        shared_stats['proxy_url'] = url
+                        log_manager.log("SUCCESS", "✅ 成功取得代理連結！")
+                        break # 成功，跳出迴圈
+                except Exception as e:
+                    log_manager.log("WARN", f"嘗試失敗: {e}")
+
+                # 只有在尚未成功時才打印等待訊息並等待
+                if not shared_stats.get('proxy_url'):
+                    log_manager.log("INFO", f"將於 {retry_delay} 秒後重試...")
+                    time.sleep(retry_delay)
+
+            # for 迴圈結束後檢查是否成功
+            if not shared_stats.get('proxy_url'):
+                shared_stats['status'] = "❌ 取得代理連結失敗"
+                log_manager.log("CRITICAL", f"在 {max_retries} 次嘗試後，仍無法取得有效的代理連結。")
+        else:
+            shared_stats['status'] = "❌ 伺服器啟動超時"
+            log_manager.log("CRITICAL", f"伺服器在 {SERVER_READY_TIMEOUT} 秒內未能就緒。")
 
         while server_manager._thread.is_alive(): time.sleep(1)
     except KeyboardInterrupt:
