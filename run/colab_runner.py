@@ -215,13 +215,19 @@ class ServerManager:
             project_path = Path(PROJECT_FOLDER_NAME)
             launcher_script_path = project_path / "scripts" / "launch.py"
 
-            if not launcher_script_path.is_file():
-                 # 為了安全，我們先執行 git clone
-                self._log_manager.log("INFO", "專案資料夾不存在，先執行 Git clone...")
-                git_command = ["git", "clone", "--branch", TARGET_BRANCH_OR_TAG, "--depth", "1", REPOSITORY_URL, str(project_path)]
-                result = subprocess.run(git_command, check=False, capture_output=True, text=True, encoding='utf-8');
-                if result.returncode != 0:
-                    self._log_manager.log("CRITICAL", f"Git clone 失敗:\n{result.stderr}"); return
+            # V65.1: 增加防禦性程式碼，確保 git clone 的目標路徑是乾淨的
+            if project_path.exists():
+                self._log_manager.log("INFO", f"偵測到舊的專案資料夾 '{project_path}'，正在強制刪除...")
+                shutil.rmtree(project_path)
+
+            # 現在我們可以安全地執行 git clone
+            self._log_manager.log("INFO", f"正在從 Git 下載 (分支: {TARGET_BRANCH_OR_TAG})...")
+            git_command = ["git", "clone", "--branch", TARGET_BRANCH_OR_TAG, "--depth", "1", REPOSITORY_URL, str(project_path)]
+            result = subprocess.run(git_command, check=False, capture_output=True, text=True, encoding='utf-8');
+            if result.returncode != 0:
+                self._log_manager.log("CRITICAL", f"Git clone 失敗:\n{result.stderr}"); return
+
+            launcher_script_path = project_path / "scripts" / "launch.py"
 
             # 直接使用系統 python 呼叫啟動器，它會自己處理 venv
             launch_command = [sys.executable, str(launcher_script_path)]
