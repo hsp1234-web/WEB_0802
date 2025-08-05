@@ -28,10 +28,15 @@ def main():
     可以透過 --config 參數傳遞一個設定檔來動態設定埠號。
     """
     parser = argparse.ArgumentParser(description="輕量級 Uvicorn 伺服器啟動器")
+    parser.add_argument('--port', type=int, help='要使用的埠號')
     parser.add_argument('--config', type=str, help='設定檔的路徑', default=None)
     args = parser.parse_args()
 
-    port = get_port_from_config(args.config)
+    # 命令列傳入的 --port 優先級最高
+    if args.port:
+        port = args.port
+    else:
+        port = get_port_from_config(args.config)
 
     print(f"🚀 正在啟動輕量級 Uvicorn 伺服器於埠 {port}...")
 

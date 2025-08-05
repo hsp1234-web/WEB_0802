@@ -231,9 +231,17 @@ class ServerManager:
             })
             self._log_manager.log("DEBUG", f"設定子進程 PYTHONPATH: {new_python_path}")
 
-            uvicorn_command = [str(venv_python), "-m", "uvicorn", "src.phoenix_core.main:app", "--host", "0.0.0.0", "--port", str(API_PORT), "--workers", "1"]
+            # 建立一個指向輕量級啟動器的指令
+            launcher_command = [
+                str(venv_python),
+                "scripts/run_server_only.py",
+                "--port",
+                str(API_PORT)
+            ]
+            self._log_manager.log("INFO", f"正在使用獨立啟動器: {' '.join(launcher_command)}")
+
             self.server_process = subprocess.Popen(
-                uvicorn_command, cwd=str(project_path), env=process_env,
+                launcher_command, cwd=str(project_path), env=process_env,
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8', preexec_fn=os.setsid
             )
             self._log_manager.log("INFO", f"Uvicorn 子進程已啟動 (PID: {self.server_process.pid})。")
