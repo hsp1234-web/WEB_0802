@@ -19,7 +19,8 @@ async def periodic_heartbeat(interval_seconds: int = 5):
     它只打印到 stdout，沒有任何外部依賴。
     """
     print("--- HEARTBEAT TASK CREATED ---", flush=True)
-    await asyncio.sleep(1)
+    # 移除不必要的初始延遲，讓任務立即開始。
+    # await asyncio.sleep(1) # <-- 已移除的除錯程式碼
     print("--- HEARTBEAT TASK STARTED ---", flush=True)
     while True:
         print(f"--- HEARTBEAT PING ({datetime.now(timezone.utc)}) ---", flush=True)
