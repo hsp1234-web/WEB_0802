@@ -1,4 +1,5 @@
 """主應用程式檔案."""
+import logging
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path

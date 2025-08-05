@@ -1,0 +1,22 @@
+2025-08-05 22:46:01,331 - MainProcess - src.queues - WARNING - 未提供日誌佇列, 日誌將輸出到控制台.
+2025-08-05 22:46:01,332 - MainProcess - __main__ - WARNING - 未提供日誌佇列, 日誌將輸出到控制台.
+INFO:     Started server process [4297]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+INFO:     127.0.0.1:35942 - "GET /health HTTP/1.1" 200 OK
+2025-08-05 22:46:01,796 - MainProcess - src.queues - INFO - 任務 6a563814-3929-4f84-8823-b3396814a3ab 已成功加入佇列.
+INFO:     127.0.0.1:35950 - "POST /upload HTTP/1.1" 202 Accepted
+INFO:     127.0.0.1:35954 - "GET /status/6a563814-3929-4f84-8823-b3396814a3ab HTTP/1.1" 200 OK
+2025-08-05 22:46:01,906 - MainProcess - src.queues - INFO - 任務 bb71e30a-d041-4ede-b0f8-9045efa54a4d 已成功加入佇列.
+INFO:     127.0.0.1:35964 - "POST /upload HTTP/1.1" 202 Accepted
+INFO:     127.0.0.1:35974 - "GET /status/bb71e30a-d041-4ede-b0f8-9045efa54a4d HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53526 - "GET /status/bb71e30a-d041-4ede-b0f8-9045efa54a4d HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53534 - "GET /status/bb71e30a-d041-4ede-b0f8-9045efa54a4d HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53546 - "GET /status/bb71e30a-d041-4ede-b0f8-9045efa54a4d HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53560 - "GET /status/bb71e30a-d041-4ede-b0f8-9045efa54a4d HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53562 - "GET /status/bb71e30a-d041-4ede-b0f8-9045efa54a4d HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [4297]

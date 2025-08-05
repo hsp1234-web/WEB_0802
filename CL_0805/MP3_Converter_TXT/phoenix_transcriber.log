@@ -1,0 +1,13 @@
+2025-08-05 22:47:53,575 - MainProcess - 智慧啟動器 - INFO - --- 鳳凰錄音轉寫服務 ---
+2025-08-05 22:47:53,576 - MainProcess - 智慧啟動器 - INFO - 成功載入配置: 生產模式 (Production)
+2025-08-05 22:47:53,576 - MainProcess - 智慧啟動器 - INFO - 核心作戰準則：擁抱韌性設計、建立可觀測性。
+2025-08-05 22:47:53,578 - MainProcess - 智慧啟動器 - INFO - 已成功建立任務佇列、結果佇列與日誌佇列。
+2025-08-05 22:47:53,578 - MainProcess - 智慧啟動器 - INFO - 將啟動真實的轉錄工人。
+2025-08-05 22:47:53,579 - MainProcess - 智慧啟動器 - INFO - 正在啟動 LogWriterProcess 行程...
+2025-08-05 22:47:53,587 - MainProcess - 智慧啟動器 - INFO - 正在啟動 APIServerProcess 行程...
+2025-08-05 22:47:53,588 - MainProcess - 智慧啟動器 - INFO - 正在啟動 IntelligentWorkerProcess-1 行程...
+2025-08-05 22:47:53,590 - MainProcess - 智慧啟動器 - INFO - 所有核心服務已啟動。主行程將保持運行以監控子行程。
+2025-08-05 22:47:53,590 - MainProcess - 智慧啟動器 - INFO - 按 Ctrl+C 以終止所有服務。
+2025-08-05 22:47:59,834 - IntelligentWorkerProcess-1 - 轉錄工人 - INFO - 真實轉錄工人行程已啟動
+2025-08-05 22:47:59,932 - APIServerProcess - API伺服器 - INFO - 準備啟動 API 伺服器...
+2025-08-05 22:47:59,933 - APIServerProcess - API伺服器 - INFO - API 伺服器即將在 http://127.0.0.1:8000 上運行
