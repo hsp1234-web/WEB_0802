@@ -86,10 +86,10 @@
 
 為確保遷移過程的穩定，我們將分階段實施此新架構。
 
-*   **第一階段：核心架構搭建與驗證**
-    1.  建立 `scripts/supervisor.py` 和 `scripts/heartbeat_worker.py` 的初始版本。
-    2.  將 `main.py` 中的背景任務邏輯移除，使其成為一個純粹的 API 伺服器。
-    3.  改造 `local_run.py`，使其呼叫 `supervisor.py`，並驗證「監督者-API-工作者」這個新的多進程模式能夠成功運行。**此階段的目標是讓 `local_run.py` 首次成功跑通**。
+*   **第一階段：核心架構搭建與驗證** [已完成]
+    1.  [已完成] 建立 `scripts/supervisor.py` 和 `scripts/heartbeat_worker.py` 的初始版本。
+    2.  [已完成] 將 `main.py` 中的背景任務邏輯移除，使其成為一個純粹的 API 伺服器。
+    3.  [已完成] 改造 `local_run.py`，使其呼叫 `supervisor.py`，並驗證「監督者-API-工作者」這個新的多進程模式能夠成功運行。**此階段的目標是讓 `local_run.py` 首次成功跑通**。
 *   **第二階段：`colab_runner.py` 適配**
     1.  在第一階段成功後，改造 `colab_runner.py`，將其核心邏輯替換為「下載並執行 `supervisor.py`」的引導加載器模式。
 *   **第三階段：文件更新**
