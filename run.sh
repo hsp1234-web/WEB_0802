@@ -93,8 +93,22 @@ done
 
 echo "✅ 所有服務已在背景啟動。監督者正在監控中... (按 Ctrl+C 結束)"
 
-# --- 步驟 3: 監控 ---
-# wait -n 等待任何一個背景進程結束
+# --- 步驟 3: 啟動監督者心跳 ---
+echo "[run.sh] 正在啟動監督者心跳迴圈..."
+(
+    # 這個迴圈是監督者 (run.sh) 自己的心跳。
+    # 它會定期更新一個檔案，讓外部的看門狗 (local_run.py) 知道它還活著。
+    while true; do
+        echo "supervisor_tick_$(date +%s)" > "$LOGS_DIR/supervisor_heartbeat.log"
+        sleep 5
+    done
+) &
+heartbeat_pid=$!
+pids_to_kill+=($heartbeat_pid)
+echo "[run.sh] 監督者心跳已啟動，PID: $heartbeat_pid"
+
+# --- 步驟 4: 監控 ---
+# wait -n 等待任何一個背景進程結束（API 服務、Worker 或心跳本身）
 # $! 包含了所有背景進程的 PID
 wait -n "${pids_to_kill[@]}"
 

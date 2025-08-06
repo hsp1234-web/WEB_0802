@@ -1,17 +1,12 @@
 ✅ 找到現有虛擬環境。
 📦 正在使用 'uv pip install' 同步依賴...
-Audited 69 packages in 14ms
+Audited 69 packages in 102ms
 ✅ 依賴已同步。
 🚀 正在啟動所有背景服務...
 [run.sh] 正在啟動: API Server...
-[run.sh] API Server 已啟動，PID: 4170，日誌: ./logs/api_server.log
+[run.sh] API Server 已啟動，PID: 5102，日誌: ./logs/api_server.log
 [run.sh] 正在啟動: Heartbeat Worker...
-[run.sh] Heartbeat Worker 已啟動，PID: 4171，日誌: ./logs/heartbeat_worker.log
+[run.sh] Heartbeat Worker 已啟動，PID: 5103，日誌: ./logs/heartbeat_worker.log
 ✅ 所有服務已在背景啟動。監督者正在監控中... (按 Ctrl+C 結束)
-================================================================================
-🚨 絕對超時！程式已運行超過 15 秒。
-   - 這可能是由於未預期的掛起或死結。
-   - 正在強制終結所有相關進程...
-================================================================================
-   - 正在終結進程組 PGID: 4162
-   - 已發送 SIGKILL 信號。
+[run.sh] 正在啟動監督者心跳迴圈...
+[run.sh] 監督者心跳已啟動，PID: 5104
