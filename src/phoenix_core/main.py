@@ -65,13 +65,17 @@ def discover_and_load_modules(reload=False):
 
 @app.on_event("startup")
 async def startup_event():
-    # 首次啟動時，加載所有模組
+    # 步驟 1: 以非阻塞方式初始化資料庫
+    # 這必須是第一個操作，以確保所有後續步驟都可以訪問資料庫。
+    await db_manager.async_initialize()
+
+    # 步驟 2: 首次啟動時，加載所有模組
     discover_and_load_modules(reload=False)
 
-    # 使用背景工作管理器來啟動所有任務
+    # 步驟 3: 使用背景工作管理器來啟動所有任務
     worker.start_background_tasks()
 
-    # 寫入啟動日誌
+    # 步驟 4: 寫入啟動日誌
     await logger.log("INFO", "核心服務啟動成功。")
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
