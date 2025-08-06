@@ -1,12 +1,225 @@
-✅ 找到現有虛擬環境。
-📦 正在使用 'uv pip install' 同步依賴...
-Audited 69 packages in 102ms
-✅ 依賴已同步。
-🚀 正在啟動所有背景服務...
-[run.sh] 正在啟動: API Server...
-[run.sh] API Server 已啟動，PID: 5102，日誌: ./logs/api_server.log
-[run.sh] 正在啟動: Heartbeat Worker...
-[run.sh] Heartbeat Worker 已啟動，PID: 5103，日誌: ./logs/heartbeat_worker.log
-✅ 所有服務已在背景啟動。監督者正在監控中... (按 Ctrl+C 結束)
-[run.sh] 正在啟動監督者心跳迴圈...
-[run.sh] 監督者心跳已啟動，PID: 5104
+--- LAUNCHER SCRIPT MAIN FUNCTION STARTED ---
+--- ABOUT TO PROBE ENVIRONMENT ---
+
+--------------------------------------------------------------------------------
+🚀 2025-08-06 11:10:43 - 環境探針 (Environment Probe)
+--------------------------------------------------------------------------------
+  - 啟動器版本: V1.1
+  - Python 版本: 3.12.11 (main, Jul 29 2025, 18:21:07) [GCC 13.3.0]
+  - Python 解釋器路徑: /home/jules/.pyenv/versions/3.12.11/bin/python
+  - 作業系統: Linux-6.8.0-x86_64-with-glibc2.39
+  - 核心架構: x86_64
+  - 當前工作目錄: /app
+  - 腳本絕對路徑: /app/scripts/launch.py
+  - 推斷的專案根目錄: /app
+  - uv 版本: uv 0.8.3
+--------------------------------------------------------------------------------
+--- PROBE ENVIRONMENT FINISHED ---
+
+================================================================================
+🚀 2025-08-06 11:10:43 - 步驟 1: 使用 uv 建立 Python 虛擬環境
+================================================================================
+   🔹 執行命令: uv venv -p /home/jules/.pyenv/versions/3.12.11/bin/python /app/.venv_gold (於 .)
+     [STDERR] Using CPython 3.12.11 interpreter at: /home/jules/.pyenv/versions/3.12.11/bin/python
+     [STDERR] Creating virtual environment at: .venv_gold
+     [STDERR] Activate with: source .venv_gold/bin/activate
+   ✅ 命令成功完成。
+
+================================================================================
+🚀 2025-08-06 11:10:44 - 步驟 2: 引導程序 (Bootstrap) - 確保 Pip 和 Wheel 存在
+================================================================================
+   🔹 執行命令: uv pip install --python /app/.venv_gold/bin/python -U pip wheel (於 .)
+     [STDERR] Using Python 3.12.11 environment at: .venv_gold
+     [STDERR] Resolved 2 packages in 49ms
+     [STDERR] Prepared 2 packages in 0.58ms
+     [STDERR] Installed 2 packages in 12ms
+     [STDERR] + pip==25.2
+     [STDERR] + wheel==0.45.1
+   ✅ 命令成功完成。
+
+================================================================================
+🚀 2025-08-06 11:10:44 - 步驟 3: 安裝專案依賴
+================================================================================
+   🔹 執行命令: uv pip install --python /app/.venv_gold/bin/python -r /app/requirements/base.txt (於 /app)
+     [STDERR] Using Python 3.12.11 environment at: .venv_gold
+     [STDERR] Resolved 70 packages in 52ms
+     [STDERR] Installed 70 packages in 93ms
+     [STDERR] + aiofiles==24.1.0
+     [STDERR] + annotated-types==0.7.0
+     [STDERR] + anyio==4.9.0
+     [STDERR] + av==15.0.0
+     [STDERR] + beautifulsoup4==4.13.4
+     [STDERR] + certifi==2025.8.3
+     [STDERR] + cffi==1.17.1
+     [STDERR] + charset-normalizer==3.4.2
+     [STDERR] + click==8.2.1
+     [STDERR] + coloredlogs==15.0.1
+     [STDERR] + ctranslate2==4.6.0
+     [STDERR] + curl-cffi==0.12.0
+     [STDERR] + duckdb==1.3.2
+     [STDERR] + fastapi==0.116.1
+     [STDERR] + faster-whisper==1.1.1
+     [STDERR] + ffmpeg-python==0.2.0
+     [STDERR] + filelock==3.18.0
+     [STDERR] + flatbuffers==25.2.10
+     [STDERR] + fredapi==0.5.2
+     [STDERR] + frozendict==2.4.6
+     [STDERR] + fsspec==2025.7.0
+     [STDERR] + future==1.0.0
+     [STDERR] + greenlet==3.2.3
+     [STDERR] + h11==0.16.0
+     [STDERR] + hf-xet==1.1.5
+     [STDERR] + huggingface-hub==0.34.3
+     [STDERR] + humanfriendly==10.0
+     [STDERR] + idna==3.10
+     [STDERR] + markdown-it-py==3.0.0
+     [STDERR] + mdurl==0.1.2
+     [STDERR] + mpmath==1.3.0
+     [STDERR] + multitasking==0.0.12
+     [STDERR] + numpy==2.3.2
+     [STDERR] + onnxruntime==1.22.1
+     [STDERR] + packaging==25.0
+     [STDERR] + pandas==2.3.1
+     [STDERR] + peewee==3.18.2
+     [STDERR] + platformdirs==4.3.8
+     [STDERR] + protobuf==6.31.1
+     [STDERR] + psutil==7.0.0
+     [STDERR] + pycparser==2.22
+     [STDERR] + pydantic==2.11.7
+     [STDERR] + pydantic-core==2.33.2
+     [STDERR] + pydantic-settings==2.10.1
+     [STDERR] + pygments==2.19.2
+     [STDERR] + python-dateutil==2.9.0.post0
+     [STDERR] + python-dotenv==1.1.1
+     [STDERR] + python-multipart==0.0.20
+     [STDERR] + pytz==2025.2
+     [STDERR] + pyyaml==6.0.2
+     [STDERR] + requests==2.32.4
+     [STDERR] + rich==14.1.0
+     [STDERR] + setuptools==80.9.0
+     [STDERR] + shellingham==1.5.4
+     [STDERR] + six==1.17.0
+     [STDERR] + sniffio==1.3.1
+     [STDERR] + soupsieve==2.7
+     [STDERR] + sqlalchemy==2.0.42
+     [STDERR] + starlette==0.47.2
+     [STDERR] + sympy==1.14.0
+     [STDERR] + tokenizers==0.21.4
+     [STDERR] + tqdm==4.67.1
+     [STDERR] + typer==0.16.0
+     [STDERR] + typing-extensions==4.14.1
+     [STDERR] + typing-inspection==0.4.1
+     [STDERR] + tzdata==2025.2
+     [STDERR] + urllib3==2.5.0
+     [STDERR] + uvicorn==0.35.0
+     [STDERR] + websockets==15.0.1
+     [STDERR] + yfinance==0.2.65
+   ✅ 命令成功完成。
+
+================================================================================
+🚀 2025-08-06 11:10:44 - 步驟 4: 將當前專案套件化安裝到 venv 中
+================================================================================
+   🔹 執行命令: /app/.venv_gold/bin/pip install -e . (於 /app)
+     [STDOUT] Obtaining file:///app
+     [STDOUT] Installing build dependencies: started
+     [STDOUT] Installing build dependencies: finished with status 'done'
+     [STDOUT] Checking if build backend supports build_editable: started
+     [STDOUT] Checking if build backend supports build_editable: finished with status 'done'
+     [STDOUT] Getting requirements to build editable: started
+     [STDOUT] Getting requirements to build editable: finished with status 'done'
+     [STDOUT] Preparing editable metadata (pyproject.toml): started
+     [STDOUT] Preparing editable metadata (pyproject.toml): finished with status 'done'
+     [STDOUT] Building wheels for collected packages: phoenix-core
+     [STDOUT] Building editable for phoenix-core (pyproject.toml): started
+     [STDOUT] Building editable for phoenix-core (pyproject.toml): finished with status 'done'
+     [STDOUT] Created wheel for phoenix-core: filename=phoenix_core-0.1.0-0.editable-py3-none-any.whl size=3632 sha256=83c7628276a5c787159c0bcab193e2cedbd94ed01573828c377e8671be833a5b
+     [STDOUT] Stored in directory: /tmp/pip-ephem-wheel-cache-xb4pwdu1/wheels/54/1b/b7/aa63e25c8f14f4f2ae7b04e6097bdecb770e455c5c1ee0a600
+     [STDOUT] Successfully built phoenix-core
+     [STDOUT] Installing collected packages: phoenix-core
+     [STDOUT] Successfully installed phoenix-core-0.1.0
+   ✅ 命令成功完成。
+
+================================================================================
+🚀 2025-08-06 11:10:49 - 步驟 4.5: 打印已安裝套件列表 (用於除錯)
+================================================================================
+   🔹 執行命令: uv pip list --python /app/.venv_gold/bin/python (於 /app)
+     [STDOUT] Package            Version     Editable project location
+     [STDOUT] ------------------ ----------- -------------------------
+     [STDOUT] aiofiles           24.1.0
+     [STDOUT] annotated-types    0.7.0
+     [STDOUT] anyio              4.9.0
+     [STDOUT] av                 15.0.0
+     [STDOUT] beautifulsoup4     4.13.4
+     [STDOUT] certifi            2025.8.3
+     [STDOUT] cffi               1.17.1
+     [STDOUT] charset-normalizer 3.4.2
+     [STDOUT] click              8.2.1
+     [STDOUT] coloredlogs        15.0.1
+     [STDOUT] ctranslate2        4.6.0
+     [STDOUT] curl-cffi          0.12.0
+     [STDOUT] duckdb             1.3.2
+     [STDOUT] fastapi            0.116.1
+     [STDOUT] faster-whisper     1.1.1
+     [STDOUT] ffmpeg-python      0.2.0
+     [STDOUT] filelock           3.18.0
+     [STDOUT] flatbuffers        25.2.10
+     [STDOUT] fredapi            0.5.2
+     [STDOUT] frozendict         2.4.6
+     [STDOUT] fsspec             2025.7.0
+     [STDOUT] future             1.0.0
+     [STDOUT] greenlet           3.2.3
+     [STDOUT] h11                0.16.0
+     [STDOUT] hf-xet             1.1.5
+     [STDOUT] huggingface-hub    0.34.3
+     [STDOUT] humanfriendly      10.0
+     [STDOUT] idna               3.10
+     [STDOUT] markdown-it-py     3.0.0
+     [STDOUT] mdurl              0.1.2--- LAUNCHER SCRIPT MAIN FUNCTION STARTED ---
+--- ABOUT TO PROBE ENVIRONMENT ---
+
+--------------------------------------------------------------------------------
+🚀 2025-08-06 11:10:49 - 環境探針 (Environment Probe)
+--------------------------------------------------------------------------------
+  - 啟動器版本: V1.1
+  - Python 版本: 3.12.11 (main, Jul 29 2025, 18:21:07) [GCC 13.3.0]
+  - Python 解釋器路徑: /app/.venv_gold/bin/python
+  - 作業系統: Linux-6.8.0-x86_64-with-glibc2.39
+  - 核心架構: x86_64
+  - 當前工作目錄: /app
+  - 腳本絕對路徑: /app/scripts/launch.py
+  - 推斷的專案根目錄: /app
+  - uv 版本: uv 0.8.3
+--------------------------------------------------------------------------------
+--- PROBE ENVIRONMENT FINISHED ---
+正在註冊路由: /transcription...
+正在註冊路由: /prometheus...
+✅ 普羅米修斯管線 (Prometheus Pipeline) 模組已成功加載並註冊路由。
+
+================================================================================
+🚀 2025-08-06 11:10:53 - 步驟 5: 啟動核心應用程式於 0.0.0.0:8080
+================================================================================
+INFO:     Started server process [5479]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+ERROR:    [Errno 98] error while attempting to bind on address ('0.0.0.0', 8080): [errno 98] address already in use
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+--- 開始自動探索模組 ---
+發現新模組: phoenix_core.modules.aicopilot，正在導入...
+發現新模組: phoenix_core.modules.backtesting，正在導入...
+發現新模組: phoenix_core.modules.dataprovider，正在導入...
+正在註冊路由: /data...
+發現新模組: phoenix_core.modules.log_streamer，正在導入...
+發現新模組: phoenix_core.modules.prometheus_pipeline，正在導入...
+發現新模組: phoenix_core.modules.status_api，正在導入...
+正在註冊路由: /api/v1/status...
+發現新模組: phoenix_core.modules.system_actions，正在導入...
+發現新模組: phoenix_core.modules.system_monitor，正在導入...
+正在註冊路由: /monitor...
+發現新模組: phoenix_core.modules.transcription，正在導入...
+發現新路由: 音訊轉錄 (Transcription)，正在掛載...
+發現新路由: Prometheus Pipeline，正在掛載...
+發現新路由: 數據提供者 (Data Provider)，正在掛載...
+發現新路由: Status，正在掛載...
+發現新路由: 系統監控 (System Monitor)，正在掛載...
+--- 模組加載流程結束 ---

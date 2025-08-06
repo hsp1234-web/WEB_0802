@@ -120,43 +120,42 @@ def run_button_clicked(b):
 
         print("✅ 程式碼已是最新版本。")
 
-        # 步驟 2: 啟動監督者
-        supervisor_script = repo_path / "scripts" / "supervisor.py"
+        # 步驟 2: 啟動監督者 (run.sh)
+        supervisor_script = repo_path / "run.sh"
         if not supervisor_script.exists():
-            print(f"❌ 錯誤：在下載的程式碼中找不到監督者腳本: {supervisor_script}")
+            with output_area:
+                print(f"❌ 錯誤：在下載的程式碼中找不到核心啟動腳本: {supervisor_script}")
             return
 
-        print("\n🔥 正在啟動後端服務... (輸出將顯示在下方)")
-        print("="*50)
+        # 賦予 run.sh 執行權限，這在 git clone 後是必要的
+        supervisor_script.chmod(0o755)
 
-        # 確保使用與 Colab 環境相同的 Python 解釋器
-        python_executable = sys.executable
-        supervisor_command = f"{python_executable} {supervisor_script}"
-
-        # 在背景執行緒中啟動 supervisor，避免阻塞 UI
-        # 注意：Colab 環境的複雜性可能影響此處的行為
-        # supervisor 的輸出會被導向到它自己的日誌檔案中
+        with output_area:
+            print("\n🔥 正在啟動後端服務...")
+            print("="*50)
+            print("   - 啟動腳本: run.sh")
+            print("   - 模式: 背景分離模式 (日誌將寫入檔案)")
 
         try:
-            # 我們在這裡只啟動它，因為它是一個持續運行的進程
-            # 我們不會等待它結束
+            # 我們以完全分離的方式在背景啟動 run.sh。
+            # 我們不捕獲它的輸出，讓它自己處理日誌記錄 (到 logs/ 目錄)。
+            # 這也避免了任何潛在的輸出管道阻塞問題。
             process = subprocess.Popen(
-                shlex.split(supervisor_command),
+                [str(supervisor_script)], # 使用列表形式傳遞命令更安全
                 cwd=str(repo_path),
-                stdout=subprocess.PIPE, # 仍然捕獲輸出以便顯示
-                stderr=subprocess.STDOUT,
-                text=True,
-                encoding='utf-8',
-                errors='replace'
+                stdout=subprocess.DEVNULL, # 將 stdout 丟棄
+                stderr=subprocess.DEVNULL, # 將 stderr 丟棄
+                start_new_session=True  # 在新 session 中啟動，與 Colab 主進程徹底分離
             )
-            print("✅ 中央監督者 (supervisor.py) 已在背景啟動。")
-            print(f"   - PID: {process.pid}")
-            print(f"   - API 伺服器日誌: {REPO_DIR}/logs/api_server.log")
-            print(f"   - 心跳工作者日誌: {REPO_DIR}/logs/heartbeat_worker.log")
-            print("\nℹ️ 您現在可以與後端服務進行互動了。")
+            with output_area:
+                print("\n✅ 後端監督者 (run.sh) 已在背景啟動。")
+                print(f"   - 監督者進程 PID: {process.pid}")
+                print(f"   - 要查看詳細日誌，請檢查 '{REPO_DIR}/logs/' 目錄下的檔案。")
+                print("\nℹ️ 後端服務正在初始化，請稍候片刻即可開始互動。")
 
         except Exception as e:
-            print(f"❌ 啟動 supervisor.py 時發生嚴重錯誤: {e}")
+            with output_area:
+                print(f"❌ 啟動 run.sh 時發生嚴重錯誤: {e}")
 
 
 # --- 組合並顯示 UI ---
