@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import asyncio
 from ...utils.logger import logger # 導入共享的、非阻塞的 logger
-from phoenix_core.modules.prometheus_pipeline.core.db.db_manager import DBManager
+from src.phoenix_core.modules.prometheus_pipeline.core.db.db_manager import DBManager
 # 假設我們有一個管線執行的主函式
 # from .pipelines.main_executor import run_pipeline_by_name
 
@@ -17,7 +17,7 @@ async def prometheus_worker_main_loop():
     # 這裡只是一個範例，展示如何初始化 DBManager 並使用它
     # 在真實的實現中，管線的執行會更複雜
     try:
-        from phoenix_core.kernel.settings import settings
+        from src.phoenix_core.kernel.settings import settings
         await logger.log("INFO", "普羅米修斯工人：開始初始化資料庫...", source="PrometheusWorker")
         # 初始化主資料庫
         db_manager_main = DBManager(settings.PROMETHEUS_PIPELINE.database.main_db_path)

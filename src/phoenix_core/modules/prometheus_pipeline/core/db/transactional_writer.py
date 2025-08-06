@@ -1,7 +1,7 @@
 import json
 import sqlite3
 from pathlib import Path
-from phoenix_core.kernel.settings import settings
+from src.phoenix_core.kernel.settings import settings
 
 
 class TransactionalWriter:
