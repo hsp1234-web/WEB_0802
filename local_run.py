@@ -12,31 +12,32 @@ from pathlib import Path
 import time
 
 # --- 設定 ---
-# 終極看門狗超時：如果 supervisor.py 在此時間內沒有自行退出，
+# 終極看門狗超時：如果 run.sh 在此時間內沒有自行退出，
 # local_run.py 將強制終止它和它的所有子進程。
-# 這個時間應該比 supervisor.py 內部的啟動超時更長。
-FINAL_WATCHDOG_TIMEOUT_SECONDS = 30
+# 60 秒對於後續執行來說是個合理的超時時間。
+FINAL_WATCHDOG_TIMEOUT_SECONDS = 60
 # 終極看門狗觸發時的退出碼
 WATCHDOG_EXIT_CODE = 99
 
 def main():
     """
-    啟動並監控中央監督者 (supervisor)，為其提供最終的超時保護。
+    啟動並監控由 run.sh 管理的後端服務，為其提供最終的超時保護。
     """
     project_root = Path(__file__).resolve().parent
-    supervisor_script = project_root / "scripts" / "supervisor.py"
+    run_script = project_root / "run.sh"
 
-    if not supervisor_script.exists():
-        print(f"❌ 錯誤：找不到監督者腳本: {supervisor_script}", file=sys.stderr)
+    if not run_script.exists():
+        print(f"❌ 錯誤：找不到核心啟動腳本: {run_script}", file=sys.stderr)
         sys.exit(1)
 
     print("="*80)
-    print("🎯 正在啟動後端服務 (最終看門狗模式)...")
-    print(f"   - 呼叫監督者: {supervisor_script}")
+    print("🎯 正在透過 'run.sh' 啟動後端服務 (最終看門狗模式)...")
+    print(f"   - 呼叫腳本: {run_script}")
     print(f"   - 終極看門狗超時: {FINAL_WATCHDOG_TIMEOUT_SECONDS} 秒")
     print("="*80)
 
-    command = [sys.executable, str(supervisor_script)]
+    # 現在我們只執行 run.sh，它負責處理所有環境設定和啟動邏輯
+    command = [str(run_script)]
 
     # 跨平台處理進程組
     # 在 Unix-like 系統上，我們創建一個新的進程組，以便可以一次性殺死 supervisor 和它所有的子進程。
