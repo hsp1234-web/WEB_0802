@@ -275,7 +275,11 @@ def run_report_generation_test(report_dir: Path):
     """執行報告生成腳本並驗證其輸出。"""
     print_header("步驟 3: 執行報告生成與驗證")
 
-    db_path = PROJECT_ROOT / "state.db"
+    # 遵循準則三：執行產物隔離原則
+    storage_dir = PROJECT_ROOT / "storage"
+    storage_dir.mkdir(exist_ok=True)
+    db_path = storage_dir / "state.db"
+
     report_script = PROJECT_ROOT / "run" / "report.py"
 
     # 步驟 3.1: 建立假的資料庫以供測試
@@ -335,7 +339,7 @@ def cleanup(report_dir: Path):
     # 清理臨時檔案
     files_to_clean = [
         PROJECT_ROOT / "src/phoenix_core/wolf.html",
-        PROJECT_ROOT / "state.db"
+        PROJECT_ROOT / "storage" / "state.db"  # 遵循準則三
     ]
     for file_path in files_to_clean:
         if file_path.exists():

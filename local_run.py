@@ -75,7 +75,7 @@ def main():
         while time.monotonic() - start_wait < WATCHDOG_TIMEOUT:
             # 檢查心跳 (這裡我們簡化為檢查 state.db 的存在與更新)
             # 注意：一個更健壯的實作會實際查詢資料庫
-            db_path = "state.db"
+            db_path = "storage/state.db"
             if os.path.exists(db_path):
                  # 這裡可以加入更複雜的檢查，例如讀取 status_updates 表
                 print("   [看門狗] ✅ 偵測到心跳信號 (資料庫存在)!")
@@ -110,7 +110,7 @@ def main():
         # --- 步驟 4: 執行報告生成器 ---
         print_header("執行報告生成器")
         # (這部分可以保持不變，或者也移到 launch.py 中作為一個可選步驟)
-        db_original_path = "state.db"
+        db_original_path = "storage/state.db"
         db_renamed_path = "logs.sqlite"
         if os.path.exists(db_original_path):
             shutil.move(db_original_path, db_renamed_path)

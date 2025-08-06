@@ -74,3 +74,6 @@ bin/
 
 # 測試執行器 (Test Runner) 虛擬環境
 .venv_test_runner/
+
+# 執行產物隔離目錄
+/storage/
