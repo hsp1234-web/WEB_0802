@@ -134,11 +134,11 @@ def main():
             print_header("步驟 2: 引導程序 (Bootstrap) - 確保 Pip 和 Wheel 存在")
             run_sync_command(["uv", "pip", "install", "--python", VENV_PYTHON, "-U", "pip", "wheel"])
 
-            print_header("步驟 3: 將當前專案套件化安裝到 venv 中")
-            run_sync_command([VENV_PIP, "install", "-e", "."], cwd=project_root)
-
-            print_header("步驟 4: 安裝專案依賴")
+            print_header("步驟 3: 安裝專案依賴")
             run_sync_command(["uv", "pip", "install", "--python", VENV_PYTHON, "-r", os.path.join(project_root, "requirements/base.txt")], cwd=project_root)
+
+            print_header("步驟 4: 將當前專案套件化安裝到 venv 中")
+            run_sync_command([VENV_PIP, "install", "-e", "."], cwd=project_root)
 
             print_header("步驟 4.5: 打印已安裝套件列表 (用於除錯)")
             run_sync_command(["uv", "pip", "list", "--python", VENV_PYTHON], cwd=project_root)
