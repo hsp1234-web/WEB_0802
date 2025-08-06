@@ -95,3 +95,76 @@
 *   **第三階段：文件更新**
     1.  在所有功能驗證通過後，更新 `CHANGEL.md` 和 `BUG.md`，將這次成功的重構經驗記錄下來。
     2.  將本計畫文件 (`REFACTOR_PLAN.md`) 也一併存檔，作為永久的技術決策記錄。
+
+---
+---
+
+## 5. V2.0 偵錯紀要：Heartbeat Worker 無聲啟動失敗問題
+
+在 V1.0 架構實施後，儘管 `supervisor.py` 的設計避免了主應用程式的生命週期問題，但新的問題浮現：`heartbeat_worker.py` 行程無法啟動，並且沒有留下任何錯誤日誌，此現象被稱為「無聲失敗」。以下是為解決此問題而進行的詳細偵錯歷程。
+
+### 5.1. 問題陳述
+
+執行 `python local_run.py` 後，`supervisor.py` 成功啟動，API 伺服器也正常運行，但 `logs/heartbeat_worker.log` 始終為空。這表示 `heartbeat_worker.py` 子行程在啟動後立即退出，且未能執行任何 Python 程式碼。
+
+### 5.2. 螺旋式偵錯歷程 (V2)
+
+1.  **假設 1：子行程輸出死鎖**
+    *   **現象**: `supervisor.py` 使用了 `subprocess.Popen`，但最初的實作是繼承父行程的 `stdout`/`stderr`，這可能導致管道阻塞。
+    *   **嘗試**: 修改 `supervisor.py`，將子行程的輸出明確地重導向到獨立的日誌檔案。
+    *   **結果**: 問題依舊。證明死鎖不是主要原因，但此修改提升了系統的健壯性。
+
+2.  **假設 2：Python 依賴缺失**
+    *   **現象**: API 伺服器曾因缺少 `uvicorn` 而失敗。`heartbeat_worker` 是否也缺少某個依賴？
+    *   **嘗試**: 執行 `pip install -r requirements/base.txt` 安裝所有基礎依賴。
+    *   **結果**: 問題依舊。`api_server` 正常啟動，但 `heartbeat_worker` 仍然失敗。
+
+3.  **假設 3：檔案權限問題**
+    *   **現象**: 子行程無法執行，可能是因為腳本檔案沒有執行權限。
+    *   **嘗試**: 執行 `ls -l scripts/`，發現 `heartbeat_worker.py` 確實缺少執行權限 (`x`)。使用 `chmod +x scripts/*.py` 添加權限。
+    *   **結果**: 問題依舊。這是一個令人困惑的結果，因為權限問題通常是無聲失敗的直接原因。
+
+4.  **假設 4：Python 腳本內部錯誤**
+    *   **現象**: 腳本可能在 `import` 階段就發生了無法被記錄的致命錯誤。
+    *   **嘗試**:
+        *   **A. 插入 `try...except` 區塊**: 修改 `heartbeat_worker.py`，用一個全域的 `try...except` 包圍所有 `import` 語句，並在 `except` 中將錯誤寫入一個獨立的偵錯日誌。
+        *   **B. 簡化腳本**: 將 `heartbeat_worker.py` 的內容完全替換為一行 `print("hello")`。
+    *   **結果**:
+        *   **A 的結果**: 偵錯日誌**未被建立**，表示錯誤發生在 `try...except` 區塊執行之前。
+        *   **B 的結果**: **成功！** 日誌中出現了 "hello"。這決定性地證明了問題**出在原始腳本的程式碼中**。
+
+5.  **假設 5：特定程式碼行導致的語法或執行錯誤**
+    *   **現象**: 在證明問題出在程式碼內部後，開始逐行還原程式碼並測試。
+    *   **嘗試**:
+        *   **A. 發現並修正語法錯誤**: 在一次 `replace_with_git_merge_diff` 操作中，意外地在 `heartbeat_worker.py` 中產生了重複的 `# -*- coding: utf-8 -*-` 宣告，這是一個會導致解釋器立即退出的致命語法錯誤。修正此問題。
+        *   **B. 發現並修正編碼錯誤**: 懷疑 `print` 中文導致 `UnicodeEncodeError`，因此在 `supervisor.py` 中開啟日誌檔案時，明確指定 `encoding="utf-8"`。
+    *   **結果**: 問題**依舊**。儘管這些都是真實存在的問題，但修復後 `heartbeat_worker` 仍然無法啟動。
+
+6.  **假設 6：Python 解釋器環境問題 (使用者建議)**
+    *   **現象**: 在所有程式碼層級的嘗試均告失敗後，採納了使用者提出的建議，使用 `pytest` 在隔離環境中進行測試。
+    *   **嘗試**: 建立 `tests/test_heartbeat_worker_standalone.py`，直接在測試中用 `subprocess.run` 呼叫 `heartbeat_worker.py`。
+    *   **結果**: **成功獲得明確的錯誤訊息！** `stderr` 中清楚地顯示：`FATAL: Failed to import DatabaseManager: No module named 'pytz'`。
+
+### 5.3. 最終結論與待辦事項
+
+`pytest` 的成功捕獲，揭示了問題的真正根源：**Python 環境不一致**。
+
+儘管主環境中已安裝 `pytz`，但 `supervisor.py` 在啟動子行程時，所使用的 Python 解釋器 (`sys.executable`) 是一個未安裝任何依賴的、更底層的系統 Python。這導致 `heartbeat_worker.py` 在 `import` 階段因找不到 `pytz` 而失敗。
+
+雖然嘗試將 `supervisor.py` 中的 `sys.executable` 改為 `python` (依賴 `PATH`)，但問題仍未解決，這表明沙箱環境中的 `PATH` 也指向了錯誤的 Python。
+
+**此問題已超出程式碼修改的範疇，屬於執行環境的配置問題。**
+
+**已完成的工作**:
+1.  **`supervisor.py` 重構**: 解決了死鎖問題，確保了日誌記錄的健壯性。
+2.  **`colab_runner.py` 建立**: 完成了一個功能完整的 Colab UI 引導加載器。
+3.  **程式碼清理**: 對 `heartbeat_worker.py` 進行了重構，使其邏輯更清晰。
+
+**交接事項 (給下一個助手)**:
+*   **核心任務**: 解決 `supervisor.py` 無法在正確的虛擬環境中啟動子行程的問題。
+*   **可能的解決方案**:
+    1.  **修改啟動命令**: 在 `supervisor.py` 中，將啟動子行程的命令修改為 `[sys.executable, "-m", "scripts.heartbeat_worker"]` 或類似的形式，嘗試使用模組化執行。
+    2.  **虛擬環境路徑**: 直接在 `supervisor.py` 中硬編碼或動態尋找正確的虛擬環境 Python 解釋器路徑來啟動子行程。
+    3.  **啟動器腳本**: 建立一個 shell 腳本 (`run.sh`)，該腳本首先 `source` 虛擬環境的 `activate` 指令，然後再執行 `python scripts/supervisor.py`。讓 `local_run.py` 改為執行此 `run.sh` 腳本。
+
+在解決此環境問題後，整個系統應能成功運行。

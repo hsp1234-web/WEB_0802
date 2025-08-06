@@ -5,56 +5,52 @@
 import sys
 import time
 import sqlite3
-from datetime import datetime
-import pytz
+from datetime import datetime, timezone
 from pathlib import Path
 
-# 將專案根目錄添加到 sys.path，以便能夠導入 phoenix_core
-# 假設此腳本是從專案根目錄執行的
-# 使用 Path(__file__).resolve().parents[1] 來獲取專案根目錄
-project_root = Path(__file__).resolve().parents[1]
-sys.path.append(str(project_root))
+def main():
+    """主執行函數"""
+    # --- Step 1: 設定路徑 ---
+    # 確保我們可以從 src 目錄導入模組
+    try:
+        project_root = Path(__file__).resolve().parents[1]
+        sys.path.append(str(project_root))
+        from src.phoenix_core.database import DatabaseManager
+    except ImportError as e:
+        # 如果發生導入錯誤，這是一個嚴重問題，直接印出到 stdout
+        # 因為日誌重導向可能已設定，所以直接寫入檔案可能更可靠
+        # 但在此最簡化版本中，我們先嘗試 print
+        print(f"FATAL: Failed to import DatabaseManager: {e}", file=sys.stderr)
+        sys.exit(1)
 
-from src.phoenix_core.database import DatabaseManager
+    # --- Step 2: 初始化 ---
+    worker_name = "heartbeat_worker"
+    interval_seconds = 5
+    heartbeat_key = "last_heartbeat"
 
-HEARTBEAT_INTERVAL_SECONDS = 5
-HEARTBEAT_KEY = "last_heartbeat"
-WORKER_NAME = "heartbeat_worker"
+    print(f"[{worker_name}] 心跳工作者啟動。每 {interval_seconds} 秒更新一次心跳。")
 
-def run_heartbeat():
-    """
-    執行心跳迴圈，定期更新資料庫中的狀態。
-    """
-    print(f"[{WORKER_NAME}] 心跳工作者啟動。每 {HEARTBEAT_INTERVAL_SECONDS} 秒更新一次心跳。")
+    try:
+        db_manager = DatabaseManager(db_path=str(project_root / "storage/state.db"))
+        db_manager._blocking_initialize()
+    except Exception as e:
+        print(f"FATAL: Failed to initialize DatabaseManager: {e}", file=sys.stderr)
+        sys.exit(1)
 
-    # 注意：由於這是一個獨立的腳本，我們直接實例化 DatabaseManager
-    # 或者，如果我們想要與主應用程式共享完全相同的實例和設定，
-    # 我們需要確保初始化方式一致。
-    # 在此，我們使用預設路徑，這與 `local_run.py` 的預期行為一致。
-    db_manager = DatabaseManager(db_path=str(project_root / "storage/state.db"))
-
-    # 執行一次初始化的檢查，確保資料表存在
-    # 在一個獨立的腳本中，我們需要手動調用它
-    # 使用 blocking_initialize 因為這是在啟動時，非同步事件迴圈外
-    db_manager._blocking_initialize()
-
+    # --- Step 3: 主迴圈 ---
     while True:
         try:
-            current_time_utc = datetime.now(pytz.utc)
-            timestamp_str = current_time_utc.isoformat()
-
-            # 使用 DatabaseManager 的 write_status_update 方法
-            # 這確保了日誌記錄和資料庫更新的邏輯是集中的
-            db_manager.write_status_update(HEARTBEAT_KEY, timestamp_str)
-
-            print(f"[{WORKER_NAME}] 心跳已更新: {timestamp_str}")
+            # 使用 timezone.utc 替代 pytz
+            timestamp_str = datetime.now(timezone.utc).isoformat()
+            db_manager.write_status_update(heartbeat_key, timestamp_str)
+            print(f"[{worker_name}] Heartbeat updated: {timestamp_str}")
 
         except sqlite3.Error as e:
-            print(f"[{WORKER_NAME}] 資料庫錯誤: {e}", file=sys.stderr)
+            print(f"[{worker_name}] Database error: {e}", file=sys.stderr)
         except Exception as e:
-            print(f"[{WORKER_NAME}] 發生未預期的錯誤: {e}", file=sys.stderr)
+            print(f"[{worker_name}] Unexpected error: {e}", file=sys.stderr)
 
-        time.sleep(HEARTBEAT_INTERVAL_SECONDS)
+        time.sleep(interval_seconds)
 
 if __name__ == "__main__":
-    run_heartbeat()
+    main()

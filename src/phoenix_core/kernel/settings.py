@@ -49,19 +49,24 @@ class Settings(BaseSettings):
     def load_from_json(cls, values):
         """從環境變數 PHOENIX_CONFIG_PATH 指定的 JSON 檔案載入設定"""
         config_path_str = os.environ.get("PHOENIX_CONFIG_PATH")
-        if config_path_str and Path(config_path_str).exists():
+        # 增加對 config_path_str 是否為 None 的檢查
+        if config_path_str:
             config_path = Path(config_path_str)
-            print(f"--- 正在從 JSON 設定檔載入: {config_path} ---")
-            with open(config_path, 'r', encoding='utf-8') as f:
-                json_config = json.load(f)
+            if config_path.exists():
+                print(f"--- 正在從 JSON 設定檔載入: {config_path} ---")
+                try:
+                    with open(config_path, 'r', encoding='utf-8') as f:
+                        json_config = json.load(f)
 
-            # 將 JSON 中的設定與現有值（可能來自環境變數）合併
-            # 這裡簡單地讓 JSON 覆蓋現有值
-            if 'log_settings' in json_config:
-                # pydantic v2 中，巢狀模型需要是字典
-                if 'LOG_SETTINGS' not in values:
-                    values['LOG_SETTINGS'] = {}
-                values['LOG_SETTINGS'].update(json_config['log_settings'])
+                    # 將 JSON 中的設定與現有值（可能來自環境變數）合併
+                    # 這裡簡單地讓 JSON 覆蓋現有值
+                    if 'log_settings' in json_config:
+                        # pydantic v2 中，巢狀模型需要是字典
+                        if 'LOG_SETTINGS' not in values:
+                            values['LOG_SETTINGS'] = {}
+                        values['LOG_SETTINGS'].update(json_config['log_settings'])
+                except (json.JSONDecodeError, IOError) as e:
+                    print(f"警告：無法讀取或解析 JSON 設定檔 {config_path}: {e}")
 
         return values
 
