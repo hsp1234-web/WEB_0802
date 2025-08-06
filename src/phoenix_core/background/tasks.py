@@ -24,7 +24,7 @@ async def periodic_heartbeat(interval_seconds: int = 5):
             current_time_str = datetime.now(timezone.utc).isoformat()
             # 使用 asyncio.to_thread 在異步事件循環中安全地調用阻塞的資料庫方法
             await asyncio.to_thread(db_manager.write_status_update, HEARTBEAT_KEY, current_time_str)
-            # logger.debug(f"心跳已更新: {current_time_str}")
+            logger.debug(f"HEARTBEAT PING: {current_time_str}")
         except Exception as e:
             logger.error(f"心跳任務發生錯誤: {e}", exc_info=True)
 

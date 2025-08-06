@@ -32,15 +32,14 @@ class DatabaseManager:
 
         self.thread_local = threading.local()
         self._initialized = True
-
-        # 確保資料庫所在的目錄存在
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
-
         # __init__ 不應包含任何阻塞 I/O 操作。
         # self._initialize_database() # 已被移動到 async_initialize
 
     def _blocking_initialize(self):
         """包含實際阻塞 I/O 的內部初始化方法。"""
+        # 步驟 1: 確保資料庫所在的目錄存在。這是執行 I/O 的正確位置。
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""

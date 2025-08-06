@@ -3,6 +3,7 @@
 
 import asyncio
 import pytest
+import logging
 from typing import List
 
 # 使用 pytest-asyncio 的 'asyncio' mode
@@ -43,12 +44,15 @@ async def test_pure_asyncio_background_task():
 from src.phoenix_core.background.tasks import periodic_heartbeat
 
 @pytest.mark.asyncio
-async def test_project_heartbeat_task_direct_execution(capsys):
+async def test_project_heartbeat_task_direct_execution(caplog):
     """
     測試二：專案心跳任務測試。
     目的：驗證我們專案的 `periodic_heartbeat` 函式在被 `pytest-asyncio` 直接調用時能否運行。
     這將問題範圍縮小到 Uvicorn vs. Pytest 的環境差異。
     """
+    # 設定日誌級別為 DEBUG，以便捕獲所有級別的日誌
+    caplog.set_level(logging.DEBUG)
+
     # 1. 創建並啟動心跳任務，使用較短的間隔以快速得到結果
     print("\n[Test 2] 正在創建專案心跳背景任務...")
     heartbeat_task = asyncio.create_task(periodic_heartbeat(interval_seconds=0.1))
@@ -65,10 +69,10 @@ async def test_project_heartbeat_task_direct_execution(capsys):
     except asyncio.CancelledError:
         print("[Test 2] 任務已成功取消。")
 
-    # 4. 捕獲並驗證 stdout 的輸出
-    captured = capsys.readouterr()
-    print("[Test 2] 驗證輸出...")
-    assert "HEARTBEAT TASK CREATED" in captured.out
-    assert "HEARTBEAT TASK STARTED" in captured.out
-    assert "HEARTBEAT PING" in captured.out
+    # 4. 使用 caplog 驗證日誌輸出
+    print("[Test 2] 驗證日誌輸出...")
+    # 驗證啟動訊息被正確記錄
+    assert "心跳任務已啟動" in caplog.text
+    # 驗證心跳 PING 訊息至少出現一次
+    assert "HEARTBEAT PING" in caplog.text
     print("[Test 2] 專案心跳任務測試成功！")
