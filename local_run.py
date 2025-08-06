@@ -54,37 +54,17 @@ def main():
             preexec_fn=preexec_fn
         )
 
-        # 等待 supervisor 進程結束，並設置超時
-        process.wait(timeout=FINAL_WATCHDOG_TIMEOUT_SECONDS)
+        # 等待 supervisor 進程結束。
+        # 對於本地運行，我們希望它一直運行直到我們手動停止它 (Ctrl+C)
+        # 或直到某個被監控的服務崩潰（此時 run.sh 會自行退出）。
+        process.wait()
         exit_code = process.returncode
 
         print("="*80)
         if exit_code == 0:
-            print("✅ 監督者已在預期內正常關閉。")
+            print("✅ 監督者已正常關閉。")
         else:
-            print(f"⚠️ 監督者已在預期內關閉，但回報了錯誤，返回碼: {exit_code}", file=sys.stderr)
-
-    except subprocess.TimeoutExpired:
-        print("="*80, file=sys.stderr)
-        print(f"🚨🚨🚨 終極看門狗觸發！🚨🚨🚨", file=sys.stderr)
-        print(f"監督者腳本 (supervisor.py) 在 {FINAL_WATCHDOG_TIMEOUT_SECONDS} 秒內未能完成任務。", file=sys.stderr)
-        print("這可能表示監督者本身或其子進程發生了嚴重掛起。", file=sys.stderr)
-        print("正在強制終止所有相關進程...", file=sys.stderr)
-
-        # 強制終止進程
-        if process:
-            if os.name != 'nt':
-                # 殺死整個進程組
-                try:
-                    os.killpg(os.getpgid(process.pid), signal.SIGKILL)
-                except ProcessLookupError:
-                    pass # 進程可能剛好結束
-            else:
-                # 在 Windows 上，終止主進程
-                process.kill()
-
-        print("強制終止完成。", file=sys.stderr)
-        exit_code = WATCHDOG_EXIT_CODE
+            print(f"⚠️ 監督者已關閉，但回報了錯誤，返回碼: {exit_code}", file=sys.stderr)
 
     except KeyboardInterrupt:
         print("\n🏁 收到中斷訊號，正在要求監督者優雅關閉...")
