@@ -6,6 +6,7 @@ import aiofiles
 
 from ...kernel.settings import settings
 from ...database import db_manager
+from ...utils.logger import logger
 
 # 根據 settings 來決定上傳目錄
 UPLOAD_DIR = Path(settings.APP_STORAGE) / "transcription_uploads"
@@ -21,6 +22,8 @@ async def create_transcription_task(file: UploadFile) -> str:
     Returns:
         新建立任務的 task_id。
     """
+    await logger.log("INFO", f"接收到新的檔案上傳請求: {file.filename}", source="TranscriptionAPI")
+
     task_id = str(uuid.uuid4())
     # Sanitize the filename to prevent security issues like directory traversal
     sanitized_filename = Path(file.filename).name

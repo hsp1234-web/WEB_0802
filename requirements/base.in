@@ -7,8 +7,7 @@ psutil
 sqlalchemy
 pyyaml
 aiofiles
-faster-whisper
-ffmpeg-python
+whisper-cpp-python
 python-multipart
 typer
 duckdb
