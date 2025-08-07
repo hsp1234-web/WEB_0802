@@ -42,6 +42,7 @@ class Settings(BaseSettings):
     APP_STORAGE: str = Field("./storage", description="應用程式的本地儲存路徑")
     LOG_SETTINGS: LogSettings = Field(default_factory=LogSettings)
     TRANSCRIPTION_MODEL_SIZE: str = Field("tiny", description="用於音訊轉錄的 Whisper 模型大小")
+    TRANSCRIPTION_WORKER_POLL_INTERVAL: int = Field(5, description="轉錄工人輪詢新任務的間隔（秒）")
     PROMETHEUS_PIPELINE: PrometheusPipelineSettings = Field(default_factory=PrometheusPipelineSettings)
 
     @model_validator(mode='before')

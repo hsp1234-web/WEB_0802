@@ -41,15 +41,19 @@ def main():
         # 初始化資料庫連接
         try:
             # 必須調用 async_initialize 而不是 initialize
+            await logger.log("INFO", "[DIAGNOSTIC] CoreWorker: 準備初始化資料庫...", source="CoreWorker")
             await db_manager.async_initialize()
-            await logger.log("INFO", "資料庫管理器初始化成功。", source="CoreWorker")
+            await logger.log("INFO", "[DIAGNOSTIC] 資料庫管理器初始化成功。", source="CoreWorker")
         except Exception as e:
             # 使用 print 是因為 logger 可能還沒完全初始化
-            print(f"CRITICAL: 資料庫初始化失敗，背景工作無法啟動: {e}", file=sys.stderr)
+            await logger.log("CRITICAL", f"資料庫初始化失敗，背景工作無法啟動: {e}", source="CoreWorker", exc_info=True)
             return # 無法繼續
 
         # 啟動所有在 background/worker.py 中定義的背景任務
+        await logger.log("INFO", "[DIAGNOSTIC] CoreWorker: 準備啟動所有背景任務...", source="CoreWorker")
         start_background_tasks()
+        await logger.log("INFO", "[DIAGNOSTIC] CoreWorker: start_background_tasks() 函式已返回。", source="CoreWorker")
+
 
         await logger.log("SUCCESS", "所有背景任務已啟動並在事件循環中運行。", source="CoreWorker")
 

@@ -114,7 +114,8 @@ async def transcription_worker_main_loop():
     while True:
         try:
             await process_single_task()
-            await asyncio.sleep(settings.get("TRANSCRIPTION_WORKER_POLL_INTERVAL", 5))
+            # V68 修復：使用 Pydantic 的屬性存取，而不是 .get() 方法
+            await asyncio.sleep(settings.TRANSCRIPTION_WORKER_POLL_INTERVAL)
         except Exception as e:
             error_message = traceback.format_exc()
             await logger.log("CRITICAL", f"轉錄工人在主循環中發生無法恢復的嚴重錯誤: {e}\n{error_message}", source="TranscriptionWorker")

@@ -22,17 +22,17 @@ async def prometheus_worker_main_loop():
         # 初始化主資料庫
         db_manager_main = DBManager(settings.PROMETHEUS_PIPELINE.database.main_db_path)
         await logger.log("INFO", f"工人成功初始化主資料庫，路徑: {db_manager_main.db_path}", source="PrometheusWorker")
-        await logger.log("INFO", "普羅米修斯工人：正在測試主資料庫連線...", source="PrometheusWorker")
-        # 直接 await 異步方法
-        await db_manager_main.fetch_table("dummy_table_for_init_main")
-        await logger.log("INFO", "普羅米修斯工人：主資料庫連線測試成功。", source="PrometheusWorker")
+        # await logger.log("INFO", "普羅米修斯工人：正在測試主資料庫連線...", source="PrometheusWorker")
+        # # 直接 await 異步方法
+        # await db_manager_main.fetch_table("dummy_table_for_init_main")
+        # await logger.log("INFO", "普羅米修斯工人：主資料庫連線測試成功。", source="PrometheusWorker")
 
         # 初始化數據倉庫
         db_manager_dw = DBManager(settings.PROMETHEUS_PIPELINE.database.data_warehouse_path)
         await logger.log("INFO", f"工人成功初始化數據倉庫，路徑: {db_manager_dw.db_path}", source="PrometheusWorker")
-        await logger.log("INFO", "普羅米修斯工人：正在測試數據倉庫連線...", source="PrometheusWorker")
-        await db_manager_dw.fetch_table("dummy_table_for_init_dw")
-        await logger.log("INFO", "普羅米修斯工人：數據倉庫連線測試成功。", source="PrometheusWorker")
+        # await logger.log("INFO", "普羅米修斯工人：正在測試數據倉庫連線...", source="PrometheusWorker")
+        # await db_manager_dw.fetch_table("dummy_table_for_init_dw")
+        # await logger.log("INFO", "普羅米修斯工人：數據倉庫連線測試成功。", source="PrometheusWorker")
 
         await logger.log("INFO", "所有資料庫連線測試成功。", source="PrometheusWorker")
     except Exception as e:

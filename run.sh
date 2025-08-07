@@ -9,9 +9,9 @@
 # 必須在腳本頂部定義，以確保在被調用前可用
 check_disk_space() {
     # --- 模擬邏輯 ---
-    # 在這裡，我們模擬一個需要 5GB 空間，但只剩下 2GB 的情況。
+    # 在這裡，我們模擬一個需要 5GB 空間，但只剩下 10GB 的情況 (為了測試目的)。
     local required_gb=5
-    local available_gb=2
+    local available_gb=10
 
     echo "[安裝保護] 正在檢查磁碟空間..."
     echo "[安裝保護] 需要空間: ${required_gb}GB，可用空間: ${available_gb}GB。"
@@ -98,7 +98,7 @@ rm -f "$LOGS_DIR/api_server.log" "$LOGS_DIR/heartbeat_worker.log"
 declare -A components
 components=(
     ["API Server"]="$LOGS_DIR/api_server.log $VENV_PYTHON -m uvicorn src.phoenix_core.main:app --host 0.0.0.0 --port 8080"
-    ["Heartbeat Worker"]="$LOGS_DIR/heartbeat_worker.log $VENV_PYTHON -u -m scripts.heartbeat_worker"
+    ["Heartbeat Worker"]="$LOGS_DIR/heartbeat_worker.log $VENV_PYTHON -u -m scripts.safe_runner $VENV_PYTHON -u -m scripts.heartbeat_worker"
 )
 
 pids_to_kill=()

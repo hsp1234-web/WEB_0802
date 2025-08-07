@@ -19,11 +19,14 @@ def start_background_tasks():
     # 使用 asyncio.create_task 來安排協程在事件循環中運行
     # 這是一個非阻塞操作
     # --- 恢復所有任務 ---
+    logger.info("[DIAGNOSTIC] 提交 'periodic_heartbeat' 任務...")
     asyncio.create_task(periodic_heartbeat())
+    logger.info("[DIAGNOSTIC] 提交 'transcription_worker_main_loop' 任務...")
     asyncio.create_task(transcription_worker_main_loop())
+    logger.info("[DIAGNOSTIC] 提交 'prometheus_worker_main_loop' 任務...")
     asyncio.create_task(prometheus_worker_main_loop())
 
-    logger.info("所有背景任務已成功提交至事件循環。")
+    logger.info("[DIAGNOSTIC] 所有背景任務已成功提交至事件循環。")
 
 # 在未來，這裡可以添加停止或管理任務的函式
 # def stop_background_tasks():
