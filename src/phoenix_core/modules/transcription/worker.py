@@ -47,7 +47,7 @@ async def _update_task_status(task_id, status, message=None):
 async def process_single_task():
     """
     完整處理一個轉錄任務的流程：領取、處理、更新結果。
-    *** 終極簡化模式：強制純 CPU ***
+    透過非阻塞方式加載模型，避免凍結事件循環。
     """
     task_id = await _get_pending_task()
     if not task_id:
@@ -61,26 +61,37 @@ async def process_single_task():
         # 1. 延遲導入 Whisper
         _lazy_import_whisper()
 
-        # 2. 強制使用最基礎的純 CPU 模式
+        # 2. 設定模型參數 (強制CPU模式以確保穩定性)
         device = "cpu"
         compute_type = "int8"
         model_size = settings.TRANSCRIPTION_MODEL_SIZE
 
-        await logger.log("INFO", f"正在為任務 {task_id} 載入 Whisper 模型 '{model_size}' (終極強制 CPU 模式)", source="TranscriptionWorker")
-        model = WhisperModel(
-            model_size,
-            device=device,
-            compute_type=compute_type
-        )
+        await logger.log("INFO", f"正在為任務 {task_id} 準備非阻塞加載 Whisper 模型 '{model_size}'", source="TranscriptionWorker")
 
-        # 3. 從資料庫獲取檔案路徑
+        # 3. 非阻塞地加載模型
+        # 這一步是關鍵：我們將同步的、可能耗時長的模型加載操作，
+        # 放到一個獨立的線程中執行，以避免阻塞 asyncio 的主事件循環。
+        loop = asyncio.get_running_loop()
+        model = await loop.run_in_executor(
+            None,  # 使用默認的線程池
+            lambda: WhisperModel(
+                model_size,
+                device=device,
+                compute_type=compute_type
+            )
+        )
+        await logger.log("INFO", f"模型 '{model_size}' 已成功在背景線程加載完畢。", source="TranscriptionWorker")
+
+
+        # 4. 從資料庫獲取檔案路徑
         path_query = "SELECT original_filepath FROM transcription_tasks WHERE id = ?"
         result = await db_manager.fetch_one(path_query, (task_id,))
         if not result:
             raise FileNotFoundError(f"在資料庫中找不到任務 {task_id} 的檔案路徑。")
         audio_path = result['original_filepath']
 
-        # 4. 執行轉錄
+        # 5. 執行轉錄
+        # 同樣，transcribe 方法也是一個阻塞操作，我們也需要將它放到線程池中執行。
         loop = asyncio.get_running_loop()
         segments, _info = await loop.run_in_executor(
             None,
@@ -91,7 +102,7 @@ async def process_single_task():
 
         await logger.log("SUCCESS", f"任務 {task_id} 轉錄完成。", source="TranscriptionWorker")
 
-        # 5. 更新最終結果
+        # 6. 更新最終結果
         await _update_task_status(task_id, "completed", message=full_transcript)
 
     except Exception as e:
