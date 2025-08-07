@@ -130,6 +130,46 @@ async def create_transcription_task(background_tasks: BackgroundTasks, file: Upl
         "task_id": task_id
     }
 
+@app.post("/api/v1/run-etl", status_code=202)
+async def run_prometheus_etl(background_tasks: BackgroundTasks):
+    """
+    建立一個任務來運行 Prometheus ETL 管線。
+    """
+    log_message("API：收到運行 Prometheus ETL 管線的請求。")
+
+    task_id = str(uuid.uuid4())
+
+    # 在此範例中，我們假設原始資料位於一個預定義的位置。
+    source_data_directory = "storage/prometheus/raw_data"
+
+    task_data = {
+        "task_id": task_id,
+        "type": "prometheus_etl",
+        "source_dir": source_data_directory,
+        "created_at": time.time()
+    }
+    # 為此任務類型使用一個獨特的名稱
+    task_filepath = PENDING_DIR / f"prometheus_etl_{task_id}.json"
+
+    try:
+        with open(task_filepath, 'w', encoding='utf-8') as f:
+            json.dump(task_data, f, indent=4)
+        log_message(f"API：Prometheus ETL 任務已建立: {task_filepath.name}")
+    except Exception as e:
+        log_message(f"API 錯誤：建立 Prometheus ETL 任務檔案失敗: {e}")
+        return {"status": "error", "message": "Failed to create ETL task file."}
+
+    # 在背景啟動 prometheus 管線工具
+    prometheus_tool_path = Path("tools/prometheus_pipeline_tool.py")
+    background_tasks.add_task(run_tool_process, prometheus_tool_path, "prometheus_pipeline_tool")
+    log_message(f"API：已排程背景任務以運行 prometheus_pipeline_tool。")
+
+    return {
+        "status": "success",
+        "message": "Prometheus ETL task created and scheduled successfully",
+        "task_id": task_id
+    }
+
 # --- 主進入點 ---
 def main():
     """
