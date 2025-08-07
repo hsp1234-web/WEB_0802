@@ -1,0 +1,2 @@
+[2025-08-07 14:41:24][DataProviderTool] --- 資料提供工具已啟動 ---
+[2025-08-07 14:41:24][DataProviderTool] ❌ 錯誤：請提供一個股票代碼作為參數。例如: python data_provider_tool.py TSM

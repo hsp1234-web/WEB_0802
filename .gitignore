@@ -78,5 +78,6 @@ bin/
 # 執行產物隔離目錄
 /storage/
 
-# 語音轉錄工具的虛擬環境
+# -- 工具專用虛擬環境 --
 tools/.venv_transcription/
+tools/.venv_dataprovider/
