@@ -3,14 +3,28 @@
 # 說明: 遵循「鳳凰之心協定」的統一服務啟動腳本。
 #       使用 'uv' 工具管理虛擬環境，並作為監督者啟動和管理所有服務。
 
-# --- 設定 ---
-SOURCE_DIR=$(dirname "$(readlink -f "$0")")
-VENV_PATH="./.venv"
-REQUIREMENTS_PATH="requirements/base.txt"
-VENV_PYTHON="$VENV_PATH/bin/python"
-LOGS_DIR="./logs"
-
 # --- 函數 ---
+
+# 磁碟空間檢查函數
+# 必須在腳本頂部定義，以確保在被調用前可用
+check_disk_space() {
+    # --- 模擬邏輯 ---
+    # 在這裡，我們模擬一個需要 5GB 空間，但只剩下 2GB 的情況。
+    local required_gb=5
+    local available_gb=2
+
+    echo "[安裝保護] 正在檢查磁碟空間..."
+    echo "[安裝保護] 需要空間: ${required_gb}GB，可用空間: ${available_gb}GB。"
+
+    if [ "$available_gb" -lt "$required_gb" ]; then
+        echo "❌ 錯誤：磁碟空間不足！" >&2
+        echo "   - 需要至少 ${required_gb}GB 空間來安裝依賴，但只剩下 ${available_gb}GB。" >&2
+        echo "   - 請清理磁碟空間後再試。" >&2
+        exit 1 # 以錯誤碼退出
+    fi
+
+    echo "[安裝保護] ✅ 磁碟空間充足。"
+}
 
 # 清理函數，用於在腳本退出時終止所有背景子進程
 cleanup() {
@@ -28,6 +42,15 @@ cleanup() {
     echo "[run.sh] 清理完成。"
     exit 0
 }
+
+
+# --- 設定 ---
+SOURCE_DIR=$(dirname "$(readlink -f "$0")")
+VENV_PATH="./.venv"
+REQUIREMENTS_PATH="requirements/base.txt"
+VENV_PYTHON="$VENV_PATH/bin/python"
+LOGS_DIR="./logs"
+
 
 # --- 主邏輯 ---
 
@@ -54,6 +77,9 @@ else
 fi
 
 echo "📦 正在使用 'uv pip install' 同步依賴..."
+# 在安裝前執行磁碟空間檢查
+check_disk_space
+
 uv pip install -r "$REQUIREMENTS_PATH" > /dev/null # 將輸出重導向，保持介面乾淨
 if [ $? -ne 0 ]; then
     echo "❌ 錯誤：使用 'uv pip install' 安裝依賴失敗。"
@@ -93,22 +119,8 @@ done
 
 echo "✅ 所有服務已在背景啟動。監督者正在監控中... (按 Ctrl+C 結束)"
 
-# --- 步驟 3: 啟動監督者心跳 ---
-echo "[run.sh] 正在啟動監督者心跳迴圈..."
-(
-    # 這個迴圈是監督者 (run.sh) 自己的心跳。
-    # 它會定期更新一個檔案，讓外部的看門狗 (local_run.py) 知道它還活著。
-    while true; do
-        echo "supervisor_tick_$(date +%s)" > "$LOGS_DIR/supervisor_heartbeat.log"
-        sleep 5
-    done
-) &
-heartbeat_pid=$!
-pids_to_kill+=($heartbeat_pid)
-echo "[run.sh] 監督者心跳已啟動，PID: $heartbeat_pid"
-
-# --- 步驟 4: 監控 ---
-# wait -n 等待任何一個背景進程結束（API 服務、Worker 或心跳本身）
+# --- 步驟 3: 監控 ---
+# wait -n 等待任何一個背景進程結束
 # $! 包含了所有背景進程的 PID
 wait -n "${pids_to_kill[@]}"
 

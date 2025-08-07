@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
-# 檔案: local_run.py (V6.0 - 鳳凰守護神模式)
-# 說明: 作為外部看門狗，啟動並監控 `run.sh` 監督者。
-#       它不信任監督者內部的邏輯，只透過監聽檔案系統上的
-#       心跳信號來判斷系統是否存活。
+# 檔案: local_run.py (V5.0 - 最終看門狗模式)
+# 說明: 本地開發與測試的統一啟動入口。
+#       其職責是呼叫中央監督者腳本 (supervisor.py)，
+#       並作為最後一道防線，對其執行時間進行監控。
 
 import sys
 import subprocess
@@ -10,146 +10,88 @@ import os
 import signal
 from pathlib import Path
 import time
-import sys
-import threading
 
 # --- 設定 ---
-MAX_HEARTBEAT_SILENCE = 15  # 監督者心跳最長靜默時間 (秒)
-INITIAL_GRACE_PERIOD = 20 # 啟動初期給予的寬限時間 (秒)
-HEARTBEAT_CHECK_INTERVAL = 2 # 檢查心跳的間隔時間 (秒)
-ABSOLUTE_MAX_RUNTIME = 60 # 整個程式最長運作時間 (秒)
+# 終極看門狗超時：如果 run.sh 在此時間內沒有自行退出，
+# local_run.py 將強制終止它和它的所有子進程。
+# 60 秒對於後續執行來說是個合理的超時時間。
+FINAL_WATCHDOG_TIMEOUT_SECONDS = 60
+# 終極看門狗觸發時的退出碼
+WATCHDOG_EXIT_CODE = 99
 
-def absolute_timeout_handler(process_to_kill):
+def main():
     """
-    最終防線。當絕對超時到達時由定時器觸發。
-    """
-    print("="*80, file=sys.stderr)
-    print(f"🚨 絕對超時！程式已運行超過 {ABSOLUTE_MAX_RUNTIME} 秒。", file=sys.stderr)
-    print("   - 這可能是由於未預期的掛起或死結。", file=sys.stderr)
-    print("   - 正在強制終結所有相關進程...", file=sys.stderr)
-    print("="*80, file=sys.stderr)
-    if process_to_kill:
-        kill_process_group(process_to_kill)
-    # 使用 os._exit 強制退出，因為 sys.exit() 可能會被 try/except 捕捉
-    os._exit(1)
-
-def phoenix_guardian(process_container):
-    """
-    鳳凰守護神的主函數。
-    啟動 run.sh，然後變成一個無情的看門狗，監聽其心跳。
+    啟動並監控由 run.sh 管理的後端服務，為其提供最終的超時保護。
     """
     project_root = Path(__file__).resolve().parent
     run_script = project_root / "run.sh"
-    heartbeat_file = project_root / "logs/supervisor_heartbeat.log"
 
     if not run_script.exists():
-        print(f"❌ 致命錯誤：找不到監督者腳本: {run_script}", file=sys.stderr)
+        print(f"❌ 錯誤：找不到核心啟動腳本: {run_script}", file=sys.stderr)
         sys.exit(1)
 
-    # 清理舊的心跳記錄，避免使用過時的檔案
-    if heartbeat_file.exists():
-        heartbeat_file.unlink()
-
     print("="*80)
-    print("🔥 鳳凰守護神已啟動 🔥")
-    print(f"   - 監控對象: {run_script}")
-    print(f"   - 心跳檔案: {heartbeat_file}")
-    print(f"   - 最大靜默時間: {MAX_HEARTBEAT_SILENCE} 秒")
+    print("🎯 正在透過 'run.sh' 啟動後端服務 (最終看門狗模式)...")
+    print(f"   - 呼叫腳本: {run_script}")
+    print(f"   - 終極看門狗超時: {FINAL_WATCHDOG_TIMEOUT_SECONDS} 秒")
     print("="*80)
 
-    # 使用 os.setsid (在 Unix-like 系統上) 來建立一個新的進程組。
-    # 這使得我們可以殺死 run.sh 和它啟動的所有子進程，無一能逃。
-    preexec_fn = os.setsid if os.name != 'nt' else None
+    # 現在我們只執行 run.sh，它負責處理所有環境設定和啟動邏輯
+    command = [str(run_script)]
 
+    # 跨平台處理進程組
+    # 在 Unix-like 系統上，我們創建一個新的進程組，以便可以一次性殺死 supervisor 和它所有的子進程。
+    preexec_fn = None
+    if os.name != 'nt':
+        preexec_fn = os.setsid
+
+    process = None
+    exit_code = 0
     try:
         process = subprocess.Popen(
-            [str(run_script)],
+            command,
             cwd=project_root,
             preexec_fn=preexec_fn
         )
-        process_container.append(process)
-    except Exception as e:
-        print(f"❌ 致命錯誤：無法啟動監督者 'run.sh': {e}", file=sys.stderr)
-        sys.exit(1)
 
+        # 等待 supervisor 進程結束。
+        # 對於本地運行，我們希望它一直運行直到我們手動停止它 (Ctrl+C)
+        # 或直到某個被監控的服務崩潰（此時 run.sh 會自行退出）。
+        process.wait()
+        exit_code = process.returncode
 
-    print(f"⏳ 監督者已啟動 (PID: {process.pid})。進入 {INITIAL_GRACE_PERIOD} 秒寬限期...")
-    time.sleep(INITIAL_GRACE_PERIOD)
-    print("✅ 寬限期結束，開始監聽心跳...")
-
-    while True:
-        # 檢查監督者進程是否已經自行退出
-        if process.poll() is not None:
-            return_code = process.returncode
-            if return_code == 0:
-                print("✅ 監督者已自行正常關閉。守護神任務完成。")
-            else:
-                print(f"⚠️ 監督者回報錯誤並已關閉 (返回碼: {return_code})。守護神任務結束。", file=sys.stderr)
-            sys.exit(return_code)
-
-        # 檢查心跳檔案是否存在
-        if not heartbeat_file.exists():
-            print(f"🚨 看門狗觸發！心跳檔案遺失。假定監督者已崩潰。", file=sys.stderr)
-            kill_process_group(process)
-            sys.exit(1)
-
-        # 檢查心跳是否過期
-        try:
-            last_modified = heartbeat_file.stat().st_mtime
-            time_since_last_beat = time.time() - last_modified
-
-            if time_since_last_beat > MAX_HEARTBEAT_SILENCE:
-                print(f"🚨 看門狗觸發！監督者心跳已停止超過 {MAX_HEARTBEAT_SILENCE} 秒。", file=sys.stderr)
-                print("   - 最後心跳時間: " + time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(last_modified)), file=sys.stderr)
-                print("   - 當前時間:     " + time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time())), file=sys.stderr)
-                kill_process_group(process)
-                sys.exit(1)
-            else:
-                pass
-
-        except FileNotFoundError:
-            print(f"🚨 看門狗觸發！心跳檔案在檢查期間消失。", file=sys.stderr)
-            kill_process_group(process)
-            sys.exit(1)
-
-        time.sleep(HEARTBEAT_CHECK_INTERVAL)
-
-def kill_process_group(process):
-    """
-    使用 os.killpg 終結整個進程組。
-    """
-    if os.name != 'nt' and process:
-        try:
-            pgid = os.getpgid(process.pid)
-            print(f"   - 正在終結進程組 PGID: {pgid}", file=sys.stderr)
-            os.killpg(pgid, signal.SIGKILL)
-            print("   - 已發送 SIGKILL 信號。", file=sys.stderr)
-        except ProcessLookupError:
-            print("   - 警告：嘗試終結時，進程組已不存在。", file=sys.stderr)
-        except Exception as e:
-            print(f"   - 錯誤：終結進程組時發生意外：{e}", file=sys.stderr)
-    elif process:
-        print("   - 正在終結主進程 (Windows)", file=sys.stderr)
-        process.kill()
-
-if __name__ == "__main__":
-    process_container = []
-
-    timeout_timer = threading.Timer(ABSOLUTE_MAX_RUNTIME, lambda: absolute_timeout_handler(process_container[0] if process_container else None))
-    timeout_timer.daemon = True
-    timeout_timer.start()
-
-    try:
-        phoenix_guardian(process_container)
+        print("="*80)
+        if exit_code == 0:
+            print("✅ 監督者已正常關閉。")
+        else:
+            print(f"⚠️ 監督者已關閉，但回報了錯誤，返回碼: {exit_code}", file=sys.stderr)
 
     except KeyboardInterrupt:
-        print("\n🚫 收到使用者中斷 (Ctrl+C)。守護神正在關閉...")
-        sys.exit(0)
-    except SystemExit as e:
-        sys.exit(e.code)
+        print("\n🏁 收到中斷訊號，正在要求監督者優雅關閉...")
+        # supervisor.py 的 finally 區塊會處理清理工作
+        if process:
+            # 等待 supervisor 自行處理
+            try:
+                process.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                print("監督者未能及時關閉，強制終止...", file=sys.stderr)
+                process.kill()
+        print("本地運行流程已終止。")
+        exit_code = 1
+
     except Exception as e:
-        print(f"❌ 鳳凰守護神遭遇未預期的致命錯誤: {e}", file=sys.stderr)
-        sys.exit(1)
+        print(f"❌ 執行 local_run.py 時發生未預期的錯誤: {e}", file=sys.stderr)
+        exit_code = 1
+
     finally:
-        if timeout_timer.is_alive():
-            timeout_timer.cancel()
+        # 確保進程在任何情況下都被處理
+        if process and process.poll() is None:
+            print("[local_run] 警告：在退出時，監督者進程仍在運行。強制終止。")
+            process.kill()
+
+    print("="*80)
+    print("🏁 本地運行流程結束。")
+    sys.exit(exit_code)
+
+if __name__ == "__main__":
+    main()

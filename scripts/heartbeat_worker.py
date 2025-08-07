@@ -1,56 +1,79 @@
 # -*- coding: utf-8 -*-
 # 檔案: scripts/heartbeat_worker.py
-# 說明: 一個獨立的背景工作者，專門負責向資料庫寫入心跳訊號。
+# 說明: 核心背景任務管理器。
+#       這是所有非 API 服務的唯一入口點。它啟動一個 asyncio 事件循環，
+#       並在其中運行所有必要的背景任務，例如：
+#       - 定期心跳
+#       - 音訊轉錄任務輪詢
+#       - Prometheus 指標抓取
+#       等等。
 
+import asyncio
 import sys
-import time
-import sqlite3
-from datetime import datetime, timezone
 from pathlib import Path
 
 def main():
-    """主執行函數"""
-    # --- Step 1: 設定路徑 ---
-    # 確保我們可以從 src 目錄導入模組
+    """
+    主執行函數：設定路徑，初始化任務，並永久運行事件循環。
+    """
+    # --- 步驟 1: 設定路徑 ---
+    # 確保我們可以從 src 目錄導入模組。
+    # 這是至關重要的一步，確保所有子模組都能被正確找到。
+    project_root = Path(__file__).resolve().parents[1]
+    if str(project_root) not in sys.path:
+        sys.path.insert(0, str(project_root))
+
+    # --- 步驟 2: 導入核心服務 ---
+    # 在設定好路徑後，才能安全地導入我們的模組。
     try:
-        project_root = Path(__file__).resolve().parents[1]
-        sys.path.append(str(project_root))
-        from src.phoenix_core.database import DatabaseManager
+        from src.phoenix_core.background.worker import start_background_tasks
+        from src.phoenix_core.database import db_manager
+        from src.phoenix_core.utils.logger import logger
     except ImportError as e:
-        # 如果發生導入錯誤，這是一個嚴重問題，直接印出到 stdout
-        # 因為日誌重導向可能已設定，所以直接寫入檔案可能更可靠
-        # 但在此最簡化版本中，我們先嘗試 print
-        print(f"FATAL: Failed to import DatabaseManager: {e}", file=sys.stderr)
+        # 如果這裡發生錯誤，說明基礎結構有問題，直接退出。
+        print(f"FATAL: 核心模組導入失敗: {e}", file=sys.stderr)
         sys.exit(1)
 
-    # --- Step 2: 初始化 ---
-    worker_name = "heartbeat_worker"
-    interval_seconds = 5
-    heartbeat_key = "last_heartbeat"
+    # --- 步驟 3: 初始化並運行事件循環 ---
+    print("核心背景任務管理器啟動...")
 
-    print(f"[{worker_name}] 心跳工作者啟動。每 {interval_seconds} 秒更新一次心跳。")
+    async def run_worker():
+        # 初始化資料庫連接
+        try:
+            # 必須調用 async_initialize 而不是 initialize
+            await db_manager.async_initialize()
+            await logger.log("INFO", "資料庫管理器初始化成功。", source="CoreWorker")
+        except Exception as e:
+            # 使用 print 是因為 logger 可能還沒完全初始化
+            print(f"CRITICAL: 資料庫初始化失敗，背景工作無法啟動: {e}", file=sys.stderr)
+            return # 無法繼續
+
+        # 啟動所有在 background/worker.py 中定義的背景任務
+        start_background_tasks()
+
+        await logger.log("SUCCESS", "所有背景任務已啟動並在事件循環中運行。", source="CoreWorker")
+
+        # 保持事件循環永久運行
+        # 我們可以加入一個 dummy future 來等待，這樣可以捕獲 KeyboardInterrupt
+        try:
+            await asyncio.Future()
+        except asyncio.CancelledError:
+            await logger.log("INFO", "背景任務管理器收到取消訊號。", source="CoreWorker")
+        finally:
+            # db_manager 沒有 close() 方法，但有 close_connection()
+            # 在這個上下文中，我們不需要手動關閉，因為它是 thread-local 的
+            # 並且進程結束時會自動清理。
+            await logger.log("INFO", "背景任務管理器正在關閉。", source="CoreWorker")
+
 
     try:
-        db_manager = DatabaseManager(db_path=str(project_root / "storage/state.db"))
-        db_manager._blocking_initialize()
+        asyncio.run(run_worker())
+    except KeyboardInterrupt:
+        print("\n收到使用者中斷 (Ctrl+C)。正在關閉背景任務管理器...")
     except Exception as e:
-        print(f"FATAL: Failed to initialize DatabaseManager: {e}", file=sys.stderr)
+        # 捕獲任何未預料的頂層錯誤
+        print(f"FATAL: 背景任務管理器遭遇無法恢復的錯誤: {e}", file=sys.stderr)
         sys.exit(1)
-
-    # --- Step 3: 主迴圈 ---
-    while True:
-        try:
-            # 使用 timezone.utc 替代 pytz
-            timestamp_str = datetime.now(timezone.utc).isoformat()
-            db_manager.write_status_update(heartbeat_key, timestamp_str)
-            print(f"[{worker_name}] Heartbeat updated: {timestamp_str}")
-
-        except sqlite3.Error as e:
-            print(f"[{worker_name}] Database error: {e}", file=sys.stderr)
-        except Exception as e:
-            print(f"[{worker_name}] Unexpected error: {e}", file=sys.stderr)
-
-        time.sleep(interval_seconds)
 
 if __name__ == "__main__":
     main()
