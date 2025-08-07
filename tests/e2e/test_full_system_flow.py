@@ -27,6 +27,19 @@ print("[E2E Setup] 模組預加載完成。")
 # 創建一個 TestClient 實例，這個實例將在所有 E2E 測試中共用。
 client = TestClient(app)
 
+@pytest.fixture(scope="module", autouse=True)
+def setup_database():
+    """
+    一個在所有模組測試開始前自動運行的 fixture。
+    它的唯一職責是確保資料庫和所有資料表都已被建立。
+    """
+    import asyncio
+    from phoenix_core.database import db_manager
+    print("\n[E2E Setup] 正在透過 fixture 明確地初始化資料庫...")
+    # 從同步的 pytest fixture 中，我們需要使用 asyncio.run() 來執行異步函式。
+    asyncio.run(db_manager.async_initialize())
+    print("[E2E Setup] 資料庫初始化完成。")
+
 
 @pytest.fixture(scope="module")
 def dummy_wav_file_content() -> bytes:
