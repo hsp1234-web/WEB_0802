@@ -1,0 +1,80 @@
+[2025-08-07 13:58:54][TranscriptionTool] --- 語音轉錄工具已啟動 ---
+[2025-08-07 13:58:54][TranscriptionTool] 正在設定虛擬環境...
+[2025-08-07 13:58:55][TranscriptionTool] 依賴 'torch' 已安裝。
+[2025-08-07 13:58:55][TranscriptionTool] 依賴 'faster-whisper' 已安裝。
+[2025-08-07 13:58:55][TranscriptionTool] 依賴 'ctranslate2' 已安裝。
+[2025-08-07 13:58:56][TranscriptionTool] 依賴 'psutil' 已安裝。
+[2025-08-07 13:58:56][TranscriptionTool] 準備啟動帶有看門狗的轉錄子程序...
+[2025-08-07 13:58:56][TranscriptionTool] 正在檢查系統資源...
+[2025-08-07 13:58:56][TranscriptionTool] 系統資源充足。
+[2025-08-07 13:58:58][TranscriptionTool] 子程序：開始轉錄任務。
+[2025-08-07 13:58:59][TranscriptionTool] 子程序：成功載入模型 'tiny' (精度: int8)。
+[2025-08-07 13:58:59][TranscriptionTool] 子程序：正在處理檔案: test_for_skip.wav
+[2025-08-07 13:58:59][TranscriptionTool] 子程序：檔案 'test_for_skip.wav' (雜湊: 2976da01...) 已處理過，跳過。
+[2025-08-07 13:58:59][TranscriptionTool] 子程序：所有檔案處理完畢。
+[2025-08-07 13:58:59][TranscriptionTool] [子程序輸出] [2025-08-07 13:58:56][TranscriptionTool] 正在檢查系統資源...
+[2025-08-07 13:58:59][TranscriptionTool] [子程序輸出] [2025-08-07 13:58:56][TranscriptionTool] 系統資源充足。
+[2025-08-07 13:58:59][TranscriptionTool] [子程序輸出] [2025-08-07 13:58:58][TranscriptionTool] 子程序：開始轉錄任務。
+[2025-08-07 13:58:59][TranscriptionTool] [子程序輸出] [2025-08-07 13:58:59][TranscriptionTool] 子程序：成功載入模型 'tiny' (精度: int8)。
+[2025-08-07 13:58:59][TranscriptionTool] [子程序輸出] [2025-08-07 13:58:59][TranscriptionTool] 子程序：正在處理檔案: test_for_skip.wav
+[2025-08-07 13:58:59][TranscriptionTool] [子程序輸出] [2025-08-07 13:58:59][TranscriptionTool] 子程序：檔案 'test_for_skip.wav' (雜湊: 2976da01...) 已處理過，跳過。
+[2025-08-07 13:58:59][TranscriptionTool] [子程序輸出] [2025-08-07 13:58:59][TranscriptionTool] 子程序：所有檔案處理完畢。
+[2025-08-07 13:58:59][TranscriptionTool] 子程序已結束，返回碼: 0
+[2025-08-07 13:58:59][TranscriptionTool] --- 語音轉錄工具執行完畢 ---
+[2025-08-07 14:03:06][TranscriptionTool] --- 語音轉錄工具已啟動 ---
+[2025-08-07 14:03:06][TranscriptionTool] 正在設定虛擬環境...
+[2025-08-07 14:03:08][TranscriptionTool] 依賴 'torch' 已安裝。
+[2025-08-07 14:03:08][TranscriptionTool] 依賴 'faster-whisper' 已安裝。
+[2025-08-07 14:03:09][TranscriptionTool] 依賴 'ctranslate2' 已安裝。
+[2025-08-07 14:03:09][TranscriptionTool] 依賴 'psutil' 已安裝。
+[2025-08-07 14:03:09][TranscriptionTool] 準備啟動帶有看門狗的轉錄子程序...
+[2025-08-07 14:03:10][TranscriptionTool] 正在檢查系統資源...
+[2025-08-07 14:03:10][TranscriptionTool] 系統資源充足。
+[2025-08-07 14:03:14][TranscriptionTool] 子程序：開始轉錄任務。
+[2025-08-07 14:03:16][TranscriptionTool] 子程序：成功載入模型 'tiny' (精度: int8)。
+[2025-08-07 14:03:16][TranscriptionTool] 子程序：正在處理檔案: test_for_skip.wav
+[2025-08-07 14:03:16][TranscriptionTool] 子程序：檔案 'test_for_skip.wav' (雜湊: 2976da01...) 已處理過，跳過。
+[2025-08-07 14:03:16][TranscriptionTool] 子程序：所有檔案處理完畢。
+[2025-08-07 14:03:16][TranscriptionTool] [子程序輸出] [2025-08-07 14:03:10][TranscriptionTool] 正在檢查系統資源...
+[2025-08-07 14:03:16][TranscriptionTool] [子程序輸出] [2025-08-07 14:03:10][TranscriptionTool] 系統資源充足。
+[2025-08-07 14:03:16][TranscriptionTool] [子程序輸出] [2025-08-07 14:03:14][TranscriptionTool] 子程序：開始轉錄任務。
+[2025-08-07 14:03:16][TranscriptionTool] [子程序輸出] [2025-08-07 14:03:16][TranscriptionTool] 子程序：成功載入模型 'tiny' (精度: int8)。
+[2025-08-07 14:03:16][TranscriptionTool] [子程序輸出] [2025-08-07 14:03:16][TranscriptionTool] 子程序：正在處理檔案: test_for_skip.wav
+[2025-08-07 14:03:16][TranscriptionTool] [子程序輸出] [2025-08-07 14:03:16][TranscriptionTool] 子程序：檔案 'test_for_skip.wav' (雜湊: 2976da01...) 已處理過，跳過。
+[2025-08-07 14:03:16][TranscriptionTool] [子程序輸出] [2025-08-07 14:03:16][TranscriptionTool] 子程序：所有檔案處理完畢。
+[2025-08-07 14:03:16][TranscriptionTool] 子程序已結束，返回碼: 0
+[2025-08-07 14:03:16][TranscriptionTool] --- 語音轉錄工具執行完畢 ---
+[2025-08-07 14:16:27][TranscriptionTool] --- 語音轉錄工具已啟動 ---
+[2025-08-07 14:17:26][TranscriptionTool] --- 語音轉錄工具已啟動 ---
+[2025-08-07 14:17:26][TranscriptionTool] 🚀 開始環境設定...
+[2025-08-07 14:17:28][TranscriptionTool] ✅ 依賴 'torch' 已安裝。
+[2025-08-07 14:17:29][TranscriptionTool] ✅ 依賴 'faster-whisper' 已安裝。
+[2025-08-07 14:17:29][TranscriptionTool] ✅ 依賴 'ctranslate2' 已安裝。
+[2025-08-07 14:17:30][TranscriptionTool] ✅ 依賴 'psutil' 已安裝。
+[2025-08-07 14:17:30][TranscriptionTool] 🛡️ 準備啟動帶有看門狗的轉錄子程序...
+[2025-08-07 14:17:30][TranscriptionTool] 💡 正在檢查系統資源...
+[2025-08-07 14:17:30][TranscriptionTool] ✅ 系統資源充足。
+[2025-08-07 14:17:37][TranscriptionTool] 🎧 子程序：開始轉錄任務。
+[2025-08-07 14:17:39][TranscriptionTool] ✅ 子程序：成功載入模型 'tiny' (精度: int8)。
+[2025-08-07 14:17:39][TranscriptionTool] 🎤 子程序：正在處理檔案: test_for_skip.wav
+[2025-08-07 14:17:41][TranscriptionTool] ✅ 子程序：偵測到語言 'en'，概率 0.28
+[2025-08-07 14:17:42][TranscriptionTool] --- 轉錄結果 START ---
+[2025-08-07 14:17:42][TranscriptionTool] 檔案: test_for_skip.wav
+[2025-08-07 14:17:42][TranscriptionTool] 內容:  You
+[2025-08-07 14:17:42][TranscriptionTool] --- 轉錄結果 END ---
+[2025-08-07 14:17:42][TranscriptionTool] ✅ 子程序：已為 'test_for_skip.wav' 建立處理標記。
+[2025-08-07 14:17:42][TranscriptionTool] 🏁 子程序：所有檔案處理完畢。
+[2025-08-07 14:17:42][TranscriptionTool] [子程序輸出] [2025-08-07 14:17:30][TranscriptionTool] 💡 正在檢查系統資源...
+[2025-08-07 14:17:42][TranscriptionTool] [子程序輸出] [2025-08-07 14:17:30][TranscriptionTool] ✅ 系統資源充足。
+[2025-08-07 14:17:42][TranscriptionTool] [子程序輸出] [2025-08-07 14:17:37][TranscriptionTool] 🎧 子程序：開始轉錄任務。
+[2025-08-07 14:17:42][TranscriptionTool] [子程序輸出] [2025-08-07 14:17:39][TranscriptionTool] ✅ 子程序：成功載入模型 'tiny' (精度: int8)。
+[2025-08-07 14:17:42][TranscriptionTool] [子程序輸出] [2025-08-07 14:17:39][TranscriptionTool] 🎤 子程序：正在處理檔案: test_for_skip.wav
+[2025-08-07 14:17:42][TranscriptionTool] [子程序輸出] [2025-08-07 14:17:41][TranscriptionTool] ✅ 子程序：偵測到語言 'en'，概率 0.28
+[2025-08-07 14:17:42][TranscriptionTool] [子程序輸出] [2025-08-07 14:17:42][TranscriptionTool] --- 轉錄結果 START ---
+[2025-08-07 14:17:42][TranscriptionTool] [子程序輸出] [2025-08-07 14:17:42][TranscriptionTool] 檔案: test_for_skip.wav
+[2025-08-07 14:17:42][TranscriptionTool] [子程序輸出] [2025-08-07 14:17:42][TranscriptionTool] 內容:  You
+[2025-08-07 14:17:42][TranscriptionTool] [子程序輸出] [2025-08-07 14:17:42][TranscriptionTool] --- 轉錄結果 END ---
+[2025-08-07 14:17:42][TranscriptionTool] [子程序輸出] [2025-08-07 14:17:42][TranscriptionTool] ✅ 子程序：已為 'test_for_skip.wav' 建立處理標記。
+[2025-08-07 14:17:42][TranscriptionTool] [子程序輸出] [2025-08-07 14:17:42][TranscriptionTool] 🏁 子程序：所有檔案處理完畢。
+[2025-08-07 14:17:42][TranscriptionTool] 子程序已結束，返回碼: 0
+[2025-08-07 14:17:42][TranscriptionTool] --- 語音轉錄工具執行完畢 ---
