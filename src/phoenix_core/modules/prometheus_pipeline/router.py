@@ -2,7 +2,7 @@
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel
 
-from src.phoenix_core.modules.prometheus_pipeline.core.logging.log_manager import LogManager
+from .core.logging.log_manager import LogManager
 
 # 暫時使用全域 logger，後續可以替換為模組專用的
 # from phoenix_core.utils.logger import logger

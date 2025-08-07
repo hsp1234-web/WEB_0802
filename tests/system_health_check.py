@@ -41,7 +41,7 @@ async def test_pure_asyncio_background_task():
 
 
 # 從專案中導入我們想要測試的背景任務
-from src.phoenix_core.background.tasks import periodic_heartbeat
+from phoenix_core.background.tasks import periodic_heartbeat
 
 @pytest.mark.asyncio
 async def test_project_heartbeat_task_direct_execution(caplog):

@@ -394,7 +394,7 @@ def test_log_filtering(live_server, enabled_levels, expected_levels):
 # ------------------------------------------------------------------------------
 # 來源: tests/test_db_queries.py
 # ------------------------------------------------------------------------------
-from src.phoenix_core.db_queries import query_logs_by_level
+from phoenix_core.db_queries import query_logs_by_level
 
 def test_query_success_logs(mock_db):
     results = query_logs_by_level(mock_db, 'SUCCESS', limit=10)
@@ -431,7 +431,7 @@ def test_mock_report_files_creation(mock_report_files):
 # ------------------------------------------------------------------------------
 # 來源: tests/test_report_generator.py
 # ------------------------------------------------------------------------------
-from src.phoenix_core.report_generator import read_selected_reports, archive_selected_reports
+from phoenix_core.report_generator import read_selected_reports, archive_selected_reports
 
 def test_read_selected_reports(mock_report_files):
     reports_dir = mock_report_files / "reports"
@@ -471,7 +471,7 @@ def test_archive_selected_reports(mock_report_files):
 # ------------------------------------------------------------------------------
 # 來源: tests/test_watchdog.py
 # ------------------------------------------------------------------------------
-from src.phoenix_core.watchdog import check_heartbeat_status, HEARTBEAT_KEY
+from phoenix_core.watchdog import check_heartbeat_status, HEARTBEAT_KEY
 
 def test_heartbeat_ok(mock_db):
     status = check_heartbeat_status(mock_db, threshold_seconds=15)
@@ -495,7 +495,7 @@ def test_heartbeat_not_found(mock_db):
 # ------------------------------------------------------------------------------
 # 來源: tests/unit/phoenix_core/kernel/test_package_utils.py
 # ------------------------------------------------------------------------------
-from src.phoenix_core.kernel.package_utils import get_package_size, parse_package_spec
+from phoenix_core.kernel.package_utils import get_package_size, parse_package_spec
 
 @pytest.mark.parametrize("spec, expected_name, expected_version", [
     ("fastapi==0.116.1", "fastapi", "0.116.1"),
@@ -551,7 +551,7 @@ def test_stock_data_cache_hit(monkeypatch):
     def mock_load_json(file_name):
         return {"symbol": "TSMC", "price": 123.45, "timestamp": "cached_time"}
     monkeypatch.setattr(f"{MODULE_PATH_TO_MOCK}.load_json", mock_load_json)
-    from src.phoenix_core.main import app
+    from phoenix_core.main import app
     with TestClient(app) as client:
         response = client.get("/data/stock/TSMC")
         assert response.status_code == 200
@@ -563,7 +563,7 @@ def test_stock_data_cache_miss(monkeypatch):
     monkeypatch.setattr(f"{MODULE_PATH_TO_MOCK}.load_json", lambda fn: None)
     monkeypatch.setattr(f"{MODULE_PATH_TO_MOCK}.save_json", lambda fn, data: None)
     monkeypatch.setattr("time.sleep", lambda seconds: None)
-    from src.phoenix_core.main import app
+    from phoenix_core.main import app
     with TestClient(app) as client:
         response = client.get("/data/stock/AAPL")
         assert response.status_code == 200

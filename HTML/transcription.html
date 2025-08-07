@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="zh-Hant" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>鳳凰之心 - AI 語音轉錄儀</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        body {
+            font-family: 'Noto Sans TC', 'Inter', sans-serif;
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+        html.dark body { background-color: #131316; color: #E8EAED; }
+        html:not(.dark) body { background-color: #F8F9FA; color: #202124; }
+        .glass-effect {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        html:not(.dark) .glass-effect {
+            background: rgba(255, 255, 255, 0.7);
+            border: 1px solid rgba(0, 0, 0, 0.1);
+        }
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: rgba(255, 255, 255, 0.05); }
+        html:not(.dark) ::-webkit-scrollbar-track { background: rgba(0, 0, 0, 0.1); }
+        ::-webkit-scrollbar-thumb { background: linear-gradient(to bottom, #A688FA, #89CFF0); border-radius: 10px; }
+    </style>
+</head>
+<body class="min-h-screen flex items-center justify-center p-4 bg-gray-900 text-gray-100">
+
+    <div class="w-full max-w-2xl mx-auto">
+        <!-- Header -->
+        <header class="text-center mb-6">
+            <h1 class="text-3xl font-bold">鳳凰之心 <span style="background: linear-gradient(90deg, #89CFF0, #A688FA, #F482A4); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">AI 語音轉錄儀</span></h1>
+            <p class="text-gray-400 mt-2">一個為效率而生的專業語音轉文字工具</p>
+        </header>
+
+        <!-- Upload Section -->
+        <section id="upload-section" class="mb-4">
+            <div id="upload-area" class="glass-effect rounded-xl p-8 border-2 border-dashed border-gray-600 hover:border-sky-400 transition-all duration-300 flex flex-col items-center justify-center text-center cursor-pointer">
+                <i data-lucide="upload-cloud" class="w-16 h-16 text-sky-400 mb-4"></i>
+                <h2 class="text-xl font-semibold mb-2">點擊此處或拖曳音訊檔以上傳</h2>
+                <p class="text-gray-500">支援 MP3, WAV, M4A, FLAC 等格式</p>
+                <input type="file" id="file-input" class="hidden" accept="audio/*">
+            </div>
+        </section>
+
+        <!-- Dashboard -->
+        <section id="dashboard" class="glass-effect rounded-xl p-4 mb-4 flex justify-around items-center text-center hidden">
+            <div>
+                <p class="text-sm text-gray-400">處理核心</p>
+                <p id="processing-core" class="text-lg font-bold text-sky-400">CPU</p>
+            </div>
+            <div>
+                <p class="text-sm text-gray-400">任務狀態</p>
+                <p id="task-status" class="text-lg font-bold text-yellow-400">待機中</p>
+            </div>
+            <div>
+                <p class="text-sm text-gray-400">轉錄速率</p>
+                <p id="transcription-speed" class="text-lg font-bold text-green-400">-</p>
+            </div>
+        </section>
+
+        <!-- Output Section -->
+        <section id="output-section" class="glass-effect rounded-xl p-4" style="min-height: 200px;">
+            <div id="transcript-container" class="w-full h-full overflow-y-auto pr-2">
+                <p id="transcript-output" class="whitespace-pre-wrap text-gray-300 leading-relaxed"></p>
+                <p id="placeholder-text" class="text-gray-500">轉錄結果將會即時顯示於此處...</p>
+            </div>
+        </section>
+
+        <!-- Action Buttons -->
+        <footer class="mt-6 flex justify-end gap-4">
+            <button id="copy-btn" class="bg-gray-700 hover:bg-sky-600 text-white font-bold py-2 px-4 rounded-lg inline-flex items-center transition-all disabled:opacity-50" disabled>
+                <i data-lucide="copy" class="mr-2"></i>
+                <span>複製</span>
+            </button>
+            <button id="download-btn" class="bg-purple-700 hover:bg-purple-600 text-white font-bold py-2 px-4 rounded-lg inline-flex items-center transition-all disabled:opacity-50" disabled>
+                <i data-lucide="download" class="mr-2"></i>
+                <span>下載 .txt</span>
+            </button>
+        </footer>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // --- DOM Elements ---
+            const uploadArea = document.getElementById('upload-area');
+            const fileInput = document.getElementById('file-input');
+            const dashboard = document.getElementById('dashboard');
+            const taskStatus = document.getElementById('task-status');
+            const transcriptionSpeed = document.getElementById('transcription-speed');
+            const transcriptOutput = document.getElementById('transcript-output');
+            const placeholderText = document.getElementById('placeholder-text');
+            const copyBtn = document.getElementById('copy-btn');
+            const downloadBtn = document.getElementById('download-btn');
+
+            let originalFileName = '';
+
+            // --- UI Functions ---
+            const setStatus = (status, color = 'yellow') => {
+                taskStatus.textContent = status;
+                taskStatus.className = `text-lg font-bold text-${color}-400`;
+            };
+
+            const resetUI = () => {
+                dashboard.classList.add('hidden');
+                placeholderText.classList.remove('hidden');
+                transcriptOutput.textContent = '';
+                copyBtn.disabled = true;
+                downloadBtn.disabled = true;
+                setStatus('待機中');
+                transcriptionSpeed.textContent = '-';
+            };
+
+            // --- Event Listeners ---
+            uploadArea.addEventListener('click', () => fileInput.click());
+            fileInput.addEventListener('change', (e) => {
+                if (e.target.files.length > 0) {
+                    handleFileUpload(e.target.files[0]);
+                }
+            });
+
+            // Drag and Drop
+            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                uploadArea.addEventListener(eventName, e => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                }, false);
+            });
+            ['dragenter', 'dragover'].forEach(eventName => {
+                uploadArea.addEventListener(eventName, () => uploadArea.classList.add('border-sky-400'), false);
+            });
+            ['dragleave', 'drop'].forEach(eventName => {
+                uploadArea.addEventListener(eventName, () => uploadArea.classList.remove('border-sky-400'), false);
+            });
+            uploadArea.addEventListener('drop', (e) => {
+                if (e.dataTransfer.files.length > 0) {
+                    handleFileUpload(e.dataTransfer.files[0]);
+                }
+            });
+
+            // --- Core Logic ---
+            const handleFileUpload = async (file) => {
+                if (!file) return;
+
+                resetUI();
+                dashboard.classList.remove('hidden');
+                placeholderText.classList.add('hidden');
+                originalFileName = file.name;
+
+                const formData = new FormData();
+                formData.append('file', file);
+
+                setStatus('上傳中...');
+
+                try {
+                    // Step 1: Upload the file
+                    const uploadResponse = await fetch('/transcription/upload', {
+                        method: 'POST',
+                        body: formData,
+                    });
+
+                    if (!uploadResponse.ok) {
+                        const errorData = await uploadResponse.json();
+                        throw new Error(errorData.detail || '上傳失敗');
+                    }
+
+                    const uploadResult = await uploadResponse.json();
+                    const taskId = uploadResult.task_id;
+
+                    setStatus('排隊等待處理...', 'sky');
+
+                    // Step 2: Poll for status
+                    const pollInterval = setInterval(async () => {
+                        try {
+                            const statusResponse = await fetch(`/transcription/status/${taskId}`);
+                            if (!statusResponse.ok) {
+                                // Stop polling on server error like 404
+                                clearInterval(pollInterval);
+                                setStatus('查詢狀態失敗', 'red');
+                                return;
+                            }
+
+                            const task = await statusResponse.json();
+
+                            // Update UI based on status
+                            switch (task.status) {
+                                case 'pending':
+                                    setStatus('排隊等待處理...', 'sky');
+                                    break;
+                                case 'processing':
+                                    setStatus('轉錄處理中...', 'yellow');
+                                    // Here you could update a progress bar if the backend provides progress info
+                                    // For now, we just show the text as it comes.
+                                    if (task.result_text) {
+                                        transcriptOutput.textContent = task.result_text;
+                                    }
+                                    break;
+                                case 'completed':
+                                    clearInterval(pollInterval);
+                                    setStatus('轉錄完成', 'green');
+                                    transcriptOutput.textContent = task.result_text;
+                                    copyBtn.disabled = false;
+                                    downloadBtn.disabled = false;
+                                    // You could also display the transcription speed here
+                                    // transcriptionSpeed.textContent = `${task.speed}x`;
+                                    break;
+                                case 'failed':
+                                    clearInterval(pollInterval);
+                                    setStatus(`任務失敗: ${task.error_message}`, 'red');
+                                    break;
+                            }
+
+                        } catch (pollError) {
+                            console.error('輪詢錯誤:', pollError);
+                            // Don't stop polling for network errors, just log them
+                        }
+                    }, 2000); // Poll every 2 seconds
+
+                } catch (error) {
+                    console.error('處理過程中發生錯誤:', error);
+                    setStatus(`錯誤: ${error.message}`, 'red');
+                }
+            };
+
+            // --- Action Buttons Logic ---
+            copyBtn.addEventListener('click', () => {
+                navigator.clipboard.writeText(transcriptOutput.textContent).then(() => {
+                    const originalText = copyBtn.innerHTML;
+                    copyBtn.innerHTML = `<i data-lucide="check" class="mr-2"></i> 已複製!`;
+                    lucide.createIcons();
+                    setTimeout(() => {
+                        copyBtn.innerHTML = originalText;
+                        lucide.createIcons();
+                    }, 2000);
+                });
+            });
+
+            downloadBtn.addEventListener('click', () => {
+                const blob = new Blob([transcriptOutput.textContent], { type: 'text/plain;charset=utf-8' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                // Use original file name for the download
+                const baseName = originalFileName.substring(0, originalFileName.lastIndexOf('.'));
+                a.download = `${baseName || 'transcript'}.txt`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            });
+
+            // --- Initial State ---
+            lucide.createIcons();
+        });
+    </script>
+</body>
+</html>

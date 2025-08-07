@@ -1,0 +1,7 @@
+# AI/Transcription dependencies for CPU
+pytz
+faster-whisper
+ffmpeg-python
+duckdb
+fredapi
+yfinance

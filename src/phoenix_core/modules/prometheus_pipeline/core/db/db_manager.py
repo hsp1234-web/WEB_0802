@@ -2,8 +2,8 @@ import duckdb
 import os
 import pandas as pd
 import asyncio
-from src.phoenix_core.utils.logger import logger
-from src.phoenix_core.kernel.settings import settings
+from ....utils.logger import logger
+from ....kernel.settings import settings
 
 class DBManager:
     def __init__(self, db_path: str = None):

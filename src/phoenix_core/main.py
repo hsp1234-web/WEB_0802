@@ -85,6 +85,11 @@ async def read_root():
     """提供 wolf.html 儀表板作為主頁面。"""
     return os.path.join(PROJECT_ROOT, 'wolf.html')
 
+@app.get("/transcription", response_class=FileResponse, tags=["應用 (Apps)"])
+async def read_transcription_app():
+    """提供獨立的語音轉錄應用程式頁面。"""
+    return os.path.join(PROJECT_ROOT, 'HTML', 'transcription.html')
+
 @app.get("/system/config", tags=["系統 (System)"])
 async def get_system_config():
     return {"app_name": settings.APP_NAME, "environment": settings.APP_ENV}

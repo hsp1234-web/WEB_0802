@@ -1,0 +1,11 @@
+# Core web server dependencies
+fastapi
+uvicorn
+pydantic
+pydantic-settings
+psutil
+sqlalchemy
+pyyaml
+aiofiles
+python-multipart
+typer

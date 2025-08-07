@@ -8,7 +8,7 @@ import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 # Now we can import the task
-from src.phoenix_core.background.tasks import periodic_heartbeat
+from phoenix_core.background.tasks import periodic_heartbeat
 
 @pytest.mark.asyncio
 async def test_simplified_heartbeat_runs(capsys):

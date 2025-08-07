@@ -26,9 +26,9 @@ def main():
     # --- 步驟 2: 導入核心服務 ---
     # 在設定好路徑後，才能安全地導入我們的模組。
     try:
-        from src.phoenix_core.background.worker import start_background_tasks
-        from src.phoenix_core.database import db_manager
-        from src.phoenix_core.utils.logger import logger
+        from phoenix_core.background.worker import start_background_tasks
+        from phoenix_core.database import db_manager
+        from phoenix_core.utils.logger import logger
     except ImportError as e:
         # 如果這裡發生錯誤，說明基礎結構有問題，直接退出。
         print(f"FATAL: 核心模組導入失敗: {e}", file=sys.stderr)
