@@ -263,6 +263,57 @@ graph TD
     2.  **重複執行完全相同的整合測試**，但這次的目標是 `run/colab_runner.py`，確保其行為與探測器完全一致。
 *   **成果**：我們移植的不再是「程式碼」，而是一個已通過嚴格品管的「成品」，確保了最終整合的成功。
 ---
+## 案件 004：系統性重構與端對端測試的螺旋式除錯 (2025-08-06)
+
+**情境概述:** 此次任務旨在對系統進行全面重構，包括輕量化轉錄模組、強化日誌與監控系統、並建立端對端測試。然而，這個過程揭示了從環境設定、依賴管理到程式碼邏輯的多層次潛藏問題。
+
+---
+
+### 第一層：啟動腳本與安裝保護
+
+*   **症狀**: `local_run.py` 無法成功執行。
+*   **分析**:
+    1.  `run.sh` 中的磁碟空間檢查是寫死的模擬邏輯，必定失敗。
+    2.  修復後，發現在乾淨的 `uv venv` 虛擬環境中 `pip` 模組不存在，導致後續安裝命令失敗。
+    3.  再次修復後，發現資源檢查腳本自身依賴 `pytz` 和 `pydantic-settings`，但這些依賴未被預先安裝，導致 `ModuleNotFoundError`。
+*   **解決方案**:
+    1.  修改 `run.sh`，將檢查邏輯替換為呼叫專案中既有的 `resource_monitor.py` 模組。
+    2.  在 `run.sh` 中，於 `uv venv` 後立即使用 `uv pip install pip` 引導安裝 `pip`。
+    3.  在 `run.sh` 中，於主要依賴安裝前，預先安裝資源檢查腳本所需的所有前置依賴 (`psutil`, `pyyaml`, `pytz`, `pydantic-settings`)。
+
+### 第二層：核心依賴的編譯與相容性
+
+*   **症狀**: 即使啟動腳本邏輯正確，`uv pip install` 依然失敗，log 顯示 `Failed to build whisper-cpp-python`。
+*   **分析**:
+    1.  錯誤訊息指向 `CMake` 版本不相容，顯示沙箱環境的建置工具有其限制。
+    2.  在使用者提供關鍵文件後，確認問題根源是 `whisper-cpp-python` 的一個深層依賴 `pandas-ta` 與 `numpy 2.0` 不相容。
+*   **解決方案**:
+    1.  **設定 `CMAKE_ARGS`**: 在 `run.sh` 中 `export CMAKE_ARGS="-DCMAKE_POLICY_VERSION_MINIMUM=3.5"`，繞過嚴格的版本檢查，讓 `whisper-cpp-python` 編譯成功。
+    2.  **更換依賴分支**: 根據使用者文件，將依賴從 `pandas-ta` 更換為其活躍維護、相容 `numpy 2.0` 的分支 `pandas-ta-openbb`。
+    3.  **鎖定核心版本**: 在 `requirements/base.in` 中，明確鎖定 `pandas==2.2.2` 和 `numpy==2.0.0`，確保依賴樹的穩定。
+
+### 第三層：新舊程式碼的整合與執行錯誤
+
+*   **症狀**: 依賴安裝成功後，伺服器程序在啟動後立刻崩潰，E2E 測試因 `Connection refused` 而失敗。
+*   **分析**:
+    1.  透過暫時移除 `run.sh` 中的日誌重導向，成功捕獲到背景服務的 `stderr` 輸出。
+    2.  錯誤追蹤顯示，新建立的 `system_monitor_worker.py` 中，使用了 `settings.get(...)` 的方式讀取 Pydantic 設定，但 Pydantic Settings 物件應使用屬性方式 (`settings.SYSTEM_MONITOR_POLL_INTERVAL`) 讀取，導致 `AttributeError`。
+    3.  修復後，E2E 測試的連線問題解決，但出現 `sqlite3.OperationalError: no such table: transcription_tasks`，原因是測試腳本連接了錯誤路徑的資料庫 (`state.db` 而非 `storage/state.db`)。
+    4.  再次修復後，發現轉錄任務的狀態始終為 `pending`，最終定位到 `transcription_worker` 服務從未被 `run.sh` 啟動。
+*   **解決方案**:
+    1.  在 `system_monitor_worker.py` 中，使用 `getattr(settings, "...", default_value)` 的安全方式讀取設定。
+    2.  修正 `tests/e2e/test_simulation.py` 中的資料庫路徑和 API 端點 URL。
+    3.  在 `run.sh` 的啟動陣列中，加入 `transcription_worker`。
+
+### 最終總結
+
+此次除錯過程是一個典型的、由表及裡的螺旋式探索。從表面上的 E2E 測試失敗，深入到服務啟動崩潰，再到依賴編譯錯誤，最終根據使用者提供的關鍵文件定位到核心函式庫的相容性問題。這再次證明了，在複雜的系統中：
+1.  **可觀測性至關重要**: 移除日誌重導向以看見真實的 `stderr` 是找到服務崩潰原因的轉捩點。
+2.  **依賴管理是基石**: 精確地管理和鎖定核心依賴的版本，是避免「依賴地獄」的唯一途徑。
+3.  **深入理解工具**: 僅僅「使用」工具是不夠的，必須深入理解其設計哲學（如 Pydantic 的屬性存取、pandas-ta 的 DataFrame 特性），才能避免誤用。
+4.  **端對端測試是最終的真理標準**: 只有當所有服務一同運行時，許多隱藏的整合問題才會浮現。
+
+---
 ## 案件 003：`local_run.py` 的螺旋式除錯之旅 (2025-08-06)
 
 **情境概述:** 最初的任務是簡單地加固 `local_run.py`，為其增加結構化日誌和更可靠的資料庫心跳檢查。然而，這個看似直接的任務，卻意外地揭示了一連串環環相扣、從表面延伸至核心的深層次問題，完美地重現了本文件中記錄的多個歷史 BUG。
