@@ -7,7 +7,7 @@
 
 隨著專案架構的成熟，我們的測試策略也演進為一個更健壯、更全面的端對端（E2E）測試模型。舊的單元測試和分散的整合測試，已由一個單一的、權威性的 E2E 測試腳本所取代。
 
-這個測試的核心是 `tests/e2e/test_colab_logic.py`，它的設計理念是：**在不實際運行 `colab_runner.py` 的情況下，精準地模擬其核心業務邏輯，並驗證整個後端服務的反應是否符合預期。**
+這個測試的核心是 `tests/e2e/test_full_system_flow.py`，它的設計理念是：**在不實際運行 `colab_runner.py` 的情況下，精準地模擬其核心業務邏輯，並驗證整個後端服務的反應是否符合預期。**
 
 此測試框架專注於回答以下關鍵問題：
 1.  模擬 `@markdown` 參數生成的設定檔，能否被後端服務正確解析？
@@ -27,21 +27,26 @@
 
 - **Python 3.8+ 環境**
 - **Git** 已安裝並在系統 PATH 中
+- **虛擬環境與依賴**:
+  - 需先建立虛擬環境 (`uv venv`)
+  - 安裝核心依賴 (`uv pip install -r requirements/base.txt`)
+  - 安裝開發依賴 (`uv pip install -r requirements/dev.txt`)
+  - 以可編輯模式安裝專案 (`uv pip install -e .`)
 
 ### **執行測試套件:**
 
-在專案的根目錄下，執行 `test_colab_logic.py` 腳本：
+在專案的根目錄下，使用 `pytest` 執行 `test_full_system_flow.py` 腳本：
 
 ```bash
-# 執行完整的 E2E 測試套件
-python tests/e2e/test_colab_logic.py
+# 推薦的執行方式 (需要先設定好環境)
+.venv/bin/python -m pytest -v tests/e2e/test_full_system_flow.py
 ```
 
 此腳本是**完全自我包含的**，它會自動處理所有繁瑣的環境設定步驟。
 
 ---
 
-## 三、 核心測試詳解：`test_colab_logic.py`
+## 三、 核心測試詳解：`test_full_system_flow.py`
 
 這是我們目前最重要的測試檔案，它是一個精心設計的自動化流程，包含以下幾個階段：
 

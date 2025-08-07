@@ -53,7 +53,8 @@
 │   └── report.py          # Colab 報告生成觸發器 (V33)
 ├── scripts/               # 【主要腳本】供開發者/CI 使用的核心自動化腳本
 │   ├── local_run.py       # 本地/CI 環境的總啟動器
-│   └── run_server_only.py # 輕量級的後端服務啟動器
+│   ├── run_server_only.py # 輕量級的後端服務啟動器
+│   └── safe_runner.py     # (V68 新增) 帶看門狗的通用安全啟動器，用於監控背景服務
 ├── src/                   # 【應用程式碼】所有專案的核心原始碼
 │   └── phoenix_core/      # 我們的 Python 套件
 │       ├── __init__.py
