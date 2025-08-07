@@ -79,5 +79,5 @@ bin/
 /storage/
 
 # -- 工具專用虛擬環境 --
-tools/.venv_transcription/
-tools/.venv_dataprovider/
+# 忽略所有在 tools/ 目錄下，以 .venv_ 開頭的虛擬環境目錄
+tools/.venv_*/
