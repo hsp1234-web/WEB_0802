@@ -812,6 +812,29 @@ def handle_data(context, data):
             localStorage.setItem('fontSize', newSize);
         }
 
+        // --- v2.0 新增: UI 事件日誌記錄 ---
+        async function logUIEvent(componentId, eventType = 'click', details = {}) {
+            console.log(`記錄 UI 事件: ${componentId} (${eventType})`); // 在瀏覽器控制台也印出日誌，方便前端除錯
+            try {
+                const response = await fetch('/api/v1/actions/log_ui_event', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        event_type: eventType,
+                        component_id: componentId,
+                        details: details,
+                    }),
+                });
+                if (!response.ok) {
+                    console.error('記錄 UI 事件失敗:', response.status, await response.text());
+                }
+            } catch (error) {
+                console.error('記錄 UI 事件時發生網路錯誤:', error);
+            }
+        }
+
         // --- 善狼 - 核心功能 ---
         function renderMasterSelector() {
             masterSelectorContainer.innerHTML = '';
@@ -1210,6 +1233,7 @@ def handle_data(context, data):
         
         // 主題切換
         themeToggleBtn.addEventListener('click', () => {
+            logUIEvent('theme-toggle'); // 記錄點擊事件
             const isDark = document.documentElement.classList.toggle('dark');
             localStorage.setItem('color-theme', isDark ? 'dark' : 'light');
             applyTheme(isDark ? 'dark' : 'light');
@@ -1220,22 +1244,38 @@ def handle_data(context, data):
         });
 
         // 字體大小
-        fontIncreaseBtn.addEventListener('click', () => setFontSize(parseFloat(getComputedStyle(htmlEl).fontSize) + 1));
-        fontDecreaseBtn.addEventListener('click', () => setFontSize(parseFloat(getComputedStyle(htmlEl).fontSize) - 1));
+        fontIncreaseBtn.addEventListener('click', () => {
+            logUIEvent('font-increase');
+            setFontSize(parseFloat(getComputedStyle(htmlEl).fontSize) + 1);
+        });
+        fontDecreaseBtn.addEventListener('click', () => {
+            logUIEvent('font-decrease');
+            setFontSize(parseFloat(getComputedStyle(htmlEl).fontSize) - 1);
+        });
         
         // 策略選擇
-        strategySelector.addEventListener('change', loadStrategyExample);
+        strategySelector.addEventListener('change', (e) => {
+            logUIEvent('strategy-selector', 'change', { value: e.target.value });
+            loadStrategyExample();
+        });
 
         // 運行管線
-        runPipelineBtn.addEventListener('click', runPipeline);
+        runPipelineBtn.addEventListener('click', () => {
+            logUIEvent('run-pipeline-btn', 'click', { pipeline: document.getElementById('pipeline-selector').value });
+            runPipeline();
+        });
         
         // 日期範圍選擇
-        applyDateRangeBtn.addEventListener('click', applyDateRange);
+        applyDateRangeBtn.addEventListener('click', () => {
+            logUIEvent('apply-date-range-btn');
+            applyDateRange();
+        });
 
         // Tab 選單
         tabsContainer.addEventListener('click', (e) => {
             if (e.target.classList.contains('tab')) {
                 const targetTab = e.target.dataset.tab;
+                logUIEvent(`tab-${targetTab}`, 'click'); // 記錄 Tab 點擊
                 tabsContainer.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
                 e.target.classList.add('active');
                 tabContents.forEach(content => {
@@ -1261,17 +1301,27 @@ def handle_data(context, data):
         });
         
         // 善狼功能事件監聽
-        weekSelector.addEventListener('change', updateShanJiaLangContent);
-        sendButton.addEventListener('click', handleSendInstruction);
+        weekSelector.addEventListener('change', (e) => {
+            logUIEvent('week-selector', 'change', { week: e.target.value });
+            updateShanJiaLangContent();
+        });
+        sendButton.addEventListener('click', () => {
+            logUIEvent('send-button');
+            handleSendInstruction();
+        });
         chatInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
+                logUIEvent('chat-input', 'submit');
                 handleSendInstruction();
             }
         });
 
         // 鳳凰轉錄儀功能事件監聽
-        uploadArea.addEventListener('click', () => fileInput.click());
+        uploadArea.addEventListener('click', () => {
+            logUIEvent('upload-area');
+            fileInput.click();
+        });
         ['dragenter', 'dragover'].forEach(e => uploadArea.addEventListener(e, (evt) => { 
             evt.preventDefault(); 
             uploadArea.classList.add('border-sky-400'); 
