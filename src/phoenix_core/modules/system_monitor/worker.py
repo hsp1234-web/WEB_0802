@@ -12,7 +12,8 @@ async def system_monitor_worker_main_loop():
     """
     await logger.log("INFO", "系統監控工人背景任務已啟動，開始記錄資源使用情況...", source="SystemMonitorWorker")
 
-    poll_interval = settings.get("SYSTEM_MONITOR_POLL_INTERVAL", 60) # 預設60秒
+    # 使用 getattr 安全地從 pydantic settings 物件獲取屬性，並提供預設值
+    poll_interval = getattr(settings, "SYSTEM_MONITOR_POLL_INTERVAL", 60)
 
     while True:
         try:

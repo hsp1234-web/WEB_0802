@@ -7,8 +7,8 @@ import sqlite3
 from pathlib import Path
 
 # --- Test Configuration ---
-DB_PATH = Path("state.db")
-UPLOAD_URL = "http://localhost:8080/transcribe/"
+DB_PATH = Path("storage/state.db")
+UPLOAD_URL = "http://localhost:8080/transcription/upload"
 DUMMY_AUDIO_PATH = Path("tests/e2e/dummy_audio.wav")
 
 def create_dummy_wav_file(duration_ms=100):
@@ -26,40 +26,23 @@ def create_dummy_wav_file(duration_ms=100):
         wf.setframerate(framerate)
         wf.writeframes(b'\x00' * n_frames * n_channels * sampwidth)
 
+# This test assumes the server is already running in the background.
+# To run this test:
+# 1. Start the server: `bash run.sh &`
+# 2. Run pytest: `./.venv/bin/python -m pytest tests/e2e/test_simulation.py`
+# 3. Stop the server: `kill %1`
+
 @pytest.fixture(scope="module", autouse=True)
-def live_server():
+def setup_teardown():
     """
-    Fixture to start and stop the main application server for the test module.
-    'autouse=True' ensures it runs for all tests in this module.
+    Fixture to create and clean up the dummy audio file for the test.
     """
-    # Clean up old environment and DB
-    subprocess.run("rm -rf .venv && rm -f state.db", shell=True, check=True)
-
-    # Create a dummy audio file for testing
+    # Setup: Create a dummy audio file for testing
     create_dummy_wav_file()
-
-    # Start the server
-    server_process = subprocess.Popen(
-        ["python", "local_run.py"],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True
-    )
-
-    # Wait for the server to be ready
-    # We can poll the API or wait for a specific log message
-    time.sleep(30) # Give it ample time to install deps and start
 
     yield
 
-    # Teardown: stop the server
-    server_process.terminate()
-    try:
-        server_process.wait(timeout=10)
-    except subprocess.TimeoutExpired:
-        server_process.kill()
-
-    # Clean up the dummy file
+    # Teardown: Clean up the dummy file
     if DUMMY_AUDIO_PATH.exists():
         DUMMY_AUDIO_PATH.unlink()
 
@@ -96,7 +79,7 @@ def test_transcription_flow():
         files = {'file': (DUMMY_AUDIO_PATH.name, f, 'audio/wav')}
         response = requests.post(UPLOAD_URL, files=files)
 
-    assert response.status_code == 200, f"API returned status {response.status_code}"
+    assert response.status_code == 202, f"API returned status {response.status_code}"
     response_data = response.json()
     assert "task_id" in response_data
     task_id = response_data["task_id"]

@@ -83,6 +83,8 @@ echo "[安裝保護] ✅ 資源充足。"
 
 # 步驟 1C: 安裝主要依賴
 echo "📦 正在使用 'uv pip install' 同步主要依賴..."
+# 設置 CMAKE_ARGS 來處理舊版 CMake 的相容性問題
+export CMAKE_ARGS="-DCMAKE_POLICY_VERSION_MINIMUM=3.5"
 uv pip install -r "$REQUIREMENTS_PATH" > /dev/null # 將輸出重導向，保持介面乾淨
 if [ $? -ne 0 ]; then
     echo "❌ 錯誤：使用 'uv pip install' 安裝依賴失敗。"
@@ -94,7 +96,7 @@ echo "✅ 依賴已同步。"
 echo "🚀 正在啟動所有背景服務..."
 
 # 清理舊的日誌檔案
-rm -f "$LOGS_DIR/api_server.log" "$LOGS_DIR/heartbeat_worker.log" "$LOGS_DIR/system_monitor_worker.log"
+rm -f "$LOGS_DIR/api_server.log" "$LOGS_DIR/heartbeat_worker.log" "$LOGS_DIR/system_monitor_worker.log" "$LOGS_DIR/transcription_worker.log"
 
 # 定義要啟動的服務
 # 服務名稱 => [日誌檔案, 啟動指令...]
@@ -103,6 +105,7 @@ components=(
     ["API Server"]="$LOGS_DIR/api_server.log $VENV_PYTHON -m uvicorn src.phoenix_core.main:app --host 0.0.0.0 --port 8080"
     ["Heartbeat Worker"]="$LOGS_DIR/heartbeat_worker.log $VENV_PYTHON -u -m scripts.heartbeat_worker"
     ["System Monitor"]="$LOGS_DIR/system_monitor_worker.log $VENV_PYTHON -u -m src.phoenix_core.modules.system_monitor.worker"
+    ["Transcription Worker"]="$LOGS_DIR/transcription_worker.log $VENV_PYTHON -u -m src.phoenix_core.modules.transcription.worker"
 )
 
 pids_to_kill=()
@@ -112,8 +115,8 @@ for name in "${!components[@]}"; do
 
     echo "[run.sh] 正在啟動: $name..."
 
-    # 在背景執行指令，並將 stdout/stderr 導向到日誌檔案
-    $command > "$log_path" 2>&1 &
+    # 在背景執行指令，暫時將輸出導向到主控台以便除錯
+    $command &
 
     # 獲取剛啟動的背景進程的 PID
     pid=$!

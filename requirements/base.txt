@@ -63,25 +63,39 @@ msgpack==1.1.1
 multitasking==0.0.12
     # via yfinance
 numba==0.61.2
-    # via librosa
-numpy==2.2.6
     # via
+    #   librosa
+    #   pandas-ta-openbb
+numpy==2.0.0
+    # via
+    #   -r requirements/base.in
     #   librosa
     #   numba
     #   pandas
+    #   pandas-ta-openbb
+    #   patsy
     #   scikit-learn
     #   scipy
     #   soundfile
     #   soxr
+    #   statsmodels
     #   yfinance
 packaging==25.0
     # via
     #   lazy-loader
     #   pooch
-pandas==2.3.1
+    #   statsmodels
+pandas==2.2.2
     # via
+    #   -r requirements/base.in
     #   fredapi
+    #   pandas-ta-openbb
+    #   statsmodels
     #   yfinance
+pandas-ta-openbb==0.4.22
+    # via -r requirements/base.in
+patsy==1.0.1
+    # via statsmodels
 peewee==3.18.2
     # via yfinance
 platformdirs==4.3.8
@@ -128,10 +142,12 @@ rich==14.1.0
     # via typer
 scikit-learn==1.7.1
     # via librosa
-scipy==1.16.1
+scipy==1.15.3
     # via
     #   librosa
+    #   pandas-ta-openbb
     #   scikit-learn
+    #   statsmodels
 shellingham==1.5.4
     # via typer
 six==1.17.0
@@ -148,6 +164,8 @@ sqlalchemy==2.0.42
     # via -r requirements/base.in
 starlette==0.47.2
     # via fastapi
+statsmodels==0.14.5
+    # via pandas-ta-openbb
 threadpoolctl==3.6.0
     # via scikit-learn
 typer==0.16.0

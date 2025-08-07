@@ -17,5 +17,4 @@ pytest-mock # 用於模擬和修補物件
 uvicorn # 我們用它來在測試中啟動 live server
 
 # --- 報告工具 ---
-pandas
 tabulate
