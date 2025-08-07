@@ -10,6 +10,7 @@ V2 架構:
 """
 import threading
 import asyncio
+import sys
 from ..database import db_manager
 from typing import List, Tuple, Optional
 
@@ -45,6 +46,10 @@ class Logger:
             source (str, optional): 日誌來源。預設為 "default"。
         """
         try:
+            # 【V68 除錯修改】同時打印到 stdout，以便 safe_runner.py 的看門狗可以監控到活動。
+            # 在生產環境中，可以考慮移除此 print 或透過設定來控制。
+            print(f"[{level.upper()}] [{source}] {message}", file=sys.stdout, flush=True)
+
             # 在背景執行緒中執行同步的資料庫寫入操作
             await asyncio.to_thread(
                 db_manager.write_log,

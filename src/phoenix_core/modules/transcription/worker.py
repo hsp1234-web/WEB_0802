@@ -1,13 +1,16 @@
 # src/phoenix_core/modules/transcription/worker.py
 import asyncio
-import time
+import gc
+import os
+import sys
 import traceback
 
+# 導入 torch 是為了檢查 CUDA
+# import torch # 暫時禁用，以測試是否是 torch 本身導致崩潰
+
 from ...kernel.settings import settings
-from ...kernel.hardware import get_best_hardware_config
 from ...database import db_manager
 from ...utils.logger import logger
-from ...utils.resource_monitor import is_resource_sufficient, load_resource_settings
 
 # 延遲導入，以避免循環依賴
 WhisperModel = None
@@ -44,77 +47,87 @@ async def _update_task_status(task_id, status, message=None):
 async def process_single_task():
     """
     完整處理一個轉錄任務的流程：領取、處理、更新結果。
+    透過非阻塞方式加載模型，避免凍結事件循環。
     """
     task_id = await _get_pending_task()
-
     if not task_id:
-        return # 沒有待處理任務
+        return
 
     await logger.log("INFO", f"找到待處理任務: {task_id}", source="TranscriptionWorker")
     await _update_task_status(task_id, "processing")
 
+    model = None
     try:
-        # 0. 資源檢查
-        resource_settings = load_resource_settings()
-        sufficient, message = is_resource_sufficient(resource_settings)
-        if not sufficient:
-            raise Exception(f"資源不足，暫停處理: {message}")
-
         # 1. 延遲導入 Whisper
         _lazy_import_whisper()
 
-        # 2. 獲取硬體設定與模型
-        hardware_config = get_best_hardware_config()
+        # 2. 設定模型參數 (強制CPU模式以確保穩定性)
+        device = "cpu"
+        compute_type = "int8"
         model_size = settings.TRANSCRIPTION_MODEL_SIZE
 
-        await logger.log("INFO", f"正在為任務 {task_id} 載入 Whisper 模型 '{model_size}' (設備: {hardware_config['device']}, 類型: {hardware_config['compute_type']})", source="TranscriptionWorker")
-        model = WhisperModel(
-            model_size,
-            device=hardware_config["device"],
-            compute_type=hardware_config["compute_type"],
-        )
+        await logger.log("INFO", f"正在為任務 {task_id} 準備非阻塞加載 Whisper 模型 '{model_size}'", source="TranscriptionWorker")
 
-        # 3. 從資料庫獲取檔案路徑
+        # 3. 非阻塞地加載模型
+        # 這一步是關鍵：我們將同步的、可能耗時長的模型加載操作，
+        # 放到一個獨立的線程中執行，以避免阻塞 asyncio 的主事件循環。
+        loop = asyncio.get_running_loop()
+        model = await loop.run_in_executor(
+            None,  # 使用默認的線程池
+            lambda: WhisperModel(
+                model_size,
+                device=device,
+                compute_type=compute_type
+            )
+        )
+        await logger.log("INFO", f"模型 '{model_size}' 已成功在背景線程加載完畢。", source="TranscriptionWorker")
+
+
+        # 4. 從資料庫獲取檔案路徑
         path_query = "SELECT original_filepath FROM transcription_tasks WHERE id = ?"
         result = await db_manager.fetch_one(path_query, (task_id,))
         if not result:
             raise FileNotFoundError(f"在資料庫中找不到任務 {task_id} 的檔案路徑。")
         audio_path = result['original_filepath']
 
-        await logger.log("INFO", f"開始轉錄檔案: {audio_path}", source="TranscriptionWorker")
+        # 5. 執行轉錄
+        # 同樣，transcribe 方法也是一個阻塞操作，我們也需要將它放到線程池中執行。
+        loop = asyncio.get_running_loop()
+        segments, _info = await loop.run_in_executor(
+            None,
+            lambda: model.transcribe(audio_path, beam_size=5)
+        )
 
-        # 4. 執行轉錄
-        segments, _info = model.transcribe(audio_path, beam_size=5)
-        full_transcript = "".join(segment.text for segment in segments)
+        full_transcript = "".join(segment.text.strip() for segment in segments)
 
         await logger.log("SUCCESS", f"任務 {task_id} 轉錄完成。", source="TranscriptionWorker")
 
-        # 5. 更新最終結果
-        await _update_task_status(task_id, "completed", message=full_transcript.strip())
-        await logger.log("INFO", f"任務 {task_id} 狀態更新為: completed", source="TranscriptionWorker")
+        # 6. 更新最終結果
+        await _update_task_status(task_id, "completed", message=full_transcript)
 
     except Exception as e:
         error_message = traceback.format_exc()
         await logger.log("ERROR", f"轉錄任務 {task_id} 過程中發生錯誤: {error_message}", source="TranscriptionWorker")
         await _update_task_status(task_id, "failed", message=error_message)
-        await logger.log("INFO", f"任務 {task_id} 狀態更新為: failed", source="TranscriptionWorker")
+
+    finally:
+        if model is not None:
+            del model
+            gc.collect()
 
 
 async def transcription_worker_main_loop():
     """
     轉錄工人的主循環，定期檢查並處理新任務。
-    這將被核心背景任務管理器 (`background/worker.py`) 所調用。
     """
-    await logger.log("INFO", "轉錄工人背景任務已啟動，開始監聽新任務...", source="TranscriptionWorker")
+    await logger.log("INFO", "轉錄工人背景任務已啟動 (終極強制 CPU 模式)，開始監聽新任務...", source="TranscriptionWorker")
 
     while True:
-        await logger.log("DEBUG", "進入轉錄工人主循環...", source="TranscriptionWorker")
         try:
             await process_single_task()
-            # 任務之間的短暫延遲，避免過度佔用 CPU 進行輪詢
-            await asyncio.sleep(settings.get("TRANSCRIPTION_WORKER_POLL_INTERVAL", 5))
+            # V68 修復：使用 Pydantic 的屬性存取，而不是 .get() 方法
+            await asyncio.sleep(settings.TRANSCRIPTION_WORKER_POLL_INTERVAL)
         except Exception as e:
             error_message = traceback.format_exc()
             await logger.log("CRITICAL", f"轉錄工人在主循環中發生無法恢復的嚴重錯誤: {e}\n{error_message}", source="TranscriptionWorker")
-            # 如果發生嚴重錯誤，等待更長時間再重試
             await asyncio.sleep(60)

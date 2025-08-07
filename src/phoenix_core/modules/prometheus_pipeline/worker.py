@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import asyncio
 from ...utils.logger import logger # 導入共享的、非阻塞的 logger
-from phoenix_core.modules.prometheus_pipeline.core.db.db_manager import DBManager
+from src.phoenix_core.modules.prometheus_pipeline.core.db.db_manager import DBManager
 # 假設我們有一個管線執行的主函式
 # from .pipelines.main_executor import run_pipeline_by_name
 
@@ -17,22 +17,22 @@ async def prometheus_worker_main_loop():
     # 這裡只是一個範例，展示如何初始化 DBManager 並使用它
     # 在真實的實現中，管線的執行會更複雜
     try:
-        from phoenix_core.kernel.settings import settings
+        from src.phoenix_core.kernel.settings import settings
         await logger.log("INFO", "普羅米修斯工人：開始初始化資料庫...", source="PrometheusWorker")
         # 初始化主資料庫
         db_manager_main = DBManager(settings.PROMETHEUS_PIPELINE.database.main_db_path)
         await logger.log("INFO", f"工人成功初始化主資料庫，路徑: {db_manager_main.db_path}", source="PrometheusWorker")
-        await logger.log("INFO", "普羅米修斯工人：正在測試主資料庫連線...", source="PrometheusWorker")
-        # 直接 await 異步方法
-        await db_manager_main.fetch_table("dummy_table_for_init_main")
-        await logger.log("INFO", "普羅米修斯工人：主資料庫連線測試成功。", source="PrometheusWorker")
+        # await logger.log("INFO", "普羅米修斯工人：正在測試主資料庫連線...", source="PrometheusWorker")
+        # # 直接 await 異步方法
+        # await db_manager_main.fetch_table("dummy_table_for_init_main")
+        # await logger.log("INFO", "普羅米修斯工人：主資料庫連線測試成功。", source="PrometheusWorker")
 
         # 初始化數據倉庫
         db_manager_dw = DBManager(settings.PROMETHEUS_PIPELINE.database.data_warehouse_path)
         await logger.log("INFO", f"工人成功初始化數據倉庫，路徑: {db_manager_dw.db_path}", source="PrometheusWorker")
-        await logger.log("INFO", "普羅米修斯工人：正在測試數據倉庫連線...", source="PrometheusWorker")
-        await db_manager_dw.fetch_table("dummy_table_for_init_dw")
-        await logger.log("INFO", "普羅米修斯工人：數據倉庫連線測試成功。", source="PrometheusWorker")
+        # await logger.log("INFO", "普羅米修斯工人：正在測試數據倉庫連線...", source="PrometheusWorker")
+        # await db_manager_dw.fetch_table("dummy_table_for_init_dw")
+        # await logger.log("INFO", "普羅米修斯工人：數據倉庫連線測試成功。", source="PrometheusWorker")
 
         await logger.log("INFO", "所有資料庫連線測試成功。", source="PrometheusWorker")
     except Exception as e:

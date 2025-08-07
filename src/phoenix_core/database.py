@@ -2,6 +2,7 @@
 import os
 import sqlite3
 import threading
+import asyncio
 from pathlib import Path
 from datetime import datetime
 import pytz
@@ -31,13 +32,14 @@ class DatabaseManager:
 
         self.thread_local = threading.local()
         self._initialized = True
+        # __init__ 不應包含任何阻塞 I/O 操作。
+        # self._initialize_database() # 已被移動到 async_initialize
 
-        # 確保資料庫所在的目錄存在
+    def _blocking_initialize(self):
+        """包含實際阻塞 I/O 的內部初始化方法。"""
+        # 步驟 1: 確保資料庫所在的目錄存在。這是執行 I/O 的正確位置。
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
 
-        self._initialize_database()
-
-    def _initialize_database(self):
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
@@ -78,6 +80,13 @@ class DatabaseManager:
             )
             """)
             conn.commit()
+
+    async def async_initialize(self):
+        """
+        以非阻塞方式執行資料庫初始化。
+        應在應用程式啟動時被 await。
+        """
+        await asyncio.to_thread(self._blocking_initialize)
 
     def get_connection(self) -> sqlite3.Connection:
         if not hasattr(self.thread_local, "connection"):

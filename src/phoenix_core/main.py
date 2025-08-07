@@ -10,7 +10,6 @@ import asyncio
 from .kernel.settings import settings
 from .kernel.registry import registered_routers
 from . import modules
-from .background import worker
 from .database import db_manager
 from .utils.logger import logger
 
@@ -65,14 +64,18 @@ def discover_and_load_modules(reload=False):
 
 @app.on_event("startup")
 async def startup_event():
-    # 首次啟動時，加載所有模組
+    # 步驟 1: 以非阻塞方式初始化資料庫
+    # 這必須是第一個操作，以確保所有後續步驟都可以訪問資料庫。
+    await db_manager.async_initialize()
+
+    # 步驟 2: 首次啟動時，加載所有模組
     discover_and_load_modules(reload=False)
 
-    # 使用背景工作管理器來啟動所有任務
-    worker.start_background_tasks()
+    # 步驟 3: (已移除) 背景任務現由獨立的 supervisor 管理。
+    # worker.start_background_tasks()
 
-    # 寫入啟動日誌
-    await logger.log("INFO", "核心服務啟動成功。")
+    # 步驟 4: 寫入啟動日誌
+    await logger.log("INFO", "核心 API 伺服器啟動成功。")
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 app.mount("/static", StaticFiles(directory=PROJECT_ROOT), name="static")
