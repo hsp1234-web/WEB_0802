@@ -22,7 +22,7 @@ TOOL_NAME = "DataProviderTool"
 # 虛擬環境目錄名稱，與烘烤腳本中定義的保持一致
 VENV_DIR = Path(__file__).parent / f".venv_{Path(__file__).stem}"
 # 預烘烤環境存檔的路徑
-BAKED_ENV_ARCHIVE = Path(__file__).parent.parent / "storage" / "baked_envs" / f"{VENV_DIR.name}.tar.gz"
+BAKED_ENV_ARCHIVE = Path(__file__).parent.parent / "storage" / "baked_envs" / f"{VENV_DIR.name}.tar.xz"
 
 CACHE_DIR = Path("./storage/cache/dataprovider")
 LOG_FILE = Path(__file__).parent / "data_provider_tool.log"
@@ -62,9 +62,9 @@ def prepare_environment():
         log("   請先執行 'python scripts/bake_tool_envs.py' 來建立環境存檔。")
         sys.exit(1)
 
-    log(f"📦 找到存檔，正在解壓縮至 '{VENV_DIR.parent}'...")
+    log(f"📦 找到存檔，正在解壓縮至 '{VENV_DIR.parent}' (使用 xz)...")
     try:
-        with tarfile.open(BAKED_ENV_ARCHIVE, "r:gz") as tar:
+        with tarfile.open(BAKED_ENV_ARCHIVE, "r:xz") as tar:
             tar.extractall(path=VENV_DIR.parent)
         log("✅ 環境解壓縮成功。")
     except Exception as e:

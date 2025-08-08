@@ -53,7 +53,7 @@ def bake_environment(tool_path: Path):
     """為單一工具執行完整的烘烤流程。"""
     tool_name = tool_path.stem
     venv_dir = TOOLS_DIR / f".venv_{tool_name}"
-    archive_path = BAKED_ENVS_DIR / f"{venv_dir.name}.tar.gz"
+    archive_path = BAKED_ENVS_DIR / f"{venv_dir.name}.tar.xz"
 
     log(f"--- 開始為 '{tool_name}' 烘烤環境 ---")
 
@@ -96,8 +96,8 @@ def bake_environment(tool_path: Path):
             return False
 
         # 4. 壓縮虛擬環境
-        log(f"📦 正在將 '{venv_dir.name}' 壓縮至 '{archive_path}'...")
-        with tarfile.open(archive_path, "w:gz") as tar:
+        log(f"📦 正在將 '{venv_dir.name}' 壓縮至 '{archive_path}' (使用 xz)...")
+        with tarfile.open(archive_path, "w:xz") as tar:
             # arcname=venv_dir.name 確保在解壓縮時不會產生多餘的上層目錄
             tar.add(str(venv_dir), arcname=venv_dir.name)
 
@@ -133,19 +133,46 @@ def main():
 
     log(f"找到 {len(tool_files)} 個工具需要處理: {[t.name for t in tool_files]}")
 
-    success_count = 0
-    failure_count = 0
+    # 使用 ProcessPoolExecutor 來平行執行烘烤任務
+    # 這在多核心 CPU 上能顯著提升速度
+    from concurrent.futures import ProcessPoolExecutor
 
-    for tool_path in tool_files:
-        if bake_environment(tool_path):
-            success_count += 1
-        else:
-            failure_count += 1
+    log(f"🔥 即將以平行模式開始烘烤 {len(tool_files)} 個工具...")
+
+    with ProcessPoolExecutor() as executor:
+        # map 會將 tool_files 中的每個元素作為參數傳遞給 bake_environment
+        # 並以平行方式執行
+        results = executor.map(bake_environment, tool_files)
+
+    # 收集結果
+    success_count = sum(1 for r in results if r)
+    failure_count = len(tool_files) - success_count
 
     log("--- 烘烤流程總結 ---")
     log(f"✅ 成功: {success_count} 個")
     log(f"❌ 失敗: {failure_count} 個")
     log("========================")
+    log("Final baked environment archives:")
+    try:
+        total_size = 0
+        files = list(BAKED_ENVS_DIR.glob('*.tar.xz'))
+        if not files:
+             log("No archives found.")
+
+        for f in sorted(files):
+            size_bytes = f.stat().st_size
+            total_size += size_bytes
+            if size_bytes > 1024 * 1024:
+                size_str = f"{size_bytes / (1024*1024):.2f} MB"
+            else:
+                size_str = f"{size_bytes / 1024:.2f} KB"
+            log(f"- {f.name:<40} {size_str}")
+
+        total_size_mb = total_size / (1024 * 1024)
+        log(f"Total size: {total_size_mb:.2f} MB")
+    except Exception as e:
+        log(f"Error listing baked archives: {e}")
+
 
     if failure_count > 0:
         sys.exit(1)

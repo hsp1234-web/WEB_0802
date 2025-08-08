@@ -20,7 +20,7 @@ from pathlib import Path
 # --- 設定 ---
 TOOL_NAME = "SystemMonitoringTool"
 VENV_DIR = Path(__file__).parent / f".venv_{Path(__file__).stem}"
-BAKED_ENV_ARCHIVE = Path(__file__).parent.parent / "storage" / "baked_envs" / f"{VENV_DIR.name}.tar.gz"
+BAKED_ENV_ARCHIVE = Path(__file__).parent.parent / "storage" / "baked_envs" / f"{VENV_DIR.name}.tar.xz"
 WATCHDOG_TIMEOUT = 15
 
 # --- 依賴列表 (僅供參考) ---
@@ -59,9 +59,9 @@ def prepare_environment():
         log(f"❌ 嚴重錯誤：找不到預烘烤的環境存檔: {BAKED_ENV_ARCHIVE}")
         log("   請先執行 'python scripts/bake_tool_envs.py' 來建立環境存檔。")
         sys.exit(1)
-    log(f"📦 找到存檔，正在解壓縮至 '{VENV_DIR.parent}'...")
+    log(f"📦 找到存檔，正在解壓縮至 '{VENV_DIR.parent}' (使用 xz)...")
     try:
-        with tarfile.open(BAKED_ENV_ARCHIVE, "r:gz") as tar:
+        with tarfile.open(BAKED_ENV_ARCHIVE, "r:xz") as tar:
             tar.extractall(path=VENV_DIR.parent)
         log("✅ 環境解壓縮成功。")
     except Exception as e:
