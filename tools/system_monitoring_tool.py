@@ -1,31 +1,29 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-系統監控獨立工具 (System Monitoring Tool)
+系統監控獨立工具 (System Monitoring Tool) - v2 (烘烤模式)
 
 功能:
-1.  自我管理虛擬環境和依賴 (`pydantic`, `psutil`)。
-2.  執行前進行系統資源檢查。
-3.  使用看門狗（Watchdog）計時器，防止腳本意外卡死。
-4.  獲取當前的 CPU 和記憶體使用率。
-5.  將結果以 JSON 格式輸出到標準輸出 (stdout)。
-6.  將日誌記錄輸出到標準錯誤 (stderr)。
+1.  啟動時檢查並解壓縮預烘烤的虛擬環境。
+2.  使用看門狗（Watchdog）計時器，防止腳本意外卡死。
+3.  獲取當前的 CPU 和記憶體使用率，並以 JSON 格式輸出。
 """
 import os
 import sys
-import subprocess
-import venv
 import time
 import json
 import signal
+import tarfile
+import shutil
 from pathlib import Path
 
 # --- 設定 ---
 TOOL_NAME = "SystemMonitoringTool"
 VENV_DIR = Path(__file__).parent / f".venv_{Path(__file__).stem}"
-WATCHDOG_TIMEOUT = 15  # 秒，對於這個簡單的任務，15秒足夠了
+BAKED_ENV_ARCHIVE = Path(__file__).parent.parent / "storage" / "baked_envs" / f"{VENV_DIR.name}.tar.gz"
+WATCHDOG_TIMEOUT = 15
 
-# --- 依賴列表 ---
+# --- 依賴列表 (僅供參考) ---
 DEPENDENCIES = {
     "pydantic": "pydantic==2.11.7",
     "psutil": "psutil==7.0.0",
@@ -33,7 +31,6 @@ DEPENDENCIES = {
 
 # --- 日誌記錄 ---
 def log(message):
-    """將日誌訊息寫入標準錯誤流。"""
     timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
     print(f"[{timestamp}][{TOOL_NAME}] {message}", file=sys.stderr)
 
@@ -41,104 +38,73 @@ def log(message):
 class Watchdog:
     def __init__(self, seconds):
         self.seconds = seconds
-
     def __enter__(self):
         signal.signal(signal.SIGALRM, self._handle_timeout)
         signal.alarm(self.seconds)
         log(f"🛡️ 看門狗已啟動，超時設定為 {self.seconds} 秒。")
-
     def __exit__(self, exc_type, exc_value, traceback):
-        signal.alarm(0) # 取消鬧鐘
+        signal.alarm(0)
         log("✅ 看門狗已解除。")
-
     def _handle_timeout(self, signum, frame):
         log(f"❌ 看門狗錯誤：腳本執行超過 {self.seconds} 秒，強制終止。")
         sys.exit(1)
 
-# --- 核心功能 ---
-def setup_environment():
-    """設定虛擬環境並安裝依賴。"""
-    if VENV_DIR.exists() and (VENV_DIR / ".tool_setup_complete").exists():
-        return # 如果已經設定完成，直接返回
-
-    log("🚀 開始環境設定...")
-    if not VENV_DIR.exists():
-        log(f"正在建立虛擬環境於: {VENV_DIR}")
-        venv.create(VENV_DIR, with_pip=True)
-
-    pip_executable = VENV_DIR / "bin" / "pip" if os.name != "nt" else VENV_DIR / "Scripts" / "pip.exe"
-
-    log("📦 正在檢查並安裝依賴...")
-    try:
-        # 一次性安裝所有依賴，提高效率
-        requirements = [spec for spec in DEPENDENCIES.values()]
-        subprocess.check_call([str(pip_executable), "install", *requirements], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
-        log("✅ 所有依賴均已準備就緒。")
-    except subprocess.CalledProcessError as e:
-        log(f"❌ 依賴安裝失敗。錯誤: {e.stderr.decode('utf-8', errors='ignore')}")
+# --- 環境準備 ---
+def prepare_environment():
+    if VENV_DIR.exists():
+        log(f"✅ 虛擬環境 '{VENV_DIR.name}' 已存在。")
+        return
+    log(f"🔍 虛擬環境 '{VENV_DIR.name}' 不存在，正在尋找預烘烤的存檔...")
+    if not BAKED_ENV_ARCHIVE.exists():
+        log(f"❌ 嚴重錯誤：找不到預烘烤的環境存檔: {BAKED_ENV_ARCHIVE}")
+        log("   請先執行 'python scripts/bake_tool_envs.py' 來建立環境存檔。")
         sys.exit(1)
-
-    # 標記設定完成
-    (VENV_DIR / ".tool_setup_complete").touch()
-
+    log(f"📦 找到存檔，正在解壓縮至 '{VENV_DIR.parent}'...")
+    try:
+        with tarfile.open(BAKED_ENV_ARCHIVE, "r:gz") as tar:
+            tar.extractall(path=VENV_DIR.parent)
+        log("✅ 環境解壓縮成功。")
+    except Exception as e:
+        log(f"❌ 解壓縮環境時發生錯誤: {e}")
+        if VENV_DIR.exists():
+            shutil.rmtree(VENV_DIR)
+        sys.exit(1)
 
 def activate_venv():
-    """啟動虛擬環境，將其路徑加入到 sys.path。"""
-    if not VENV_DIR.exists():
-        log("❌ 虛擬環境目錄不存在，無法啟動。")
-        sys.exit(1)
-
     site_packages = VENV_DIR / "lib" / f"python{sys.version_info.major}.{sys.version_info.minor}" / "site-packages"
     if os.name == 'nt':
         site_packages = VENV_DIR / "Lib" / "site-packages"
-
     if not site_packages.exists():
-        log(f"❌ 找不到 site-packages 目錄: {site_packages}")
+        log(f"❌ 嚴重錯誤：在虛擬環境中找不到 site-packages 目錄: {site_packages}")
         sys.exit(1)
-
+    log(f"🔌 正在將 '{site_packages}' 加入到 sys.path")
     sys.path.insert(0, str(site_packages))
 
-
+# --- 核心功能 ---
 def get_system_usage():
-    """
-    獲取系統使用率並以 JSON 格式輸出。
-    """
     import psutil
     from pydantic import BaseModel
 
     class SystemUsage(BaseModel):
-        """定義系統使用率的數據模型。"""
         cpu_percent: float
         memory_percent: float
 
-    log("💡 正在檢查系統資源...")
-    mem = psutil.virtual_memory()
-    if mem.percent > 90:
-        log(f"⚠️ 警告：記憶體使用率偏高 ({mem.percent}%)。")
-
+    log("💡 正在獲取系統使用率...")
     cpu_percent = psutil.cpu_percent(interval=0.1)
     memory_info = psutil.virtual_memory()
-
     usage_data = SystemUsage(
         cpu_percent=cpu_percent,
         memory_percent=memory_info.percent
     )
-
     log(f"📊 CPU: {cpu_percent}%, Memory: {memory_info.percent}%")
-
-    # 將結果輸出到 stdout
     print(usage_data.model_dump_json())
 
-
 def main():
-    """主執行函數。"""
-    log("--- 系統監控工具已啟動 ---")
-
+    log("--- 系統監控工具已啟動 (v2 烘烤模式) ---")
     with Watchdog(WATCHDOG_TIMEOUT):
-        setup_environment()
+        prepare_environment()
         activate_venv()
         get_system_usage()
-
     log("--- 系統監控工具執行完畢 ---")
 
 if __name__ == "__main__":
